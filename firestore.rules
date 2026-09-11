@@ -1,0 +1,177 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Public identity contains only the chosen username and avatar URL.
+    match /profiles/{userId} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false;
+    }
+    match /usernames/{username} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.username == username;
+      allow update, delete: if false;
+    }
+    // The profile-creation batch increments this counter. Rules below are
+    // deliberately narrow so a browser cannot reset it or create account 51.
+    match /app/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && id == 'limits'
+        && request.resource.data.userCount == 1;
+      allow update: if request.auth != null && id == 'limits'
+        && request.resource.data.userCount == resource.data.userCount + 1
+        && request.resource.data.userCount <= 50;
+      allow delete: if false;
+    }
+
+    // Course progress belongs to one person and is never shared.
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /projects/{projectId} {
+
+      function signedIn() { return request.auth != null; }
+      function me()       { return request.auth.uid; }
+
+      // Map keys cannot contain a dot, so an address is stored with them escaped.
+      function myEmailKey() {
+        return request.auth.token.email == null
+          ? ''
+          : request.auth.token.email.lower().replace('\\.', '%2E');
+      }
+
+      // get() with a default keeps a document that is missing a field from
+      // erroring out and denying for the wrong reason.
+      function membersOf(data) { return data.get('members', {}); }
+      function invitesOf(data) { return data.get('invites', {}); }
+
+      function role()      { return membersOf(resource.data).get(me(), null); }
+      function invitedAs() { return myEmailKey() == '' ? null : invitesOf(resource.data).get(myEmailKey(), null); }
+
+      // Who is in the project, and on what terms, is the owner's business alone.
+      function membershipKeys() {
+        return ['owner', 'members', 'memberIds', 'invites', 'invitedEmails'].toSet();
+      }
+      function touchesMembership() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasAny(membershipKeys());
+      }
+
+      // Taking up an invitation: add your own seat, clear your own address, put
+      // your name in, and touch nothing else that belongs to anyone else.
+      function claimingSeat() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let nextMembers = membersOf(request.resource.data);
+        let nextInvites = invitesOf(request.resource.data);
+        return invitedAs() != null
+          && changed.hasOnly(['members', 'memberIds', 'invites', 'invitedEmails', 'people'].toSet())
+          && nextMembers.get(me(), null) == invitedAs()
+          && nextMembers.diff(membersOf(resource.data)).affectedKeys().hasOnly([me()].toSet())
+          && nextInvites.diff(invitesOf(resource.data)).affectedKeys().hasOnly([myEmailKey()].toSet())
+          && nextInvites.get(myEmailKey(), null) == null
+          && me() in request.resource.data.get('memberIds', [])
+          && request.resource.data.get('people', {})
+               .diff(resource.data.get('people', {})).affectedKeys().hasOnly([me()].toSet());
+      }
+
+      // An editor may remove only their own membership. This is separate
+      // from owner-controlled membership administration: it cannot add anyone,
+      // change a role, or touch invitations.
+      function leavingSeat() {
+        let changed = request.resource.data.diff(resource.data).affectedKeys();
+        let nextMembers = membersOf(request.resource.data);
+        let oldIds = resource.data.get('memberIds', []);
+        let nextIds = request.resource.data.get('memberIds', []);
+        return role() != null && role() != 'owner'
+          && changed.hasOnly(['members', 'memberIds', 'updatedAt'].toSet())
+          && nextMembers.diff(membersOf(resource.data)).affectedKeys().hasOnly([me()].toSet())
+          && nextMembers.get(me(), null) == null
+          && me() in oldIds && !(me() in nextIds)
+          && nextIds.size() == oldIds.size() - 1;
+      }
+
+      // A query is judged against what it asks for, not against each document
+      // it happens to return. Studio looks projects up by `memberIds` and
+      // invitations by `invitedEmails`, so reading has to be decided by those
+      // very fields; deciding it by the `members` map instead denies the query
+      // outright, however well the two agree.
+      allow read: if signedIn() && (
+           me() in resource.data.get('memberIds', [])
+        || (request.auth.token.email != null
+            && request.auth.token.email.lower() in resource.data.get('invitedEmails', []))
+      );
+
+      allow create: if signedIn()
+        && request.resource.data.owner == me()
+        && membersOf(request.resource.data).get(me(), null) == 'owner'
+        && request.resource.data.memberIds.hasOnly([me()]);
+
+      allow update: if signedIn() && (
+           role() == 'owner'
+        || (role() == 'editor' && !touchesMembership())
+        || claimingSeat()
+        || leavingSeat()
+      );
+
+      allow delete: if signedIn() && role() == 'owner';
+
+      // Presence documents have no membership map of their own. Always look
+      // at the parent project before allowing a collaborator to publish or see
+      // a cursor/selection.
+      match /presence/{userId} {
+        function presenceProject() {
+          return get(/databases/$(database)/documents/projects/$(projectId)).data;
+        }
+        function presenceRole() {
+          return presenceProject().get('members', {}).get(request.auth.uid, null);
+        }
+        allow read: if signedIn() && presenceRole() != null;
+        allow create, update, delete: if signedIn()
+          && presenceRole() != null && userId == me();
+      }
+
+      match /blocks/{blockId} {
+        function project() {
+          return get(/databases/$(database)/documents/projects/$(projectId)).data;
+        }
+        function blockRole() { return project().get('members', {}).get(request.auth.uid, null); }
+
+        allow read:  if signedIn() && blockRole() != null;
+        allow write: if signedIn() && blockRole() in ['owner', 'editor'];
+      }
+      // Discussion, checkpoints, and CRDT updates are kept separate from the
+      // project document so collaboration does not turn one document into a hotspot.
+      match /comments/{commentId} {
+        function project() { return get(/databases/$(database)/documents/projects/$(projectId)).data; }
+        function commentRole() { return project().get('members', {}).get(request.auth.uid, null); }
+        allow read: if signedIn() && commentRole() != null;
+        allow create: if signedIn() && commentRole() != null && request.resource.data.authorId == me();
+        allow delete: if signedIn() && (commentRole() == 'owner' || resource.data.authorId == me());
+        allow update: if false;
+      }
+      match /history/{revisionId} {
+        function project() { return get(/databases/$(database)/documents/projects/$(projectId)).data; }
+        function historyRole() { return project().get('members', {}).get(request.auth.uid, null); }
+        allow read: if signedIn() && historyRole() != null;
+        allow create: if signedIn() && historyRole() in ['owner','editor'] && request.resource.data.authorId == me();
+        allow update, delete: if false;
+      }
+      match /collab/{blockId} {
+        function project() { return get(/databases/$(database)/documents/projects/$(projectId)).data; }
+        function collabRole() { return project().get('members', {}).get(request.auth.uid, null); }
+        allow read: if signedIn() && collabRole() != null;
+        allow create, update: if signedIn() && collabRole() in ['owner','editor'];
+        allow delete: if signedIn() && collabRole() == 'owner';
+        match /updates/{updateId} {
+          allow read: if signedIn() && collabRole() != null;
+          allow create: if signedIn() && collabRole() in ['owner','editor'] && request.resource.data.authorId == me();
+          allow update, delete: if false;
+        }
+      }
+    }
+  }
+}

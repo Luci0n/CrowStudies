@@ -1,0 +1,8 @@
+# Operating-system and editor metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+node_modules/
+collab-server/.env
+collab-server/firebase-admin.json

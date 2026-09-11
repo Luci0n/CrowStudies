@@ -1,0 +1,35 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function project(projectId) {
+      return firestore.get(/databases/(default)/documents/projects/$(projectId)).data;
+    }
+    function role(projectId) {
+      return project(projectId).get('members', {}).get(request.auth.uid, null);
+    }
+    function imageUpload() {
+      return request.resource.size <= 1536 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    // A single, replaceable avatar per account. No executable SVGs.
+    match /avatars/{userId}/avatar {
+      allow read: if true;
+      allow create, update: if signedIn() && request.auth.uid == userId
+        && request.resource.size <= 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+
+    // Twenty fixed slots, 1.5 MB each: a real 30 MB hard project ceiling
+    // without a browser-maintained counter that could be bypassed.
+    match /projects/{projectId}/images/{slot} {
+      allow read: if signedIn() && role(projectId) != null;
+      allow create, update: if signedIn() && role(projectId) in ['owner', 'editor']
+        && slot.matches('image-(0[1-9]|1[0-9]|20)')
+        && imageUpload();
+      allow delete: if signedIn() && role(projectId) in ['owner', 'editor'];
+    }
+  }
+}

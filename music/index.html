@@ -1,0 +1,1667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Music theory · CrowStudies</title>
+<meta name="description" content="Learn scales, chords, harmony, and modes one idea at a time, with a keyboard you can play.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../assets/site.css?v=20260909-32">
+<style>
+  .mono{ font-family:"IBM Plex Mono","SFMono-Regular",monospace; font-weight:500; font-variant-numeric:tabular-nums; }
+
+  .kbwrap{ overflow-x:auto; overflow-y:hidden; padding:14px; background:var(--well); border:2px solid var(--line); border-radius:20px; }
+  .demo .kbwrap{ padding:0; border:none; background:transparent; }
+  .keyboard{ position:relative; display:flex; width:max-content; height:190px; margin:0 auto; user-select:none; }
+  .wkey{
+    position:relative; width:58px; height:100%;
+    background:linear-gradient(180deg, var(--key-white) 0 86%, var(--key-white-2) 100%);
+    border:2px solid var(--line-strong); border-radius:0 0 12px 12px;
+    margin-left:-2px; display:flex; align-items:flex-end; justify-content:center;
+    padding-bottom:12px; cursor:pointer;
+    transition:transform .06s ease, box-shadow .12s ease;
+  }
+  .wkey .lab{ font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:16px; color:#5c6480; }
+  .bkey{
+    position:absolute; top:0; width:36px; height:62%;
+    background:linear-gradient(180deg, var(--key-black) 0%, var(--key-black-2) 100%);
+    border-radius:0 0 8px 8px; z-index:2; cursor:pointer;
+    box-shadow:0 4px 6px rgba(0,0,0,.35);
+    transition:transform .06s ease, box-shadow .12s ease;
+  }
+  @media (hover:hover){
+    .wkey:hover:not(:active):not(.pressed){ filter:brightness(1.015); }
+    .bkey:hover:not(:active):not(.pressed){ filter:brightness(1.035); }
+  }
+  .wkey:active, .wkey.pressed, .bkey:active, .bkey.pressed{ transform:none; filter:brightness(.9); }
+  .kbadge{
+    position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    width:26px; height:26px; border-radius:50%; display:grid; place-items:center;
+    font-family:"Space Grotesk",sans-serif; font-weight:650; font-size:14px;
+    background:var(--brand); color:#fff;
+  }
+  .bkey .kbadge{ top:8px; width:24px; height:24px; font-size:13px; }
+  .is-root .kbadge{ background:var(--gold); color:#3a2400; }
+  .wkey.in-scale, .bkey.in-scale{ box-shadow:inset 0 0 0 3px var(--brand); }
+  .wkey.is-root, .bkey.is-root{ box-shadow:inset 0 0 0 3px var(--gold); }
+  .wkey.hit-good, .bkey.hit-good{ box-shadow:inset 0 0 0 4px var(--good); }
+  .wkey.flash-bad, .bkey.flash-bad{ box-shadow:inset 0 0 0 4px var(--bad); animation:shake .3s ease; }
+
+  .slots{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 16px; }
+  .slot{
+    min-width:56px; height:52px; padding:0 10px; border-radius:14px;
+    background:var(--well); border:2px dashed var(--line-strong);
+    display:grid; place-items:center;
+    font-family:"IBM Plex Mono",monospace; font-size:18px; color:var(--ink-3);
+  }
+  .slot.on{ background:var(--good-soft); border:2px solid var(--good); color:var(--good); }
+  .slot.miss{ background:var(--bad-soft); border:2px solid var(--bad); color:var(--bad); }
+  .slot.reveal{ border:2px solid var(--line); color:var(--ink-3); }
+
+  .recipepath{ display:flex; align-items:center; justify-content:center; gap:0; flex-wrap:wrap; padding:12px 4px 4px; }
+  .recipe-note{ min-width:30px; height:30px; border-radius:50%; background:var(--well); border:1px solid var(--line-strong); color:var(--ink); font:800 13px/30px "IBM Plex Mono",monospace; text-align:center; }
+  .recipe-gap{ position:relative; min-width:70px; padding:0 5px 18px; color:#2878d8; font-size:10px; font-weight:850; letter-spacing:.04em; text-align:center; text-transform:uppercase; }
+  .recipe-gap::after{ content:'→'; position:absolute; left:0; right:0; bottom:-1px; color:currentColor; font:700 24px/1 "Space Grotesk",sans-serif; }
+  .recipe-gap.h{ color:var(--gold); }
+  @media (max-width:520px){ .recipe-gap{ min-width:52px; font-size:9px; } }
+
+
+  .stepstrip{ display:flex; gap:4px; }
+  .stepseg{
+    flex:1; min-width:0; height:44px; border-radius:10px; display:grid; place-items:center;
+    font-family:"Space Grotesk",sans-serif; font-weight:650; font-size:15px;
+    background:var(--brand); color:#fff;
+  }
+  .stepseg.h{ background:var(--gold); color:#3a2400; }
+
+  .blk{
+    min-width:60px; min-height:52px; padding:8px 12px; border-radius:14px;
+    background:var(--well); border:2px solid var(--line);
+    display:grid; place-items:center; font-family:"Space Grotesk",sans-serif; font-weight:650; font-size:19px;
+    line-height:1.2; color:var(--ink);
+  }
+  .blk.on{ background:var(--brand); border-color:var(--brand); color:#fff; }
+  /* Two-line tile: the label above, the scale degree below. */
+  .pickblk{ gap:4px; padding:9px 14px; }
+  .pickblk .picktag{ font-size:11px; font-weight:800; letter-spacing:.09em; opacity:.75; }
+  .pickblk .picknote{ font-size:18px; font-weight:650; }
+  .blocks{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; min-height:56px; align-items:center; }
+
+  .lesson-nav{ display:flex; align-items:center; }
+  .lesson-nav .lessontabs{ flex:1; }
+  .course-piano-launch{ width:38px; height:38px; display:grid; place-items:center; flex:none; border:1px solid var(--line-strong); border-radius:9px; background:var(--well); color:var(--brand); }
+  .course-piano-launch:hover{ border-color:var(--brand); background:var(--brand-soft); }
+  .course-piano-launch svg{ width:21px; height:21px; }
+  #pianoKeyboard .keyhint{ position:absolute; bottom:7px; left:50%; transform:translateX(-50%); color:rgba(41,48,72,.46); font:600 10px/1 "IBM Plex Mono",monospace; pointer-events:none; }
+  #pianoKeyboard .wkey .lab{ position:absolute; bottom:25px; }
+  #pianoKeyboard .bkey .keyhint{ color:rgba(255,255,255,.45); bottom:8px; }
+  @media (max-width:600px){ #pianoKeyboard .keyhint{ display:none; } #pianoKeyboard .wkey .lab{ position:static; } }
+  .piano-stage{ padding:12px 0 0; }
+  .piano-stage-top{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:20px; }
+  .piano-stage-top p{ margin:0; color:var(--ink-3); font-size:13px; font-weight:700; }
+  .piano-canvas{ overflow:hidden; padding:0; }
+  #pianoKeyboard{ display:flex; width:max-content; margin:0 auto; }
+  #pianoKeyboard .keyboard{ margin:0; }
+  .piano-shortcuts{ display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; }
+  .piano-shortcuts kbd{
+    min-width:27px; padding:5px 7px; border:1px solid var(--line-strong); border-bottom-width:3px;
+    border-radius:6px; background:var(--well); color:var(--ink-2); text-align:center;
+    font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:600;
+  }
+  .sample-credit{ margin:14px 0 0; color:var(--ink-3); font-size:12px; font-weight:650; }
+  .sample-credit a{ color:var(--brand); }
+
+  .learnbar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+  select.pill{
+    appearance:none; padding-right:34px; color:var(--ink);
+    background-image:linear-gradient(45deg,transparent 50%,var(--ink-3) 50%),linear-gradient(135deg,var(--ink-3) 50%,transparent 50%);
+    background-position:calc(100% - 18px) center,calc(100% - 12px) center;
+    background-size:6px 6px,6px 6px; background-repeat:no-repeat;
+  }
+  .lessontabs{ display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; margin-bottom:16px; }
+  .lessontabs .pill{ flex:none; }
+  .lesson{ display:none; }
+  .lesson.active{ display:block; }
+  .spell{
+    font-family:"IBM Plex Mono",monospace; font-size:19px; color:var(--ink);
+    background:var(--well); border-radius:14px; padding:14px 16px; overflow-x:auto; white-space:nowrap;
+  }
+  .deglist{ display:flex; flex-direction:column; gap:8px; }
+  .degrow{
+    display:flex; align-items:center; gap:14px; width:100%; text-align:left;
+    background:var(--card-2); border:2px solid var(--line); border-radius:14px; padding:12px 14px;
+    color:var(--ink); font-size:16px;
+  }
+  .degrow:hover{ border-color:var(--brand); }
+  .degrow .n{
+    width:34px; height:34px; border-radius:10px; background:var(--brand); color:#fff;
+    display:grid; place-items:center; font-family:"Space Grotesk",sans-serif; font-weight:650; font-size:17px; flex:none;
+  }
+  .degrow .nm{ font-family:"IBM Plex Mono",monospace; font-size:19px; width:44px; flex:none; }
+  .degrow .fn{ flex:1; color:var(--ink-2); }
+  .chordgrid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; }
+  .chord-stack{
+    display:flex; flex-direction:column; align-items:center; gap:2px; width:170px; margin:0 auto 16px; padding:10px;
+    background:var(--well); border:1px solid var(--line); border-radius:8px;
+  }
+  .stack-label{ align-self:stretch; margin-bottom:5px; color:var(--ink-3); font-size:11px; font-weight:800; letter-spacing:.08em; text-align:center; text-transform:uppercase; }
+  .stack-note{ display:block; min-width:76px; padding:4px 10px; border:1px solid var(--line-strong); border-radius:5px; background:var(--card); color:var(--ink); font-family:"IBM Plex Mono",monospace; font-size:18px; font-weight:600; text-align:center; }
+  .stack-note small{ color:var(--ink-3); font-family:"Space Grotesk",sans-serif; font-size:10px; font-weight:800; text-transform:uppercase; }
+  .stack-note.n0{ border-color:var(--gold); color:var(--gold); }
+  .stack-caption{ margin-top:7px; color:var(--ink-3); font-size:11px; font-weight:700; line-height:1.35; text-align:center; }
+  .chordbtn{
+    background:var(--card-2); border:2px solid var(--line); border-bottom-width:5px; border-radius:16px;
+    padding:14px; text-align:left; display:flex; flex-direction:column; gap:4px;
+  }
+  .chordbtn:active{ transform:translateY(3px); border-bottom-width:2px; margin-bottom:3px; }
+  .chordbtn .rn{ font-family:"Space Grotesk",sans-serif; font-weight:650; font-size:26px; color:var(--ink); }
+  .chordbtn .nt{ font-family:"IBM Plex Mono",monospace; font-size:14px; color:var(--ink-3); }
+  .qual{ align-self:flex-start; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; padding:3px 9px; border-radius:999px; }
+  .qual.major{ background:var(--brand-soft); color:var(--brand); }
+  .qual.minor{ background:var(--good-soft); color:var(--good-shelf); }
+  .qual.diminished{ background:var(--bad-soft); color:var(--bad-shelf); }
+  .progrow{ display:flex; gap:10px; flex-wrap:wrap; }
+  .moderow{ display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:2px solid var(--line); flex-wrap:wrap; }
+  .moderow:last-child{ border-bottom:none; }
+  .moderow .mn{ font-family:"Space Grotesk",sans-serif; font-weight:650; font-size:21px; width:128px; flex:none; }
+  .moderow .mt{ font-family:"IBM Plex Mono",monospace; font-size:15px; color:var(--brand); width:44px; flex:none; }
+  .moderow .md{ flex:1; min-width:180px; font-size:15px; color:var(--ink-2); }
+
+  @media (max-width:560px){
+    .keyboard{ height:158px; }
+    .wkey{ width:46px; }
+    .bkey{ width:30px; }
+    .moderow .mn{ width:auto; }
+    .moderow .md{ flex-basis:100%; }
+  }
+</style>
+</head>
+<body>
+
+<header class="sitehead">
+  <div class="inner">
+    <a class="wordmark" href="../">
+      <span class="wordmark-icon" aria-hidden="true"></span>
+      CrowStudies
+    </a>
+    <nav class="sitenav">
+      <a href="../lessons/" aria-current="page">Lessons</a>
+      <a href="../studio/">Studio</a>
+      <button class="authbtn auth-pending" data-firebase-auth disabled>Sign in</button>
+    </nav>
+  </div>
+</header>
+
+<div id="app"></div>
+
+<script type="module" src="../assets/firebase.js?v=20260909-32"></script>
+<script src="../assets/quiz.js?v=separate-guest-progress-20260910"></script>
+<script>
+(function(){
+  "use strict";
+
+  /* ================= THEORY ENGINE ================= */
+  var LETTERS = ['C','D','E','F','G','A','B'];
+  var NATURAL_PC = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
+  var MAJOR_INTERVALS = [0,2,4,5,7,9,11];
+  var MINOR_INTERVALS = [0,2,3,5,7,8,10];
+  var ROMAN = ['I','II','III','IV','V','VI','VII'];
+  var DEGREE_NAMES_MAJOR = ['Tonic','Supertonic','Mediant','Subdominant','Dominant','Submediant','Leading Tone'];
+  var DEGREE_NAMES_MINOR = ['Tonic','Supertonic','Mediant','Subdominant','Dominant','Submediant','Subtonic'];
+  var MODE_NAMES = ['Ionian','Dorian','Phrygian','Lydian','Mixolydian','Aeolian','Locrian'];
+  var MODE_DESC = [
+    'The major scale: bright, resolved, and at home.',
+    'Minor with a lifted 6th. It feels moody without being heavy, and shows up in funk and jazz.',
+    'Minor with a lowered 2nd. It has a dark sound common in flamenco and metal.',
+    'Major with a raised 4th. It feels dreamy and floating.',
+    'Major with a lowered 7th. Think blues and rock anthems.',
+    'Natural minor: sad, grounded, and the default minor sound.',
+    'Minor with a lowered 2nd and 5th. It is unstable and rarely feels like home.'
+  ];
+
+  var ROOT_DEFS = [
+    ['C','C',0],['G','G',0],['D','D',0],['A','A',0],['E','E',0],['B','B',0],
+    ["F♯",'F',1],["D♭",'D',-1],["A♭",'A',-1],["E♭",'E',-1],["B♭",'B',-1],['F','F',0]
+  ];
+  var ROOTS = ROOT_DEFS.map(function(d){
+    return { label:d[0], letter:d[1], acc:d[2], pc:((NATURAL_PC[d[1]] + d[2]) % 12 + 12) % 12 };
+  });
+
+  function normAcc(diff){
+    var d = ((diff % 12) + 12) % 12;
+    if (d > 6) d -= 12;
+    return d;
+  }
+  function accSymbol(a){ return a > 0 ? '♯'.repeat(a) : (a < 0 ? '♭'.repeat(-a) : ''); }
+  function noteName(n){ return n.letter + accSymbol(n.acc); }
+
+  function buildScale(rootIndex, scaleType){
+    var root = ROOTS[rootIndex];
+    var intervals = scaleType === 'major' ? MAJOR_INTERVALS : MINOR_INTERVALS;
+    var startIdx = LETTERS.indexOf(root.letter);
+    var notes = [];
+    for (var i=0; i<7; i++){
+      var targetPc = ((root.pc + intervals[i]) % 12 + 12) % 12;
+      var letter = LETTERS[(startIdx + i) % 7];
+      notes.push({ letter:letter, acc:normAcc(targetPc - NATURAL_PC[letter]), pc:targetPc, semi:intervals[i], degree:i+1 });
+    }
+    return notes;
+  }
+
+  function triadsForScale(scaleArr){
+    var S = scaleArr.map(function(n){ return n.semi; });
+    var S2 = S.concat(S.map(function(s){ return s+12; }));
+    var out = [];
+    for (var i=0; i<7; i++){
+      var third = S2[i+2]-S2[i], fifth = S2[i+4]-S2[i], quality;
+      if (third===4 && fifth===7) quality='major';
+      else if (third===3 && fifth===7) quality='minor';
+      else if (third===3 && fifth===6) quality='diminished';
+      else if (third===4 && fifth===8) quality='augmented';
+      else quality='other';
+      var roman = (quality==='major'||quality==='augmented') ? ROMAN[i] : ROMAN[i].toLowerCase();
+      if (quality==='diminished') roman += '°';
+      if (quality==='augmented') roman += '+';
+      out.push({
+        roman:roman, quality:quality, degree:i+1,
+        notes:[scaleArr[i], scaleArr[(i+2)%7], scaleArr[(i+4)%7]],
+        midiOffsets:[S2[i], S2[i+2], S2[i+4]]
+      });
+    }
+    return out;
+  }
+
+  /* ================= AUDIO ================= */
+  var audioCtx = null, master = null;
+  function masterOut(ctx){
+    if (!master){ master = ctx.createGain(); master.gain.value = 1; master.connect(ctx.destination); }
+    return master;
+  }
+  function ensureCtx(){
+    if (!audioCtx){
+      var AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+  function midiToFreq(m){ return 440 * Math.pow(2, (m-69)/12); }
+
+  /* Recorded piano samples are preloaded immediately. */
+  var PIANO_SAMPLE_BASE = 'https://tonejs.github.io/audio/salamander/';
+  var pianoBuffers = {}, pianoSamplesLoading = false, pianoSamplesReady = false;
+  var PIANO_SAMPLE_FILES = { 60:'C4.mp3', 63:'Ds4.mp3', 66:'Fs4.mp3', 69:'A4.mp3' };
+  function updatePianoSoundStatus(){
+    var status = document.getElementById('pianoSoundStatus');
+    if (status) status.textContent = pianoSamplesReady ? 'Grand-piano sound ready.' : 'Loading grand-piano sound…';
+  }
+  function loadPianoSamples(ctx){
+    if (pianoSamplesLoading || pianoSamplesReady) return;
+    pianoSamplesLoading = true;
+    Promise.all(Object.keys(PIANO_SAMPLE_FILES).map(function(midi){
+      return fetch(PIANO_SAMPLE_BASE + PIANO_SAMPLE_FILES[midi])
+        .then(function(response){ if (!response.ok) throw new Error('sample unavailable'); return response.arrayBuffer(); })
+        .then(function(data){ return ctx.decodeAudioData(data); })
+        .then(function(buffer){ pianoBuffers[+midi] = buffer; });
+    })).then(function(){ pianoSamplesReady = true; updatePianoSoundStatus(); }).catch(function(){
+      pianoSamplesLoading = false;
+      var status = document.getElementById('pianoSoundStatus');
+      if (status) status.textContent = 'Piano sound could not load. Check your connection and try again.';
+    });
+  }
+  function schedulePianoSample(ctx, midi, startTime, duration){
+    if (!pianoSamplesReady) return false;
+    var choices = Object.keys(pianoBuffers).map(Number);
+    var sourceMidi = choices.reduce(function(best, candidate){ return Math.abs(candidate-midi) < Math.abs(best-midi) ? candidate : best; }, choices[0]);
+    var source = ctx.createBufferSource();
+    source.buffer = pianoBuffers[sourceMidi];
+    source.playbackRate.value = Math.pow(2, (midi-sourceMidi)/12);
+    var gain = ctx.createGain(), life = Math.max(1.35, duration + 0.9);
+    gain.gain.setValueAtTime(0.0001, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.82, startTime + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + life);
+    source.connect(gain); gain.connect(masterOut(ctx));
+    source.start(startTime); source.stop(startTime + life + 0.04);
+    return true;
+  }
+
+  var noiseBuffer = null;
+  function getNoiseBuffer(ctx){
+    if (noiseBuffer) return noiseBuffer;
+    var len = Math.floor(ctx.sampleRate * 0.06);
+    noiseBuffer = ctx.createBuffer(1, len, ctx.sampleRate);
+    var data = noiseBuffer.getChannelData(0);
+    for (var i=0;i<len;i++) data[i] = (Math.random()*2-1) * (1 - i/len);
+    return noiseBuffer;
+  }
+
+  // Additive piano-ish voice: slightly stretched harmonic partials, each with
+  // its own decay, plus a short filtered noise burst for the hammer strike.
+  var PARTIALS = [
+    { ratio:1.000, amp:1.00, decay:1.00 }, { ratio:2.001, amp:0.55, decay:0.85 },
+    { ratio:3.005, amp:0.30, decay:0.68 }, { ratio:4.012, amp:0.17, decay:0.52 },
+    { ratio:5.023, amp:0.10, decay:0.40 }, { ratio:6.039, amp:0.06, decay:0.30 }
+  ];
+
+  function scheduleTone(ctx, midi, startTime, duration){
+    loadPianoSamples(ctx);
+    if (!schedulePianoSample(ctx, midi, startTime, duration)) return;
+    var freq = midiToFreq(midi);
+    var dur = duration * Math.max(0.55, Math.min(1.5, 1.55 - (midi-48)/48));
+
+    var voice = ctx.createGain();
+    voice.gain.value = 0.9;
+    var tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.setValueAtTime(Math.min(9000, freq*9 + 1200), startTime);
+    tone.frequency.exponentialRampToValueAtTime(Math.max(600, freq*2), startTime + dur);
+    tone.Q.value = 0.4;
+    tone.connect(voice);
+    voice.connect(masterOut(ctx));
+
+    PARTIALS.forEach(function(p){
+      var osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq * p.ratio;
+      var g = ctx.createGain();
+      var partialDur = Math.max(0.12, dur * p.decay);
+      g.gain.setValueAtTime(0.0001, startTime);
+      g.gain.exponentialRampToValueAtTime(0.30 * p.amp, startTime + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, startTime + partialDur);
+      osc.connect(g); g.connect(tone);
+      osc.start(startTime);
+      osc.stop(startTime + partialDur + 0.05);
+    });
+
+    var noise = ctx.createBufferSource();
+    noise.buffer = getNoiseBuffer(ctx);
+    var nf = ctx.createBiquadFilter();
+    nf.type = 'bandpass';
+    nf.frequency.value = Math.min(6000, freq*3);
+    nf.Q.value = 0.8;
+    var ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.16, startTime);
+    ng.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.045);
+    noise.connect(nf); nf.connect(ng); ng.connect(voice);
+    noise.start(startTime);
+    noise.stop(startTime + 0.06);
+  }
+
+  // Single notes stack, so you can hold a chord one key at a time. Anything that
+  // plays a phrase of its own -- a chord button, a progression -- takes over the
+  // output, so starting a second one cuts the first instead of layering on it.
+  var stepTimers = [];
+  function stopPlayback(){
+    stepTimers.forEach(clearTimeout);
+    stepTimers = [];
+    if (!audioCtx || !master) return;
+    var leaving = master, now = audioCtx.currentTime;
+    leaving.gain.cancelScheduledValues(now);
+    leaving.gain.setValueAtTime(Math.max(0.0001, leaving.gain.value), now);
+    leaving.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+    setTimeout(function(){ try{ leaving.disconnect(); }catch(e){} }, 160);
+    master = null;
+  }
+  function playMidis(midis, opts){
+    opts = opts || {};
+    if (opts.exclusive) stopPlayback();
+    var ctx = ensureCtx(), now = ctx.currentTime + 0.02;
+    midis.forEach(function(m, i){ scheduleTone(ctx, m, now + i*(opts.strum||0), opts.duration||1.0); });
+  }
+  function playSequence(groups, stepMs, onStep){
+    stopPlayback();
+    var ctx = ensureCtx(), now = ctx.currentTime + 0.05;
+    groups.forEach(function(g, idx){
+      (Array.isArray(g) ? g : [g]).forEach(function(m){
+        scheduleTone(ctx, m, now + idx*(stepMs/1000), (stepMs/1000)*0.9);
+      });
+      if (onStep) stepTimers.push(setTimeout(function(){ onStep(idx); }, idx*stepMs));
+    });
+  }
+  var UI_SFX = {
+    correct:'../assets/sfx/confirm.wav',
+    wrong:'../assets/sfx/error.wav',
+    complete:'../assets/sfx/complete.wav'
+  };
+  function playUiSfx(kind){
+    var sound = new Audio(UI_SFX[kind]);
+    sound.volume = kind === 'wrong' ? 0.38 : 0.48;
+    sound.play().catch(function(){});
+  }
+  function chime(){ playUiSfx('correct'); }
+  function buzz(){ playUiSfx('wrong'); }
+  function fanfare(){ playUiSfx('complete'); }
+
+  /* ================= KEYBOARD ================= */
+  var WHITE_PCS = [0,2,4,5,7,9,11];
+  var BLACK_PCS = { 0:1, 1:3, 3:6, 4:8, 5:10 };
+
+  function metrics(){
+    var w = window.innerWidth || 1000;
+    if (w < 420) return { whiteW:40, blackW:26 };
+    if (w < 560) return { whiteW:46, blackW:30 };
+    return { whiteW:58, blackW:36 };
+  }
+
+  function renderKeyboard(el, highlightFn, onPlay, size){
+    if (typeof el === 'string') el = document.getElementById(el);
+    if (!el) return null;
+    el.innerHTML = '';
+    var m = size || metrics();
+    WHITE_PCS.forEach(function(pc, i){
+      var info = highlightFn(pc) || {};
+      var k = document.createElement('div');
+      k.className = 'wkey' + (info.inScale?' in-scale':'') + (info.isRoot?' is-root':'');
+      k.style.width = m.whiteW + 'px';
+      k.dataset.pc = pc;
+      var lab = document.createElement('span');
+      lab.className = 'lab';
+      lab.textContent = LETTERS[i];
+      k.appendChild(lab);
+      if (info.badge){
+        var b = document.createElement('span');
+        b.className = 'kbadge';
+        b.textContent = info.badge;
+        k.appendChild(b);
+      }
+      k.addEventListener('click', function(){ onPlay(pc, k); });
+      el.appendChild(k);
+    });
+    Object.keys(BLACK_PCS).forEach(function(key){
+      var idx = +key, pc = BLACK_PCS[idx];
+      var info = highlightFn(pc) || {};
+      var k = document.createElement('div');
+      k.className = 'bkey' + (info.inScale?' in-scale':'') + (info.isRoot?' is-root':'');
+      k.style.width = m.blackW + 'px';
+      k.style.left = (idx*m.whiteW + m.whiteW - m.blackW/2 - 2) + 'px';
+      k.dataset.pc = pc;
+      if (info.badge){
+        var b = document.createElement('span');
+        b.className = 'kbadge';
+        b.textContent = info.badge;
+        k.appendChild(b);
+      }
+      k.addEventListener('click', function(e){ e.stopPropagation(); onPlay(pc, k); });
+      el.appendChild(k);
+    });
+    return el;
+  }
+
+  function flashKey(container, pc){
+    if (typeof container === 'string') container = document.getElementById(container);
+    if (!container) return;
+    var n = container.querySelector('[data-pc="'+pc+'"]');
+    if (!n) return;
+    n.classList.add('pressed');
+    setTimeout(function(){ n.classList.remove('pressed'); }, 240);
+  }
+
+  function pianoMetrics(){ var white = Math.max(22, Math.min(42, Math.floor(((window.innerWidth || 1000) - 42) / 14))); return { whiteW:white, blackW:Math.round(white*.62) }; }
+  function flashPianoMidi(midi){
+    var node = document.querySelector('#pianoKeyboard [data-midi="'+midi+'"]');
+    if (!node) return;
+    node.classList.add('pressed');
+    setTimeout(function(){ node.classList.remove('pressed'); }, 180);
+  }
+  function renderPianoKeyboard(){
+    var root = document.getElementById('pianoKeyboard');
+    if (!root) return;
+    root.innerHTML = '';
+    [48,60].forEach(function(base){
+      var keyboard = document.createElement('div');
+      keyboard.className = 'keyboard piano-octave';
+      root.appendChild(keyboard);
+      renderKeyboard(keyboard, function(){ return null; }, function(pc){
+        var midi = base + pc;
+        playMidis([midi], { duration:1.25 });
+        flashPianoMidi(midi);
+      }, pianoMetrics());
+      Array.prototype.forEach.call(keyboard.querySelectorAll('[data-pc]'), function(node){
+        var midi = base + (+node.dataset.pc);
+        node.dataset.midi = midi;
+        var offset = midi - computerPianoBase;
+        if (COMPUTER_PIANO_LABELS[offset]){
+          var hint = document.createElement('span');
+          hint.className = 'keyhint';
+          hint.textContent = COMPUTER_PIANO_LABELS[offset];
+          node.appendChild(hint);
+        }
+      });
+    });
+  }
+  var COMPUTER_PIANO_KEYS = { a:0, w:1, s:2, e:3, d:4, f:5, t:6, g:7, y:8, h:9, u:10, j:11, k:12 };
+  var COMPUTER_PIANO_LABELS = { 0:'A',1:'W',2:'S',3:'E',4:'D',5:'F',6:'T',7:'G',8:'Y',9:'H',10:'U',11:'J',12:'K' };
+  var computerPianoBase = 60;
+  var computerPianoBound = false;
+  function bindComputerPiano(){
+    if (computerPianoBound) return;
+    computerPianoBound = true;
+    window.addEventListener('keydown', function(event){
+      if (event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
+      if (!document.querySelector('#lesson-piano.active')) return;
+      if (event.target && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
+      var key = String(event.key || '').toLowerCase();
+      if (key === 'z'){
+        computerPianoBase = 48;
+        renderPianoKeyboard();
+        event.preventDefault();
+        return;
+      }
+      if (key === 'x'){
+        computerPianoBase = 60;
+        renderPianoKeyboard();
+        event.preventDefault();
+        return;
+      }
+      var offset = COMPUTER_PIANO_KEYS[key];
+      if (offset == null) return;
+      var midi = computerPianoBase + offset;
+      event.preventDefault();
+      playMidis([midi], { duration:1.25 });
+      flashPianoMidi(midi);
+    });
+  }
+
+  /* ================= QUESTION GENERATORS ================= */
+  function randInt(n){ return Math.floor(Math.random()*n); }
+  function shuffle(a){ for (var i=a.length-1;i>0;i--){ var j=randInt(i+1), t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+  function choiceSet(correct, pool, count){
+    var p = pool.filter(function(d){ return d!==correct; });
+    shuffle(p);
+    var all = p.slice(0, count-1).concat([correct]);
+    shuffle(all);
+    return { choices:all, correctIndex:all.indexOf(correct) };
+  }
+  function randRoot(){ return randInt(ROOTS.length); }
+  function randType(){ return Math.random()<0.5 ? 'major' : 'minor'; }
+
+  function genStepType(scaleType){
+    var st = scaleType || randType();
+    var iv = st==='major' ? MAJOR_INTERVALS : MINOR_INTERVALS;
+    var i = randInt(7);
+    var next = i<6 ? iv[i+1] : 12;
+    var set = choiceSet((next - iv[i])===1 ? 'Half step' : 'Whole step', ['Whole step','Half step'], 2);
+    return { type:'mcq', tag: st==='major'?'Major scale':'Minor scale',
+      headline:'Between scale notes ' + (i+1) + ' and ' + (i===6?'the next root':i+2) + ': how far?',
+      choices:set.choices, correctIndex:set.correctIndex,
+      explain: st==='major'
+        ? 'Major has half steps between its 3rd–4th and 7th–next-root notes. Everywhere else is a whole step.'
+        : 'Natural minor has half steps between its 2nd–3rd and 5th–6th notes. Everywhere else is a whole step.' };
+  }
+
+  function genKeyboardStepType(){
+    var examples = [
+      { from:'C', to:'C♯', answer:'Half step' },
+      { from:'C', to:'D', answer:'Whole step' }
+    ];
+    var x = examples[randInt(examples.length)];
+    var set = choiceSet(x.answer, ['Whole step','Half step'], 2);
+    return { type:'mcq', tag:'Step sizes',
+      headline:x.from + ' to ' + x.to + ': whole step or half step?',
+      choices:set.choices, correctIndex:set.correctIndex,
+      explain:x.answer === 'Half step'
+        ? 'There is no key between ' + x.from + ' and ' + x.to + ', so it is a half step.'
+        : 'There is one key between ' + x.from + ' and ' + x.to + ', so it is a whole step.' };
+  }
+
+  function genNextKeyAfterC(){
+    var set = choiceSet('C♯', ['C♯','D','B','D♯'], 4);
+    return { type:'mcq', tag:'Keyboard layout',
+      headline:'What is the very next key after C?',
+      choices:set.choices, correctIndex:set.correctIndex,
+      explain:'C♯ is immediately beside C. There is no key between them.' };
+  }
+
+  function genHalfStepAtWhiteKeys(){
+    var examples = [
+      { from:'E', to:'F' }, { from:'B', to:'C' }
+    ];
+    var x = examples[randInt(examples.length)];
+    var set = choiceSet('Half step', ['Whole step','Half step'], 2);
+    return { type:'mcq', tag:'Half steps',
+      headline:x.from + ' to ' + x.to + ': half step or whole step?',
+      choices:set.choices, correctIndex:set.correctIndex,
+      explain:x.from + ' and ' + x.to + ' are neighboring keys, even though both are white. That makes the distance a half step.' };
+  }
+
+  function genScaleBuild(){
+    var ri = randRoot(), st = randType(), scale = buildScale(ri, st);
+    return { type:'scaleBuild', tag:ROOTS[ri].label + ' ' + st,
+      headline:'Play ' + ROOTS[ri].label + ' ' + st + ', low to high',
+      sub:'Tap the seven keys in order.',
+      sequence:scale.map(function(n){ return n.pc; }),
+      noteNames:scale.map(noteName),
+      explain: ROOTS[ri].label + ' ' + st + ' is ' + scale.map(noteName).join(' – ') + '.' };
+  }
+
+  function genDegreeFind(scaleType){
+    var ri = randRoot(), st = scaleType || randType(), scale = buildScale(ri, st), i = randInt(7);
+    return { type:'degreeFind', tag:ROOTS[ri].label + ' ' + st,
+      headline:'Find degree ' + (i+1), sub:'One key. Tap it.',
+      targetPc:scale[i].pc,
+      explain:'Degree ' + (i+1) + ' of ' + ROOTS[ri].label + ' ' + st + ' is ' + noteName(scale[i]) + '.' };
+  }
+
+  function genChordSpot(scaleType, degree){
+    var ri = randRoot(), st = scaleType || randType();
+    var triads = triadsForScale(buildScale(ri, st));
+    var t = triads[degree == null ? randInt(7) : degree];
+    return { type:'chordSpot', tag:ROOTS[ri].label + ' ' + st,
+      headline:'Play the ' + t.roman + ' chord', sub:'Three keys, any order.',
+      targetPcs:t.notes.map(function(n){ return n.pc; }),
+      stack:t.notes.map(noteName),
+      explain:'The ' + t.roman + ' chord is ' + t.notes.map(noteName).join(', ') + '. It is ' + t.quality + '.' };
+  }
+
+  function genFunctionName(scaleType){
+    var ri = randRoot(), st = scaleType || randType();
+    var names = st==='major' ? DEGREE_NAMES_MAJOR : DEGREE_NAMES_MINOR;
+    var i = randInt(7);
+    var set = choiceSet(names[i], names.filter(function(n,x){ return x!==i; }), 4);
+    return { type:'mcq', tag:ROOTS[ri].label + ' ' + st + ' · degree ' + (i+1),
+      headline:'What do we call degree ' + (i+1) + '?',
+      choices:set.choices, correctIndex:set.correctIndex,
+      explain:'Degree ' + (i+1) + ' is always the ' + names[i] + '. The name follows the number, not the letter.' };
+  }
+
+  function genChordQuality(scaleType){
+    var ri = randRoot(), st = scaleType || randType(), i = randInt(7);
+    var t = triadsForScale(buildScale(ri, st))[i];
+    var label = t.quality.charAt(0).toUpperCase() + t.quality.slice(1);
+    var set = choiceSet(label, ['Major','Minor','Diminished'], 3);
+    return { type:'mcq', tag:ROOTS[ri].label + ' ' + st + ' · degree ' + (i+1),
+      headline:'Is that triad major, minor or diminished?',
+      choices:set.choices, correctIndex:set.correctIndex,
+      explain:'It spells ' + t.notes.map(noteName).join(', ') + '. That makes it ' + t.quality + '.' };
+  }
+
+  function genHalfStepLocation(scaleType){
+    var st = scaleType || randType();
+    var correct = st==='major' ? '3–4 and 7–8' : '2–3 and 5–6';
+    var set = choiceSet(correct, ['3–4 and 7–8','2–3 and 5–6','1–2 and 4–5','4–5 and 6–7'], 4);
+    return { type:'mcq', tag: st==='major'?'Major scale':'Minor scale',
+      headline:'Between which scale-note positions do the half steps fall?',
+      choices:set.choices, correctIndex:set.correctIndex,
+      explain: st==='major'
+        ? 'Major: between the 3rd–4th notes and 7th–next-root notes, like Mi–Fa and Ti–Do.'
+        : 'Natural minor has the same two gaps, just earlier: between its 2nd–3rd and 5th–6th notes.' };
+  }
+
+  function genRelativeMinor(){
+    var mi = randRoot();
+    var minorPc = (ROOTS[mi].pc + 9) % 12, minorIndex = 0;
+    for (var k=0;k<ROOTS.length;k++){ if (ROOTS[k].pc===minorPc){ minorIndex=k; break; } }
+    var set = choiceSet(ROOTS[minorIndex].label, ROOTS.map(function(r){ return r.label; }), 4);
+    return { type:'mcq', tag:ROOTS[mi].label + ' major',
+      headline:'What is its relative minor?',
+      choices:set.choices, correctIndex:set.correctIndex,
+      explain:'The relative minor starts on degree 6. It has the same notes and key signature, but a different home.' };
+  }
+
+  var PRESETS = [
+    { label:'I – V – vi – IV', degrees:[0,4,5,3] },
+    { label:'I – IV – V – I', degrees:[0,3,4,0] },
+    { label:'vi – IV – I – V', degrees:[5,3,0,4] },
+    { label:'ii – V – I', degrees:[1,4,0] }
+  ];
+
+  function genProgressionBlank(scaleType){
+    var ri = randRoot(), st = scaleType || randType();
+    var triads = triadsForScale(buildScale(ri, st));
+    var preset = PRESETS[randInt(PRESETS.length)];
+    var shown = preset.degrees.slice(0,-1).map(function(d){ return triads[d].roman; });
+    var correct = triads[preset.degrees[preset.degrees.length-1]].roman;
+    var set = choiceSet(correct, triads.map(function(t){ return t.roman; }), 4);
+    return { type:'mcq', tag:ROOTS[ri].label + ' ' + st,
+      headline:shown.join(' – ') + ' – ?', sub:'Finish the progression.',
+      choices:set.choices, correctIndex:set.correctIndex,
+      explain:'That is ' + preset.label + '. It lands on ' + correct + '.' };
+  }
+
+  function genHarmonyRole(){
+    var prompts = [
+      { headline:'Which chord feels like home in a major key?', correct:'I', explain:'I begins on the tonic, so it is the home chord.' },
+      { headline:'Which chord creates the strongest pull back to I?', correct:'V', explain:'V creates the strongest pull back to the home chord, I.' },
+      { headline:'Which chord moves away from home more gently?', correct:'IV', explain:'IV moves away from I without the strong unfinished pull of V.' }
+    ];
+    var x = prompts[randInt(prompts.length)];
+    var set = choiceSet(x.correct, ['I','IV','V'], 3);
+    return { type:'mcq', tag:'Harmony', headline:x.headline,
+      choices:set.choices, correctIndex:set.correctIndex, explain:x.explain };
+  }
+
+  function genKeyFunction(scaleType){
+    var ri = randRoot(), st = scaleType || randType();
+    var names = st==='major' ? DEGREE_NAMES_MAJOR : DEGREE_NAMES_MINOR;
+    var i = [0,3,4][randInt(3)];
+    var set = choiceSet(names[i], names.filter(function(n,x){ return x!==i; }), 3);
+    return { type:'mcq', tag:ROOTS[ri].label + ' ' + st,
+      headline:'What is degree ' + (i+1) + '?',
+      choices:set.choices, correctIndex:set.correctIndex,
+      explain:'Degree ' + (i+1) + ' is the ' + names[i] + '. It is one of the three notes harmony leans on.' };
+  }
+
+  function genModeIdentify(){
+    var k = randInt(7);
+    var set = choiceSet(MODE_NAMES[k], MODE_NAMES, 4);
+    return { type:'mcq', tag:'Modes', headline:'Which mode sounds like this?', sub:MODE_DESC[k],
+      choices:set.choices, correctIndex:set.correctIndex,
+      explain:MODE_NAMES[k] + ' starts on degree ' + (k+1) + ' of the parent major scale.' };
+  }
+
+  function genModeDegree(){
+    var k = randInt(7);
+    var set = choiceSet(String(k+1), ['1','2','3','4','5','6','7'], 4);
+    return { type:'mcq', tag:MODE_NAMES[k], headline:'Which degree does it start on?',
+      choices:set.choices, correctIndex:set.correctIndex,
+      explain:MODE_NAMES[k] + ' begins on degree ' + (k+1) + '. ' + MODE_DESC[k] };
+  }
+
+  /* ================= TEACHING DEMOS ================= */
+  function demoKeyboard(rootIndex, scaleType, cap){
+    var wrap = document.createElement('div');
+    wrap.className = 'demo';
+    var scale = buildScale(rootIndex, scaleType);
+    var map = {}; scale.forEach(function(n){ map[n.pc] = n; });
+
+    var kbWrap = document.createElement('div');
+    kbWrap.className = 'kbwrap';
+    kbWrap.style.cssText = 'padding:0;border:none;background:transparent;overflow-x:auto';
+    var kb = document.createElement('div');
+    kb.className = 'keyboard';
+    kbWrap.appendChild(kb);
+    wrap.appendChild(kbWrap);
+    renderKeyboard(kb, function(pc){
+      var n = map[pc];
+      return n ? { inScale:true, isRoot:n.degree===1, badge:String(n.degree) } : null;
+    }, function(pc){ playMidis([60+pc]); flashKey(kb, pc); });
+
+    var row = document.createElement('div');
+    row.className = 'row';
+    row.style.marginTop = '14px';
+    var play = document.createElement('button');
+    play.className = 'btn sm';
+    play.textContent = 'Hear it';
+    play.onclick = function(){
+      var midis = scale.map(function(n){ return 60 + ROOTS[rootIndex].pc + n.semi; });
+      midis.push(60 + ROOTS[rootIndex].pc + 12);
+      var pcs = scale.map(function(n){ return n.pc; }); pcs.push(scale[0].pc);
+      playSequence(midis, 300, function(i){ flashKey(kb, pcs[i]); });
+    };
+    row.appendChild(play);
+    wrap.appendChild(row);
+    if (cap){
+      var c = document.createElement('p');
+      c.className = 'cap';
+      c.textContent = cap;
+      wrap.appendChild(c);
+    }
+    return wrap;
+  }
+
+  function demoStepExample(fromPc, toPc, from, to, caption){
+    var wrap = document.createElement('div');
+    wrap.className = 'demo';
+    var kbWrap = document.createElement('div');
+    kbWrap.className = 'kbwrap';
+    kbWrap.style.cssText = 'padding:0;border:none;background:transparent;overflow-x:auto';
+    var kb = document.createElement('div');
+    kb.className = 'keyboard';
+    kbWrap.appendChild(kb);
+    wrap.appendChild(kbWrap);
+
+    var marks = {};
+    marks[fromPc] = { inScale:true, isRoot:true, badge:from };
+    marks[toPc] = { inScale:true, badge:to };
+    renderKeyboard(kb, function(pc){ return marks[pc] || null; }, function(pc){
+      playMidis([60+pc]); flashKey(kb, pc);
+    });
+    var cap = document.createElement('p');
+    cap.className = 'cap';
+    cap.textContent = caption;
+    wrap.appendChild(cap);
+    return wrap;
+  }
+
+  function demoSteps(scaleType){
+    var wrap = document.createElement('div');
+    wrap.className = 'demo';
+    var iv = scaleType==='major' ? MAJOR_INTERVALS : MINOR_INTERVALS;
+    var strip = document.createElement('div');
+    strip.className = 'stepstrip';
+    for (var i=0;i<7;i++){
+      var next = i<6 ? iv[i+1] : 12;
+      var half = (next - iv[i]) === 1;
+      var seg = document.createElement('div');
+      seg.className = 'stepseg' + (half ? ' h' : '');
+      seg.textContent = half ? 'H' : 'W';
+      strip.appendChild(seg);
+    }
+    wrap.appendChild(strip);
+    var cap = document.createElement('p');
+    cap.className = 'cap';
+    cap.textContent = scaleType==='major'
+      ? 'Gold = half step. In major they sit after degree 3 and after degree 7.'
+      : 'Gold = half step. In natural minor they sit after degree 2 and after degree 5.';
+    wrap.appendChild(cap);
+    return wrap;
+  }
+
+  function demoScaleRecipe(scaleType, part, caption){
+    var notes = scaleType==='major'
+      ? (part==='start'
+        ? [{pc:0,name:'C'},{pc:2,name:'D'},{pc:4,name:'E'},{pc:5,name:'F'}]
+        : [{pc:5,name:'F'},{pc:7,name:'G'},{pc:9,name:'A'},{pc:11,name:'B'},{pc:0,name:'C'}])
+      : (part==='start'
+        ? [{pc:0,name:'C'},{pc:2,name:'D'},{pc:3,name:'E♭'},{pc:5,name:'F'}]
+        : [{pc:5,name:'F'},{pc:7,name:'G'},{pc:8,name:'A♭'},{pc:10,name:'B♭'},{pc:0,name:'C'}]);
+    var steps = scaleType==='major'
+      ? (part==='start' ? ['W','W','H'] : ['W','W','W','H'])
+      : (part==='start' ? ['W','H','W'] : ['W','H','W','W']);
+
+    var wrap = document.createElement('div');
+    wrap.className = 'demo recipe-demo';
+    var kbWrap = document.createElement('div');
+    kbWrap.className = 'kbwrap';
+    kbWrap.style.cssText = 'padding:0;border:none;background:transparent;overflow-x:auto';
+    var kb = document.createElement('div');
+    kb.className = 'keyboard';
+    kbWrap.appendChild(kb);
+    wrap.appendChild(kbWrap);
+
+    renderKeyboard(kb, function(){ return null; }, function(pc){
+      playMidis([60+pc]); flashKey(kb, pc);
+    });
+
+    var row = document.createElement('div');
+    row.className = 'recipepath';
+    row.style.marginTop = '14px';
+    notes.forEach(function(note, i){
+      var noteMark = document.createElement('span');
+      noteMark.className = 'recipe-note';
+      noteMark.textContent = note.name;
+      row.appendChild(noteMark);
+      if (steps[i]){
+        var gap = document.createElement('span');
+        gap.className = 'recipe-gap' + (steps[i]==='H' ? ' h' : '');
+        gap.textContent = steps[i]==='W' ? 'whole step' : 'half step';
+        row.appendChild(gap);
+      }
+    });
+    wrap.appendChild(row);
+
+    var key = document.createElement('p');
+    key.className = 'cap';
+    key.innerHTML = '<strong>Blue = whole step.</strong> <strong>Gold = half step.</strong> ' + caption;
+    wrap.appendChild(key);
+    return wrap;
+  }
+
+  function demoChords(rootIndex, degrees, cap){
+    var wrap = document.createElement('div');
+    wrap.className = 'demo';
+    var triads = triadsForScale(buildScale(rootIndex, 'major'));
+    var row = document.createElement('div');
+    row.className = 'row';
+    degrees.forEach(function(d){
+      var t = triads[d];
+      var b = document.createElement('button');
+      b.className = 'btn ghost sm';
+      b.innerHTML = t.roman + ' <span style="opacity:.6;font-size:13px">' + t.notes.map(noteName).join(' ') + '</span>';
+      b.onclick = function(){
+        playMidis(t.midiOffsets.map(function(o){ return 60 + ROOTS[rootIndex].pc + o; }), {strum:0.02, duration:1.4, exclusive:true});
+      };
+      row.appendChild(b);
+    });
+    wrap.appendChild(row);
+    if (cap){
+      var c = document.createElement('p'); c.className='cap'; c.textContent = cap;
+      wrap.appendChild(c);
+    }
+    return wrap;
+  }
+
+  function demoTriadBuild(){
+    var wrap = document.createElement('div');
+    wrap.className = 'demo';
+    var row = document.createElement('div');
+    row.className = 'row';
+    [
+      ['1 · C','take'], ['2 · D','skip'], ['3 · E','take'],
+      ['4 · F','skip'], ['5 · G','take']
+    ].forEach(function(part){
+      var block = document.createElement('div');
+      block.className = 'blk pickblk' + (part[1] === 'take' ? ' on' : '');
+      block.style.minWidth = '76px';
+      block.innerHTML = '<span class="picktag">' + part[1].toUpperCase() + '</span><span class="picknote">' + part[0] + '</span>';
+      row.appendChild(block);
+    });
+    wrap.appendChild(row);
+    var cap = document.createElement('p');
+    cap.className = 'cap';
+    cap.innerHTML = '<strong>Keep:</strong> C, E, G. <strong>Skip:</strong> D, F. Those three kept notes are the I chord.';
+    wrap.appendChild(cap);
+    return wrap;
+  }
+
+  function demoProgression(rootIndex, degrees, label){
+    var wrap = document.createElement('div');
+    wrap.className = 'demo';
+    var triads = triadsForScale(buildScale(rootIndex, 'major'));
+    var blocks = document.createElement('div');
+    blocks.className = 'row';
+    degrees.forEach(function(d, i){
+      var b = document.createElement('div');
+      b.className = 'blk';
+      b.dataset.idx = i;
+      b.textContent = triads[d].roman;
+      blocks.appendChild(b);
+    });
+    wrap.appendChild(blocks);
+    var row = document.createElement('div');
+    row.className = 'row';
+    row.style.marginTop = '14px';
+    var play = document.createElement('button');
+    play.className = 'btn sm';
+    play.textContent = 'Hear ' + label;
+    play.onclick = function(){
+      playSequence(degrees.map(function(d){
+        return triads[d].midiOffsets.map(function(o){ return 60 + ROOTS[rootIndex].pc + o; });
+      }), 800, function(i){
+        Array.prototype.forEach.call(blocks.children, function(c){ c.classList.remove('on'); });
+        var n = blocks.querySelector('[data-idx="'+i+'"]');
+        if (n) n.classList.add('on');
+      });
+    };
+    row.appendChild(play);
+    wrap.appendChild(row);
+    return wrap;
+  }
+
+  function demoModes(rootIndex){
+    var wrap = document.createElement('div');
+    wrap.className = 'demo';
+    var parent = buildScale(rootIndex, 'major');
+    var row = document.createElement('div');
+    row.className = 'row';
+    [0,5].forEach(function(k){
+      var tonic = parent[k];
+      var b = document.createElement('button');
+      b.className = 'btn ghost sm';
+      b.textContent = MODE_NAMES[k] + ' on ' + noteName(tonic);
+      b.onclick = function(){
+        var seq = [], rootMidi = 60 + tonic.pc;
+        for (var j=0;j<7;j++){
+          seq.push(rootMidi + (((parent[(k+j)%7].semi - tonic.semi) + 12) % 12));
+        }
+        seq.push(rootMidi+12);
+        playSequence(seq, 280);
+      };
+      row.appendChild(b);
+    });
+    wrap.appendChild(row);
+    var c = document.createElement('p');
+    c.className = 'cap';
+    c.textContent = 'Identical notes, different home. One sounds major, one sounds minor.';
+    wrap.appendChild(c);
+    return wrap;
+  }
+
+  /* ================= UNITS ================= */
+  var UNIT_ICONS = {
+    scales:"<svg aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M10 13v4\" /> <path d=\"M14 13v4\" /> <path d=\"M18 13v4\" /> <path d=\"M2 13h20\" /> <path d=\"M22 11.5A3.5 3.5 0 0018.5 8a3.52 3.52 0 01-3.173-2A7 7 0 002 9v10a2 2 0 002 2h16a2 2 0 002-2z\" /> <path d=\"M6 13v4\" /> </svg> ",
+    degrees:"<svg aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M11 5h10\" /> <path d=\"M11 12h10\" /> <path d=\"M11 19h10\" /> <path d=\"M4 4h1v5\" /> <path d=\"M4 9h2\" /> <path d=\"M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02\" /> </svg> ",
+    chords:"<svg aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\" /> <path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\" /> <path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\" /> </svg> ",
+    harmony:"<svg aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M15 6a9 9 0 0 0-9 9V3\" /> <circle cx=\"18\" cy=\"6\" r=\"3\" /> <circle cx=\"6\" cy=\"18\" r=\"3\" /> </svg> ",
+    modes:"<svg aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M20.341 6.484A10 10 0 0 1 10.266 21.85\" /> <path d=\"M3.659 17.516A10 10 0 0 1 13.74 2.152\" /> <circle cx=\"12\" cy=\"12\" r=\"3\" /> <circle cx=\"19\" cy=\"5\" r=\"2\" /> <circle cx=\"5\" cy=\"19\" r=\"2\" /> </svg> ",
+    review:"<svg aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" > <path d=\"M10 14.66V17a1 1 0 0 1-1 1 2 2 0 0 0-2 2v2\" /> <path d=\"M14 14.66V17a1 1 0 0 0 1 1 2 2 0 0 1 2 2v2\" /> <path d=\"M17.916 10H19.5A2.5 2.5 0 0 0 22 7.5V5a1 1 0 0 0-1-1h-3\" /> <path d=\"M4 22h16\" /> <path d=\"M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z\" /> <path d=\"M6.084 10H4.5A2.5 2.5 0 0 1 2 7.5V5a1 1 0 0 1 1-1h3\" /> </svg> "
+  };
+
+  var UNITS = [
+    { id:'scale-1', title:'Scales I', blurb:'keyboard steps', color:'#5b41f5',
+      icon:UNIT_ICONS.scales,
+      hint:'Major: W W H W W W H. Its half steps fall between the 3rd–4th notes and 7th–next-root notes. Natural minor: W H W W H W W, with gaps between its 2nd–3rd and 5th–6th notes.',
+      steps:[
+        { title:'The next key',
+          body:'Start at C. The next key to the right is C♯, the black key beside it. There is nothing between C and C♯. For now, only notice that they are direct neighbors.',
+          demo:function(){ return demoStepExample(0, 1, 'C', 'C♯', 'C and C♯ touch. Tap either key to hear them.'); },
+          practice:'Choose <strong>C♯</strong> when asked for the very next key after C.',
+          questions:1, gens:[genNextKeyAfterC] },
+        { title:'Name that distance: half step',
+          body:'Moving between two neighboring piano keys is called a half step. C to C♯ is a half step because there is no key in between them.',
+          demo:function(){ return demoStepExample(0, 1, 'C', 'C♯', 'No key lies between C and C♯. This exact distance is one half step.'); },
+          practice:'Label <strong>C to C♯</strong> as a <strong>half step</strong>.',
+          questions:1, gens:[function(){ return { type:'mcq', tag:'Half steps', headline:'C to C♯ is a…', choices:['Whole step','Half step'], correctIndex:1, explain:'C and C♯ are neighboring keys, so their distance is a half step.' }; }] },
+        { title:'A whole step skips one key',
+          body:'Now move from C to D. C♯ sits between them, so C and D are not neighbors. When exactly one key sits in the middle, the distance is a whole step.',
+          demo:function(){ return demoStepExample(0, 2, 'C', 'D', 'C♯ is the key between C and D. Skipping it makes C to D a whole step.'); },
+          practice:'Label <strong>C to D</strong> as a <strong>whole step</strong> because C♯ is between them.',
+          questions:1, gens:[function(){ return { type:'mcq', tag:'Whole steps', headline:'C to D is a…', choices:['Whole step','Half step'], correctIndex:0, explain:'C♯ sits between C and D. One key in the middle means a whole step.' }; }] },
+        { title:'White keys can touch too',
+          body:'The rule is about neighboring keys, not key color. E and F touch with no black key between them. B and C do too. Both pairs are half steps.',
+          demo:function(){ return demoStepExample(4, 5, 'E', 'F', 'E and F are neighboring white keys. They are still one half step apart.'); },
+          practice:'For <strong>E to F</strong> or <strong>B to C</strong>, choose <strong>half step</strong>.',
+          questions:1, gens:[genHalfStepAtWhiteKeys] }
+      ] },
+
+    { id:'scale-2', title:'Scales II', blurb:'build major and minor scales', color:'#5b41f5',
+      icon:UNIT_ICONS.scales,
+      hint:'Build major and natural minor in two short climbs, then spell the notes in another key.',
+      steps:[
+        { title:'Build major: the first four notes',
+          body:'Start at C. Make two whole steps: C → D → E. Then make one half step: E → F. You have the first half of C major.',
+          demo:function(){ return demoScaleRecipe('major','start','Walk C → D → E → F. Tap any highlighted key to hear where you land.'); },
+          practice:'For this first stretch of major, remember: <strong>whole, whole, half</strong>.',
+          questions:1, gens:[function(){ return genStepType('major'); }] },
+        { title:'Build major: finish the climb',
+          body:'Continue from F. Take three whole steps to G, A, and B. One final half step brings you home at the next C. Put both visual strips together to build the full scale.',
+          demo:function(){ return demoScaleRecipe('major','finish','Continue F → G → A → B → C. The final gold step is the small move home.'); },
+          practice:'Major has two half steps: <strong>between the 3rd–4th notes</strong> and <strong>between the 7th note and the next root</strong>.',
+          gens:[function(){ return genHalfStepLocation('major'); }, function(){ return genStepType('major'); }] },
+        { title:'Build natural minor: the first four notes',
+          body:'Natural minor begins differently. From C, take a whole step to D, then a half step to E♭, then a whole step to F. Hear how the early half step changes the color.',
+          demo:function(){ return demoScaleRecipe('minor','start','Walk C → D → E♭ → F. The gold step arrives one move earlier than it did in major.'); },
+          practice:'For the first stretch of natural minor, remember: <strong>whole, half, whole</strong>.',
+          questions:1, gens:[function(){ return genStepType('minor'); }] },
+        { title:'Build natural minor: finish the climb',
+          body:'From F, take a whole step to G, a half step to A♭, then two whole steps to B♭ and the next C. Now the full C natural minor scale is under your fingers.',
+          demo:function(){ return demoScaleRecipe('minor','finish','Continue F → G → A♭ → B♭ → C. Find the second gold step before the climb ends.'); },
+          practice:'Natural minor places its half steps <strong>between the 2nd–3rd notes</strong> and <strong>between the 5th–6th notes</strong>.',
+          gens:[function(){ return genHalfStepLocation('minor'); }, function(){ return genStepType('minor'); }] },
+        { title:'Name the notes correctly',
+          body:'When you spell a scale, use each letter name once in order. Start on the root and follow the pattern. That is why D major is D E F♯ G A B C♯, not a mixture of repeated letter names.',
+          demo:function(){ return demoKeyboard(2,'major','D major follows the major pattern, so it needs F♯ and C♯.'); },
+          practice:'Tap the seven notes of the requested scale from low to high, using each letter name once.',
+          gens:[genScaleBuild] }
+      ] },
+
+    { id:'degrees-1', title:'Degrees I', blurb:'roots and scale numbers', color:'#12b26a',
+      icon:UNIT_ICONS.degrees,
+      hint:'1 Tonic, 2 Supertonic, 3 Mediant, 4 Subdominant, 5 Dominant, 6 Submediant, 7 Leading Tone (major) or Subtonic (minor).',
+      steps:[
+        { title:'The root is degree 1',
+          body:'Every scale needs a starting note, called its <strong>root</strong>. Call that note degree 1, then count upward through the scale: 2, 3, 4, 5, 6, 7. The degree number tells you a note’s job inside the key, even when the letter name changes.',
+          demo:function(){ return demoKeyboard(0,'major','C is the root and degree 1 in C major. The numbered circles count upward through this one scale.'); },
+          practice:'First find the root. It is always degree <strong>1</strong>.',
+          gens:[] },
+        { title:'Notes have numbers',
+          body:'After building a seven-note scale, label its notes 1 to 7. In C major, C is 1, D is 2, E is 3, F is 4, and G is 5. In D major the letter names change, but D is still 1 and A is still 5.',
+          demo:function(){ return demoKeyboard(0,'major','In C major, C is degree 1 and G is degree 5. Tap the numbered keys to hear their distance.'); },
+          practice:'When asked for a degree, count from the root and tap that numbered key.',
+          gens:[function(){ return genDegreeFind('major'); }] }
+      ] },
+
+    { id:'degrees-2', title:'Degrees II', blurb:'degree names and musical jobs', color:'#12b26a',
+      icon:UNIT_ICONS.degrees,
+      hint:'Learn the key degree names, then hear why 1, 4, and 5 matter most.',
+      steps:[
+        { title:'The three names to learn first',
+          body:'Start with the most useful labels: degree <strong>1 is Tonic</strong> (home), degree <strong>4 is Subdominant</strong>, and degree <strong>5 is Dominant</strong>. These are degree names, not chord names; they tell you where a note sits in the scale.',
+          demo:function(){ return demoKeyboard(0,'major','C is 1/Tonic, F is 4/Subdominant, and G is 5/Dominant in C major.'); },
+          practice:'Memorize the first three anchors: <strong>1 tonic, 4 subdominant, 5 dominant</strong>.',
+          gens:[] },
+        { title:'The full set of degree names',
+          body:'The full major-scale list is: 1 Tonic, 2 Supertonic, 3 Mediant, 4 Subdominant, 5 Dominant, 6 Submediant, 7 Leading Tone. Learn the three anchors first, then fill in the names around them.',
+          practice:'Match a number to its degree name. The question gives one number from the list you just saw.',
+          gens:[genFunctionName] },
+        { title:'Why degree 7 gets a different name in minor',
+          body:'In a major scale, degree 7 sits one half step below the tonic, so it strongly “leads” upward; it is the <strong>Leading Tone</strong>. In natural minor, degree 7 is a whole step below the tonic, so it is called the <strong>Subtonic</strong> instead.',
+          demo:function(){ return demoKeyboard(0,'minor','C natural minor has B♭ as degree 7, a whole step below C. Compare it with B in C major.'); },
+          practice:'Use <strong>Leading Tone</strong> for major degree 7 and <strong>Subtonic</strong> for natural minor degree 7.',
+          gens:[] },
+        { title:'The three pillars',
+          body:'Degrees 1, 4, and 5 have special roles in tonal music. Degree 1 is home. Degree 4 moves away from home. Degree 5 strongly points back to home. Later, their chords will be called I, IV, and V.',
+          demo:function(){ return demoChords(0,[0,3,4],'I, IV and V in C. Hear home, away, and the pull back.'); },
+          practice:'Identify the tonic, subdominant, or dominant from its degree number.',
+          gens:[function(){ return genKeyFunction('major'); }, function(){ return genFunctionName('major'); }] }
+      ] },
+
+    { id:'chords-1', title:'Chords I', blurb:'build triads', color:'#e07b39',
+      icon:UNIT_ICONS.chords,
+      hint:'A triad stacks degrees 1-3-5. In major: I IV V are major, ii iii vi minor, vii° diminished. In natural minor: i iv v minor, III VI VII major, ii° diminished.',
+      steps:[
+        { title:'Three notes make a triad',
+          body:'A chord is several notes sounding together. The simplest common chord is a <strong>triad</strong>: three notes from the same scale. We name it from its lowest scale degree. In C major, C–E–G is the I chord because it begins on degree 1.',
+          demo:function(){ return demoChords(0,[0],'Play C, E, and G together: this is the I chord in C major.'); },
+          practice:'Listen for the three notes, then prepare to build the same shape yourself.',
+          gens:[] },
+        { title:'Take one, skip one',
+          body:'To build a triad, choose a scale degree, skip the next scale note, choose the next, skip one again, then choose the next. That is <strong>1–3–5</strong>. From C major it gives C, E, and G: C is taken; D is skipped; E is taken; F is skipped; G is taken.',
+          demo:demoTriadBuild,
+          practice:'The first question says <strong>Play the I chord</strong>. Tap the three <strong>taken</strong> notes: C, E, and G, in any order.',
+          gens:[function(){ return genChordSpot('major', 0); }] },
+        { title:'Move the same shape',
+          body:'Keep the “take one, skip one” rule, but begin on a new scale degree. Starting on D in C major gives D–F–A, the ii chord. Starting on E gives E–G–B, the iii chord. You always use notes from the key; only the starting degree changes.',
+          demo:function(){ return demoChords(0,[0,1,2],'I, ii, and iii in C major. Watch each three-note shape move up the piano.'); },
+          practice:'The prompt gives a Roman numeral. Start on that degree and tap every other scale note.',
+          gens:[function(){ return genChordSpot('major'); }] }
+      ] },
+
+    { id:'chords-2', title:'Chords II', blurb:'major, minor, and diminished', color:'#e07b39',
+      icon:UNIT_ICONS.chords,
+      hint:'Hear what makes a triad major or minor, then learn the quality maps for major and natural minor.',
+      steps:[
+        { title:'Why chords sound major or minor',
+          body:'The middle note changes a triad’s colour. A <strong>major</strong> triad has a wider lower gap (four piano half steps) and then a smaller upper gap (three). A <strong>minor</strong> triad reverses that: three, then four. C–E–G is major; D–F–A is minor.',
+          demo:function(){ return demoChords(0,[0,1],'Hear C–E–G (I, major), then D–F–A (ii, minor). The piano shows the different middle notes.'); },
+          practice:'Notice that both chords follow 1–3–5. Their quality comes from the scale notes inside that shape.',
+          gens:[] },
+        { title:'The major-key quality map',
+          body:'Now name the pattern in every <strong>major key</strong>: <strong>I, IV, V</strong> are major; <strong>ii, iii, vi</strong> are minor; and <strong>vii°</strong> is diminished. Uppercase Roman numerals mean major, lowercase mean minor, and the small circle means diminished.',
+          demo:function(){ return demoChords(0,[0,3,4,1,2,5,6],'C major’s map: I, IV, V are major; ii, iii, vi are minor; vii° is diminished.'); },
+          practice:'In a major key, answer <strong>major</strong> for I/IV/V, <strong>minor</strong> for ii/iii/vi, and <strong>diminished</strong> for vii°.',
+          gens:[function(){ return genChordQuality('major'); }] },
+        { title:'A natural-minor contrast',
+          body:'Natural minor keeps the same triad-building rule but changes the scale notes. Its map is <strong>i, iv, v</strong> minor; <strong>III, VI, VII</strong> major; and <strong>ii°</strong> diminished. Learn the major map first, then use this as its mirror-like minor counterpart.',
+          demo:function(){ return demoChords(0,[0,3,4,2,5,6,1],'Compare the seven triads of C natural minor. Listen for i, iv, and v as minor shapes.'); },
+          practice:'For a natural-minor triad, identify its quality from the pattern you just learned.',
+          gens:[function(){ return genChordQuality('minor'); }] }
+      ] },
+
+    { id:'harmony-1', title:'Harmony I', blurb:'home, tension, and release', color:'#d64a86',
+      icon:UNIT_ICONS.harmony,
+      hint:'I is home. V pulls hardest back to I. IV leans more gently. Common shapes: I–V–vi–IV, I–IV–V–I, vi–IV–I–V, ii–V–I.',
+      steps:[
+        { title:'Roman numerals name chord roots',
+          body:'In harmony, Roman numerals tell you which scale degree a chord starts on: <strong>I</strong> starts on degree 1, <strong>IV</strong> on 4, and <strong>V</strong> on 5. In a major key, uppercase numerals are major chords and lowercase numerals are minor chords.',
+          demo:function(){ return demoChords(0,[0,3,4],'In C major: I is C–E–G, IV is F–A–C, and V is G–B–D.'); },
+          practice:'Read I, IV, and V as chord labels built from degrees 1, 4, and 5.',
+          gens:[genHarmonyRole] },
+        { title:'Home and away',
+          body:'The I chord feels like <strong>home</strong> because it begins on the tonic. IV moves away from home without demanding an ending. Try I–IV–I: your ear can hear the trip out and back before we add the stronger V chord.',
+          demo:function(){ return demoProgression(0,[0,3,0],'I – IV – I'); },
+          practice:'Listen for I as the settled chord at the beginning and end.',
+          gens:[genHarmonyRole] },
+        { title:'V pulls, I resolves',
+          body:'In a major key, V contains degree 7, the leading tone. Degree 7 sits one half step below the tonic, so it tends to resolve upward to degree 1. That is why V sounds unfinished and I sounds like the answer.',
+          demo:function(){ return demoProgression(0,[4,0],'V – I'); },
+          practice:'Hear the question-and-answer shape: <strong>V → I</strong>.',
+          gens:[genHarmonyRole] }
+      ] },
+
+    { id:'harmony-2', title:'Harmony II', blurb:'common progressions', color:'#d64a86',
+      icon:UNIT_ICONS.harmony,
+      hint:'Use Roman numerals to recognize two common major-key progression shapes.',
+      steps:[
+        { title:'Four chords, most songs',
+          body:'I–V–vi–IV is common because it starts at home, moves to the dominant, delays the return with vi, then relaxes through IV. The Roman numerals describe degrees, so the same shape works in every major key.',
+          demo:function(){ return demoProgression(0,[0,4,5,3],'I – V – vi – IV'); },
+          practice:'You will see the first Roman numerals and choose the missing final one. Read the visible pattern before answering.',
+          gens:[function(){ return genProgressionBlank('major'); }] },
+        { title:'ii – V – I',
+          body:'ii–V–I is a common jazz progression. ii prepares V, V creates the strongest pull, and I resolves it. Think of ii as the setup, V as the question, and I as the answer.',
+          demo:function(){ return demoProgression(0,[1,4,0],'ii – V – I'); },
+          practice:'For a progression blank, select the chord that completes the displayed Roman-numeral pattern.',
+          gens:[function(){ return genProgressionBlank('major'); }] }
+      ] },
+
+    { id:'modes-1', title:'Modes I', blurb:'new homes for the same notes', color:'#3aa9c9',
+      icon:UNIT_ICONS.modes,
+      hint:'Ionian 1, Dorian 2, Phrygian 3, Lydian 4, Mixolydian 5, Aeolian 6 (natural minor), Locrian 7. The relative minor is always degree 6.',
+      steps:[
+        { title:'Same notes, new home',
+          body:'A mode does not add new notes. Keep one major scale’s notes, but let a different degree feel like home. With C major’s white keys, C as home gives C Ionian; D as home gives D Dorian. The notes match, but the resting point changes.',
+          demo:function(){ return demoModes(0); }, questions:0, gens:[] },
+        { title:'Hear the new tonic',
+          body:'Before memorizing names, listen for the note that feels finished. In a mode, that note is the <strong>tonic</strong>. The piano keeps the same white keys but shifts the home note under your ear.',
+          demo:function(){ return demoModes(0); },
+          practice:'A mode changes the home note, not the collection of notes.',
+          gens:[] },
+        { title:'Seven starting points',
+          body:'The mode names follow the scale degrees in order: Ionian starts on 1, Dorian on 2, Phrygian on 3, Lydian on 4, Mixolydian on 5, Aeolian on 6, and Locrian on 7. Aeolian is natural minor under its older name.',
+          practice:'Read the ordered map once before answering: <strong>Ionian 1, Dorian 2, Phrygian 3, Lydian 4, Mixolydian 5, Aeolian 6, Locrian 7</strong>.',
+          gens:[] },
+        { title:'Match a mode to its degree',
+          body:'Now use the map. For example, Dorian starts on degree 2 and Aeolian starts on degree 6. The question asks only for the degree where the named mode begins.',
+          practice:'The question gives a mode name and asks its starting degree.',
+          gens:[genModeDegree] }
+      ] },
+
+    { id:'modes-2', title:'Modes II', blurb:'relative minor and modal colour', color:'#3aa9c9',
+      icon:UNIT_ICONS.modes,
+      hint:'Connect Aeolian to natural minor, then use listening clues for the other modes.',
+      steps:[
+        { title:'Aeolian and the relative minor',
+          body:'Start a major scale on degree 6 and you get Aeolian, also called natural minor. It uses the same notes and key signature as its parent major scale, but a different home. C major and A minor use the same seven notes.',
+          demo:function(){ return demoKeyboard(3,'minor','A natural minor is C major’s relative minor: the same white keys, with A as degree 1 and home.'); },
+          practice:'Given a major key, choose the note at degree <strong>6</strong> as its relative minor. C major → A minor.',
+          gens:[genRelativeMinor] },
+        { title:'Recognizing the modes',
+          body:'Ionian is bright and settled. Dorian is minor with a lighter sixth. Phrygian is darker, Lydian floats, Mixolydian has a bluesy edge, Aeolian is natural minor, and Locrian is unstable. Treat these as listening hints, not rules.',
+          practice:'Use the descriptions after learning the starting-degree map.',
+          gens:[genModeIdentify] }
+      ] }
+  ];
+  /* The capstone intentionally has generators only: no titles or bodies means
+     CrowQuiz builds a practice-only session rather than inserting teaching cards. */
+  UNITS.push({ id:'mixed', title:'Final review', blurb:'everything you learned, no new teaching', color:'#ffb020',
+    icon:UNIT_ICONS.review,
+    hint:'First work out which unit the question belongs to: scale steps, degree names, chord stacking, harmonic pull, or modes.',
+    steps:[{ gens: UNITS.reduce(function(a,u){
+      return a.concat(u.steps.reduce(function(b,s){ return b.concat(s.gens); }, []));
+    }, []) }] });
+
+  /* ================= CUSTOM QUESTION TYPES ================= */
+  function keyboardQuestion(area, q, api, onKey){
+    var wrap = document.createElement('div');
+    wrap.className = 'kbwrap';
+    var kb = document.createElement('div');
+    kb.className = 'keyboard';
+    kb.id = 'quizKeyboard';
+    wrap.appendChild(kb);
+    area.appendChild(wrap);
+    var done = false;
+    renderKeyboard(kb, function(){ return null; }, function(pc, node){
+      if (done) return;
+      playMidis([60+pc]);
+      if (onKey(pc, node, kb, function(ok){ done = true; api.finish(ok); })) done = true;
+    });
+    return kb;
+  }
+
+  var TYPES = {
+    scaleBuild: function(area, q, api){
+      var slots = document.createElement('div');
+      slots.className = 'slots';
+      q.sequence.forEach(function(){
+        var s = document.createElement('div');
+        s.className = 'slot';
+        s.textContent = '·';
+        slots.appendChild(s);
+      });
+      area.appendChild(slots);
+      var at = 0;
+      keyboardQuestion(area, q, api, function(pc, node, kb, finish){
+        if (pc === q.sequence[at]){
+          node.classList.add('hit-good');
+          var slot = slots.children[at];
+          slot.textContent = q.noteNames[at];
+          slot.className = 'slot on';
+          at++;
+          if (at === q.sequence.length){
+            var ascending = [], previous = -Infinity;
+            q.sequence.forEach(function(notePc){
+              var midi = 60 + notePc;
+              while (midi <= previous) midi += 12;
+              ascending.push(midi);
+              previous = midi;
+            });
+            ascending.push(ascending[0] + 12);
+            var listening = document.createElement('p');
+            listening.className = 'cap';
+            listening.textContent = 'Listen to the full scale…';
+            area.appendChild(listening);
+            playSequence(ascending, 260, function(i){ flashKey(kb, q.sequence[i % q.sequence.length]); });
+            setTimeout(function(){ finish(true); }, ascending.length * 260 + 100);
+            return true;
+          }
+          return false;
+        }
+        node.classList.add('flash-bad');
+        for (var i=at;i<q.sequence.length;i++){
+          slots.children[i].textContent = q.noteNames[i];
+          slots.children[i].className = 'slot ' + (i===at ? 'miss' : 'reveal');
+        }
+        finish(false);
+        return true;
+      });
+    },
+
+    degreeFind: function(area, q, api){
+      keyboardQuestion(area, q, api, function(pc, node, kb, finish){
+        if (pc === q.targetPc){ node.classList.add('hit-good'); finish(true); return true; }
+        node.classList.add('flash-bad');
+        var right = kb.querySelector('[data-pc="'+q.targetPc+'"]');
+        if (right) right.classList.add('hit-good');
+        finish(false);
+        return true;
+      });
+    },
+
+    chordSpot: function(area, q, api){
+      var stack = document.createElement('div');
+      stack.className = 'chord-stack';
+      stack.innerHTML = '<span class="stack-label">Build it as a stack</span>'
+        + q.stack.map(function(note, i){ return '<span class="stack-note n'+i+'">'+note+(i===0?' <small>root</small>':i===1?' <small>3rd</small>':' <small>5th</small>')+'</span>'; }).reverse().join('')
+        + '<span class="stack-caption">Read bottom to top: root, third, fifth. The top note can be in the next octave.</span>';
+      area.appendChild(stack);
+      var hit = [];
+      keyboardQuestion(area, q, api, function(pc, node, kb, finish){
+        if (hit.indexOf(pc) >= 0) return false;
+        if (q.targetPcs.indexOf(pc) >= 0){
+          hit.push(pc);
+          node.classList.add('hit-good');
+          if (hit.length === q.targetPcs.length){ finish(true); return true; }
+          return false;
+        }
+        node.classList.add('flash-bad');
+        q.targetPcs.forEach(function(t){
+          var n = kb.querySelector('[data-pc="'+t+'"]');
+          if (n) n.classList.add('hit-good');
+        });
+        finish(false);
+        return true;
+      });
+    }
+  };
+
+  /* ================= LESSONS (reference screen) ================= */
+  var lessonState = { rootIndex:0, scaleType:'major', tab:'scale', custom:[] };
+
+  function buildLessons(root){
+    root.innerHTML = ''
+      + '<div class="learnbar">'
+      +   '<select class="pill" id="rootSelect" aria-label="Key"></select>'
+      +   '<button class="pill active" data-scale="major">Major</button>'
+      +   '<button class="pill" data-scale="minor">Minor</button>'
+      + '</div>'
+      + '<div class="lesson-nav"><div class="lessontabs" id="lessonTabs"></div></div>'
+      + '<div class="lesson" id="lesson-piano">'
+      +   '<div class="piano-stage"><div class="piano-stage-top"><button class="btn ghost sm" id="closePiano">Lessons</button><p id="pianoSoundStatus">Loading grand-piano sound…</p></div>'
+      +     '<div class="piano-canvas"><div id="pianoKeyboard"></div></div>'
+      +     '<div class="piano-shortcuts" aria-label="Computer piano keys"><span>A–K plays the highlighted octave · Z / X changes octave</span>'
+      +       '<kbd>A</kbd><kbd>W</kbd><kbd>S</kbd><kbd>E</kbd><kbd>D</kbd><kbd>F</kbd><kbd>T</kbd><kbd>G</kbd><kbd>Y</kbd><kbd>H</kbd><kbd>U</kbd><kbd>J</kbd><kbd>K</kbd></div>'
+      +     '<p class="sample-credit">Piano samples: <a href="https://github.com/sfzinstruments/SalamanderGrandPiano" target="_blank" rel="noopener">Salamander Grand Piano</a> by Alexander Holm (CC BY 3.0).</p>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="lesson active" id="lesson-scale">'
+      +   '<div class="card"><h2>A scale is a step recipe</h2>'
+      +     '<p>Seven notes are spaced by whole steps (2 keys) and half steps (1 key). Use the same recipe from any starting note and you get the same flavour in a new key. That is all a key change is.</p>'
+      +     '<div class="kbwrap"><div class="keyboard" id="scaleKeyboard"></div></div>'
+      +     '<p class="spell" id="spellingLine" style="margin-top:14px"></p>'
+      +     '<div class="progrow" style="margin-top:14px"><button class="btn" id="playScaleBtn">Play it</button></div>'
+      +   '</div>'
+      +   '<div class="card"><h2>Where the half steps land</h2>'
+      +     '<p><strong>Major:</strong> after degree 3 and after degree 7. <strong>Natural minor:</strong> after degree 2 and after degree 5. The gaps are the same, but they start in a different place. That is the major/minor split.</p>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="lesson" id="lesson-degrees">'
+      +   '<div class="card"><h2>Each degree has a job</h2>'
+      +     '<p>Number the notes 1–7 and every position inherits a role. The number travels between keys; the letter does not. Tap a row to hear it.</p>'
+      +     '<div class="deglist" id="degList"></div>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="lesson" id="lesson-chords">'
+      +   '<div class="card"><h2>Stack every other note</h2>'
+      +     '<p>Take a note, skip one, take the next, skip one, take the next. Do that from all seven degrees and the key hands you seven chords for free. Tap one to hear it.</p>'
+      +     '<div class="kbwrap" style="margin-bottom:14px"><div class="keyboard" id="chordKeyboard"></div></div>'
+      +     '<div class="chordgrid" id="chordGrid"></div>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="lesson" id="lesson-harmony">'
+      +   '<div class="card"><h2>Tension, then release</h2>'
+      +     '<p><strong>I</strong> is home. <strong>V</strong> holds the leading tone a half step under home, so it pulls hardest back. <strong>IV</strong> leans more gently. <strong>vi</strong> shares two notes with I.</p>'
+      +     '<div class="progrow" id="presetRow"></div><div class="blocks" id="presetBlocks"></div>'
+      +   '</div>'
+      +   '<div class="card"><h2>Build your own</h2>'
+      +     '<p>Tap chords in the order you want them, then play it back.</p>'
+      +     '<div class="progrow" id="chipRow"></div><div class="blocks" id="customBlocks"></div>'
+      +     '<div class="progrow" style="margin-top:14px"><button class="btn" id="playCustomBtn">Play progression</button>'
+      +     '<button class="btn ghost" id="clearCustomBtn">Clear</button></div>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="lesson" id="lesson-modes">'
+      +   '<div class="card"><h2>Same notes, seven ways home</h2>'
+      +     '<p>Keep one major scale’s notes and start from a different member of the set. New tonic, new mood. Natural minor is just the one starting on degree 6.</p>'
+      +     '<div id="modeList"></div>'
+      +   '</div>'
+      + '</div>';
+
+    var sel = root.querySelector('#rootSelect');
+    ROOTS.forEach(function(r, i){
+      var o = document.createElement('option');
+      o.value = i; o.textContent = r.label;
+      sel.appendChild(o);
+    });
+    sel.value = lessonState.rootIndex;
+    sel.onchange = function(){ lessonState.rootIndex = +sel.value; renderLessons(); };
+
+    root.querySelectorAll('.learnbar .pill[data-scale]').forEach(function(b){
+      b.onclick = function(){
+        if (lessonState.scaleType === b.dataset.scale) return;
+        root.querySelectorAll('.learnbar .pill[data-scale]').forEach(function(x){ x.classList.remove('active'); });
+        b.classList.add('active');
+        lessonState.scaleType = b.dataset.scale;
+        renderLessons();
+      };
+    });
+
+    var TABS = [['scale','Scales'],['degrees','Degrees'],['chords','Chords'],['harmony','Harmony'],['modes','Modes']];
+    var tabsEl = root.querySelector('#lessonTabs');
+    function selectLessonTab(id){
+      lessonState.tab = id;
+      drawTabs();
+      TABS.concat([['piano','Piano']]).forEach(function(x){
+        root.querySelector('#lesson-'+x[0]).classList.toggle('active', x[0]===lessonState.tab);
+      });
+      root.querySelector('.learnbar').hidden = id==='piano';
+      root.querySelector('.lesson-nav').hidden = id==='piano';
+      var courseTabs = document.querySelector('.screen[data-screen="extra"] [data-f="extraCourseTabs"]');
+      if (courseTabs) courseTabs.hidden = id==='piano';
+    }
+    function drawTabs(){
+      tabsEl.innerHTML = '';
+      TABS.forEach(function(t){
+        var b = document.createElement('button');
+        b.className = 'pill' + (lessonState.tab===t[0] ? ' active' : '');
+        b.textContent = t[1];
+        b.onclick = function(){ selectLessonTab(t[0]); };
+        tabsEl.appendChild(b);
+      });
+    }
+    window.CrowMusicOpenPiano = function(){ selectLessonTab('piano'); };
+    root.querySelector('#closePiano').onclick = function(){ selectLessonTab('scale'); };
+    selectLessonTab(lessonState.tab);
+    renderLessons();
+
+    var timer = null;
+    window.addEventListener('resize', function(){
+      clearTimeout(timer);
+      timer = setTimeout(function(){
+        if (document.getElementById('scaleKeyboard')) renderLessons();
+      }, 180);
+    });
+  }
+
+  function lessonScale(){ return buildScale(lessonState.rootIndex, lessonState.scaleType); }
+  function lessonRootMidi(){ return 60 + ROOTS[lessonState.rootIndex].pc; }
+
+  function renderLessons(){
+    var scale = lessonScale();
+    var st = lessonState.scaleType;
+
+    /* piano */
+    renderPianoKeyboard();
+    bindComputerPiano();
+    updatePianoSoundStatus();
+
+    /* scales */
+    var map = {}; scale.forEach(function(n){ map[n.pc] = n; });
+    renderKeyboard('scaleKeyboard', function(pc){
+      var n = map[pc];
+      return n ? { inScale:true, isRoot:n.degree===1, badge:String(n.degree) } : null;
+    }, function(pc){ playMidis([60+pc]); flashKey('scaleKeyboard', pc); });
+
+    var accCount = scale.filter(function(n){ return n.acc!==0; }).length;
+    document.getElementById('spellingLine').textContent =
+      ROOTS[lessonState.rootIndex].label + ' ' + (st==='major'?'major':'natural minor') + ':  ' +
+      scale.map(noteName).join('  ') + '   ·  ' +
+      (accCount===0 ? 'no sharps or flats' : accCount + (accCount===1?' accidental':' accidentals'));
+
+    document.getElementById('playScaleBtn').onclick = function(){
+      var midis = scale.map(function(n){ return lessonRootMidi() + n.semi; });
+      midis.push(lessonRootMidi()+12);
+      var pcs = scale.map(function(n){ return n.pc; }); pcs.push(scale[0].pc);
+      playSequence(midis, 320, function(i){ flashKey('scaleKeyboard', pcs[i]); });
+    };
+
+    /* degrees */
+    var names = st==='major' ? DEGREE_NAMES_MAJOR : DEGREE_NAMES_MINOR;
+    var list = document.getElementById('degList');
+    list.innerHTML = '';
+    scale.forEach(function(n, i){
+      var row = document.createElement('button');
+      row.className = 'degrow';
+      row.innerHTML = '<span class="n">'+(i+1)+'</span><span class="nm">'+noteName(n)+'</span><span class="fn">'+names[i]+'</span>';
+      row.onclick = function(){ playMidis([lessonRootMidi() + n.semi], {duration:1.2}); };
+      list.appendChild(row);
+    });
+
+    /* chords */
+    var triads = triadsForScale(scale);
+    function setChordKeys(t){
+      var m = {};
+      t.notes.forEach(function(n, i){ m[n.pc] = { inScale:true, isRoot:i===0, badge: i===0?'R':(i===1?'3':'5') }; });
+      renderKeyboard('chordKeyboard', function(pc){ return m[pc] || null; }, function(pc){
+        playMidis([60+pc]); flashKey('chordKeyboard', pc);
+      });
+    }
+    setChordKeys(triads[0]);
+    var grid = document.getElementById('chordGrid');
+    grid.innerHTML = '';
+    triads.forEach(function(t){
+      var card = document.createElement('button');
+      card.className = 'chordbtn';
+      card.innerHTML = '<span class="qual '+t.quality+'">'+t.quality+'</span>'
+        + '<span class="rn">'+t.roman+'</span>'
+        + '<span class="nt">'+t.notes.map(noteName).join(' · ')+'</span>';
+      card.onclick = function(){
+        playMidis(t.midiOffsets.map(function(o){ return lessonRootMidi()+o; }), {strum:0.02, duration:1.4, exclusive:true});
+        setChordKeys(t);
+      };
+      grid.appendChild(card);
+    });
+
+    /* harmony */
+    function drawBlocks(id, seq, onRemove){
+      var el = document.getElementById(id);
+      el.innerHTML = '';
+      if (!seq.length){
+        var p = document.createElement('span');
+        p.style.cssText = 'color:var(--ink-3);font-size:15px';
+        p.textContent = id==='customBlocks' ? 'Nothing queued yet.' : 'Pick one above.';
+        el.appendChild(p);
+        return;
+      }
+      seq.forEach(function(t, i){
+        var b = document.createElement(onRemove ? 'button' : 'div');
+        b.className = 'blk';
+        b.dataset.idx = i;
+        b.textContent = t.roman;
+        if (onRemove) b.onclick = function(){ onRemove(i); };
+        el.appendChild(b);
+      });
+    }
+    function light(id, i){
+      var el = document.getElementById(id);
+      Array.prototype.forEach.call(el.children, function(c){ c.classList.remove('on'); });
+      var n = el.querySelector('[data-idx="'+i+'"]');
+      if (n) n.classList.add('on');
+    }
+
+    var presetRow = document.getElementById('presetRow');
+    presetRow.innerHTML = '';
+    PRESETS.forEach(function(p){
+      var b = document.createElement('button');
+      b.className = 'btn ghost sm';
+      b.textContent = p.label;
+      b.onclick = function(){
+        var seq = p.degrees.map(function(d){ return triads[d]; });
+        drawBlocks('presetBlocks', seq);
+        playSequence(seq.map(function(t){ return t.midiOffsets.map(function(o){ return lessonRootMidi()+o; }); }),
+          820, function(i){ light('presetBlocks', i); });
+      };
+      presetRow.appendChild(b);
+    });
+    drawBlocks('presetBlocks', []);
+
+    var chipRow = document.getElementById('chipRow');
+    chipRow.innerHTML = '';
+    triads.forEach(function(t, i){
+      var c = document.createElement('button');
+      c.className = 'btn ghost sm';
+      c.textContent = t.roman;
+      c.onclick = function(){ lessonState.custom.push(i); drawCustom(); };
+      chipRow.appendChild(c);
+    });
+    function drawCustom(){
+      drawBlocks('customBlocks', lessonState.custom.map(function(i){ return triads[i]; }), function(i){
+        lessonState.custom.splice(i,1); drawCustom();
+      });
+    }
+    drawCustom();
+    document.getElementById('playCustomBtn').onclick = function(){
+      if (!lessonState.custom.length) return;
+      var seq = lessonState.custom.map(function(i){ return triads[i]; });
+      playSequence(seq.map(function(t){ return t.midiOffsets.map(function(o){ return lessonRootMidi()+o; }); }),
+        820, function(i){ light('customBlocks', i); });
+    };
+    document.getElementById('clearCustomBtn').onclick = function(){ lessonState.custom = []; drawCustom(); };
+
+    /* modes */
+    var rootPc = ROOTS[lessonState.rootIndex].pc;
+    var parentPc = st==='major' ? rootPc : (rootPc+3)%12;
+    var parentIndex = 0;
+    for (var i=0;i<ROOTS.length;i++){ if (ROOTS[i].pc===parentPc){ parentIndex=i; break; } }
+    var parentMajor = buildScale(parentIndex, 'major');
+    var modeList = document.getElementById('modeList');
+    modeList.innerHTML = '';
+    for (var k=0;k<7;k++){
+      (function(kk){
+        var tonic = parentMajor[kk];
+        var row = document.createElement('div');
+        row.className = 'moderow';
+        row.innerHTML = '<span class="mn">'+MODE_NAMES[kk]+'</span>'
+          + '<span class="mt">'+noteName(tonic)+'</span>'
+          + '<span class="md">'+MODE_DESC[kk]+'</span>';
+        var b = document.createElement('button');
+        b.className = 'btn ghost sm';
+        b.textContent = 'Play';
+        b.onclick = function(){
+          var seq = [], rootMidi = 60 + tonic.pc;
+          for (var j=0;j<7;j++) seq.push(rootMidi + (((parentMajor[(kk+j)%7].semi - tonic.semi) + 12) % 12));
+          seq.push(rootMidi+12);
+          playSequence(seq, 290);
+        };
+        row.appendChild(b);
+        modeList.appendChild(row);
+      })(k);
+    }
+  }
+
+  /* ================= GO ================= */
+  CrowQuiz({
+    backLink:{ href:'../lessons/', label:'All lessons' },
+    course:'music',
+    title:'Music theory',
+    tagline:'Scales, chords, and harmony at the keyboard',
+    logo:'<svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="3" y="4" width="6" height="20" rx="2" fill="#fff"/><rect x="11" y="4" width="6" height="20" rx="2" fill="#fff" opacity=".75"/><rect x="19" y="4" width="6" height="20" rx="2" fill="#fff" opacity=".5"/><rect x="6" y="4" width="4" height="12" rx="1.5" fill="var(--brand-shelf)"/><rect x="14" y="4" width="4" height="12" rx="1.5" fill="var(--brand-shelf)"/></svg>',
+    units:UNITS,
+    types:TYPES,
+    sounds:{ correct:chime, wrong:buzz, fanfare:fanfare },
+    showPracticePreview:false,
+    unitPractice:true,
+    unitPracticeCount:4,
+    extra:{ label:'Lessons', title:'Lessons', build:buildLessons, asTab:true }
+  }).start('#app');
+  loadPianoSamples(ensureCtx());
+  (function(){
+    var hero = document.querySelector('.screen[data-screen="home"] .coursehero');
+    if (!hero) return;
+    var launch = document.createElement('button');
+    launch.className = 'course-piano-launch';
+    launch.type = 'button';
+    launch.setAttribute('aria-label', 'Open piano');
+    launch.title = 'Open piano';
+    launch.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13v4M14 13v4M18 13v4M2 13h20M22 11.5A3.5 3.5 0 0 0 18.5 8a3.52 3.52 0 0 1-3.173-2A7 7 0 0 0 2 9v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2zM6 13v4"/></svg>';
+    launch.onclick = function(){
+      var lessons = document.querySelector('.course-tab[data-screen="extra"]');
+      if (lessons) lessons.click();
+      if (window.CrowMusicOpenPiano) window.CrowMusicOpenPiano();
+    };
+    hero.appendChild(launch);
+  })();
+})();
+</script>
+</body>
+</html>
