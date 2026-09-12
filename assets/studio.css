@@ -410,8 +410,12 @@
 .studio-side{ transition:opacity .2s ease, transform .26s cubic-bezier(.16,1,.3,1); }
 /* Only the panel that changes is named, so the list beside it sits still
    while the two versions of the panel cross over each other. */
+/* Named only for the length of a switch inside Studio. Left named, the panel
+   was also a named part of the page you were leaving when you navigated away,
+   so its picture stayed on screen, fading and sliding on its own, after the
+   rest of the page had already gone. */
 @media (prefers-reduced-motion: no-preference){
-  .studio-main{ view-transition-name:studio-main; }
+  :root.studio-switch .studio-main{ view-transition-name:studio-main; }
 }
 /* Everything outside the panel — the project list beside it — is untouched by
    this change, so it should not be animated for it. Left alone it would take
