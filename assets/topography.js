@@ -74,7 +74,7 @@
     lastFrame = now;
     const time = reduce ? 0 : now * .00012;
     context.clearRect(0, 0, width, height);
-    const cell = Math.max(13, Math.min(16, Math.round(width / 88)));
+    const cell = Math.max(11, Math.min(13, Math.round(width / 108)));
     const columns = Math.ceil(width / cell) + 1;
     const rows = Math.ceil(height / cell) + 1;
 
@@ -105,8 +105,8 @@
       return { x: start[0] + (end[0] - start[0]) * ratio, y: start[1] + (end[1] - start[1]) * ratio };
     };
 
-    for (let band = 0; band < 17; band++) {
-      const level = -.20 + band * .108;
+    for (let band = 0; band < 18; band++) {
+      const level = -.20 + band * .102;
       context.beginPath();
       for (let row = 0; row < rows - 1; row++) for (let column = 0; column < columns - 1; column++) {
         const a = values[row][column], b = values[row][column + 1], c = values[row + 1][column + 1], d = values[row + 1][column];
