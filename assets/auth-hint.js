@@ -12,6 +12,17 @@
 
 (function () {
   'use strict';
+  if (document.querySelector('link[data-crow-topography-style]')) return;
+  var source = document.currentScript && document.currentScript.src;
+  var style = document.createElement('link');
+  style.rel = 'stylesheet';
+  style.dataset.crowTopographyStyle = 'true';
+  style.href = source ? new URL('site.css?v=topography-20260912', source).href : 'assets/site.css?v=topography-20260912';
+  document.head.appendChild(style);
+}());
+
+(function () {
+  'use strict';
   function initials(value) {
     return String(value || '?').trim().split(/\s+/).slice(0, 2).map(function (part) {
       return part.charAt(0);
