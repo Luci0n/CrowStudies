@@ -5,8 +5,8 @@
   script.defer = true;
   script.dataset.crowTopography = 'true';
   script.src = document.currentScript && document.currentScript.src
-    ? new URL('topography.js?v=topography-20260912c', document.currentScript.src).href
-    : 'assets/topography.js?v=topography-20260912c';
+    ? new URL('topography.js?v=topography-20260912d', document.currentScript.src).href
+    : 'assets/topography.js?v=topography-20260912d';
   document.head.appendChild(script);
 }());
 
@@ -17,7 +17,7 @@
   var style = document.createElement('link');
   style.rel = 'stylesheet';
   style.dataset.crowTopographyStyle = 'true';
-  style.href = source ? new URL('site.css?v=topography-20260912c', source).href : 'assets/site.css?v=topography-20260912c';
+  style.href = source ? new URL('site.css?v=topography-20260912d', source).href : 'assets/site.css?v=topography-20260912d';
   document.head.appendChild(style);
 }());
 
