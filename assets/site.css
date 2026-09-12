@@ -804,3 +804,26 @@ body > .upgrade-slash{ position:fixed !important; z-index:80 !important; }
 .theme-mode.dark:hover{ z-index:2; transform:translate(2px,2px) scale(1.035); }
 .theme-mode:hover .theme-mode-label,.theme-mode.active .theme-mode-label{ opacity:1; background:rgba(9,12,18,.66); transform:scale(1.05); }
 .theme-mode:active{ filter:brightness(.94); }
+
+
+/* The animated terrain reads the same palette tokens as the interface. */
+:root{
+  --terrain-glow-a:76,68,168; --terrain-glow-b:29,40,95;
+  --terrain-major-a:99,142,255; --terrain-major-b:147,112,255; --terrain-major-c:86,188,238;
+  --terrain-minor-a:104,143,224; --terrain-minor-b:129,111,218; --terrain-minor-c:81,158,212;
+}
+:root[data-theme="gruvbox-light"],:root[data-theme="gruvbox-dark"]{
+  --terrain-glow-a:215,153,33; --terrain-glow-b:175,58,3;
+  --terrain-major-a:250,189,47; --terrain-major-b:215,153,33; --terrain-major-c:184,187,38;
+  --terrain-minor-a:213,196,161; --terrain-minor-b:215,153,33; --terrain-minor-c:175,58,3;
+}
+:root[data-theme="monokai-light"],:root[data-theme="monokai-dark"]{
+  --terrain-glow-a:249,38,114; --terrain-glow-b:166,226,46;
+  --terrain-major-a:249,38,114; --terrain-major-b:166,226,46; --terrain-major-c:230,219,116;
+  --terrain-minor-a:253,151,31; --terrain-minor-b:166,226,46; --terrain-minor-c:249,38,114;
+}
+:root[data-theme="runner-light"],:root[data-theme="runner-dark"]{
+  --terrain-glow-a:43,198,214; --terrain-glow-b:16,69,92;
+  --terrain-major-a:43,198,214; --terrain-major-b:255,62,87; --terrain-major-c:247,201,77;
+  --terrain-minor-a:70,163,183; --terrain-minor-b:255,62,87; --terrain-minor-c:43,198,214;
+}
