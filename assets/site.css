@@ -627,19 +627,19 @@ body > :not(.crow-topography){ position:relative; z-index:1; }
 .sitehead{
   position:sticky; top:0; z-index:20;
   border-bottom-color:color-mix(in srgb,var(--line) 56%,transparent);
-  background:color-mix(in srgb,var(--card) 28%,transparent);
+  background:color-mix(in srgb,var(--card) 16%,transparent);
   box-shadow:0 12px 34px rgba(4,7,18,.10);
-  backdrop-filter:blur(7px) saturate(125%);
-  -webkit-backdrop-filter:blur(7px) saturate(125%);
+  backdrop-filter:blur(2px) saturate(115%);
+  -webkit-backdrop-filter:blur(2px) saturate(115%);
 }
 .subject,.door,.stat,.unit,.demo,.course-tab,.speakbtn,.btn.ghost{
-  background:color-mix(in srgb,var(--card) 42%,transparent);
+  background:color-mix(in srgb,var(--card) 20%,transparent);
   border-color:color-mix(in srgb,var(--line) 55%,transparent);
-  backdrop-filter:blur(7px) saturate(120%);
-  -webkit-backdrop-filter:blur(7px) saturate(120%);
+  backdrop-filter:blur(2px) saturate(115%);
+  -webkit-backdrop-filter:blur(2px) saturate(115%);
 }
 .subject:hover,.door:hover,.unit:hover,.course-tab:not(.active):hover,.btn.ghost:hover{
-  background:color-mix(in srgb,var(--card-2) 48%,transparent);
+  background:color-mix(in srgb,var(--card-2) 28%,transparent);
 }
 @media (prefers-reduced-motion: reduce){
   .crow-topography{ transition:none; }
