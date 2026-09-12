@@ -96,12 +96,6 @@
     glow.addColorStop(1, 'rgba(9,11,18,0)');
     context.fillStyle = glow;
     context.fillRect(0, 0, width, height);
-    if (texturePattern) {
-      context.globalAlpha = .62;
-      context.fillStyle = texturePattern;
-      context.fillRect(0, 0, width, height);
-      context.globalAlpha = 1;
-    }
     const cell = Math.max(11, Math.min(13, Math.round(width / 108)));
     const columns = Math.ceil(width / cell) + 1;
     const rows = Math.ceil(height / cell) + 1;
@@ -164,6 +158,12 @@
       context.strokeStyle = colour;
       context.stroke();
       context.shadowBlur = 0;
+    }
+    if (texturePattern) {
+      context.globalAlpha = .88;
+      context.fillStyle = texturePattern;
+      context.fillRect(0, 0, width, height);
+      context.globalAlpha = 1;
     }
     display.setTransform(1, 0, 0, 1, 0, 0);
     display.clearRect(0, 0, primary.width, primary.height);
