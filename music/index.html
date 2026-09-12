@@ -1429,8 +1429,26 @@
 
     var TABS = [['scale','Scales'],['degrees','Degrees'],['chords','Chords'],['harmony','Harmony'],['modes','Modes']];
     var tabsEl = root.querySelector('#lessonTabs');
+    var extraCrumbLink = root.querySelector('.screen[data-screen="extra"] [data-f="extraCrumb"] a');
+    function returnToMusicHome(){
+      var practiceTab = root.querySelector('.screen[data-screen="extra"] .course-tab[data-screen="home"]');
+      if (practiceTab) practiceTab.click();
+    }
+    function setPianoBackLink(isPiano){
+      if (!extraCrumbLink) return;
+      extraCrumbLink.onclick = null;
+      if (isPiano) {
+        extraCrumbLink.href = '#music-theory';
+        extraCrumbLink.innerHTML = '<span aria-hidden="true">&larr;</span>Music theory';
+        extraCrumbLink.onclick = function(event){ event.preventDefault(); returnToMusicHome(); };
+      } else {
+        extraCrumbLink.href = '../lessons/';
+        extraCrumbLink.innerHTML = '<span aria-hidden="true">&larr;</span>All lessons';
+      }
+    }
     function selectLessonTab(id){
       lessonState.tab = id;
+      setPianoBackLink(id === 'piano');
       drawTabs();
       TABS.concat([['piano','Piano']]).forEach(function(x){
         root.querySelector('#lesson-'+x[0]).classList.toggle('active', x[0]===lessonState.tab);
@@ -1451,7 +1469,9 @@
       });
     }
     window.CrowMusicOpenPiano = function(){ selectLessonTab('piano'); };
-    root.querySelector('#closePiano').onclick = function(){ selectLessonTab('scale'); };
+    var closePiano = root.querySelector('#closePiano');
+    closePiano.textContent = 'Back to music theory';
+    closePiano.onclick = returnToMusicHome;
     selectLessonTab(lessonState.tab);
     renderLessons();
 
