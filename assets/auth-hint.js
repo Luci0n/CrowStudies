@@ -1,5 +1,17 @@
 (function () {
   'use strict';
+  if (window.CrowTopography || document.querySelector('script[data-crow-topography]')) return;
+  var script = document.createElement('script');
+  script.defer = true;
+  script.dataset.crowTopography = 'true';
+  script.src = document.currentScript && document.currentScript.src
+    ? new URL('topography.js', document.currentScript.src).href
+    : 'assets/topography.js';
+  document.head.appendChild(script);
+}());
+
+(function () {
+  'use strict';
   function initials(value) {
     return String(value || '?').trim().split(/\s+/).slice(0, 2).map(function (part) {
       return part.charAt(0);
