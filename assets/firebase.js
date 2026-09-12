@@ -321,6 +321,49 @@ const cloud = {
     delete payload.id; delete payload.pending;
     await setDoc(doc(db, 'projects', projectId, 'blocks', blockId), payload, { merge:true });
   },
+  /* ---------- the rows of a database block ----------
+     A database keeps its shape — its properties and its saved views — in the
+     block document, and its rows in a collection beneath it. One document per
+     row is what makes a database workable: a row is written on its own, a
+     thousand of them do not share one document's ceiling, and editing one does
+     not make every other person's copy of the rest look like news. */
+  rowsRef(projectId, blockId){
+    return collection(db, 'projects', projectId, 'blocks', blockId, 'rows');
+  },
+  async listRows(projectId, blockId){
+    if (!cloud.user) return [];
+    const snapshots = await getDocs(query(cloud.rowsRef(projectId, blockId), orderBy('order', 'asc')));
+    return snapshots.docs.map(function(snapshot){ return Object.assign({ id:snapshot.id }, snapshot.data()); });
+  },
+  watchRows(projectId, blockId, onChange, onError){
+    return onSnapshot(query(cloud.rowsRef(projectId, blockId), orderBy('order', 'asc')), function(snapshot){
+      onChange(snapshot.docs.map(function(entry){ return Object.assign({ id:entry.id }, entry.data()); }),
+        snapshot.metadata.hasPendingWrites);
+    }, onError || function(){});
+  },
+  async saveRow(projectId, blockId, rowId, data){
+    if (!cloud.user) throw new Error('Sign in first');
+    const payload = Object.assign({}, data, { updatedAt:serverTimestamp(), updatedBy:cloud.user.uid });
+    delete payload.id; delete payload.pending;
+    await setDoc(doc(db, 'projects', projectId, 'blocks', blockId, 'rows', rowId), payload, { merge:true });
+  },
+  /* One cell at a time, for the same reason a note writes only its body: two
+     people in different columns of the same row must not undo each other. */
+  async patchRow(projectId, blockId, rowId, changes){
+    return cloud.saveRow(projectId, blockId, rowId, changes);
+  },
+  async removeRow(projectId, blockId, rowId){
+    if (!cloud.user) throw new Error('Sign in first');
+    await deleteDoc(doc(db, 'projects', projectId, 'blocks', blockId, 'rows', rowId));
+  },
+  /* Deleting the block does not take its rows with it: Firestore keeps a
+     subcollection alive when its parent goes, and the rows would be left
+     unreachable and still counted. */
+  async removeAllRows(projectId, blockId){
+    if (!cloud.user) return;
+    const snapshots = await getDocs(cloud.rowsRef(projectId, blockId));
+    await Promise.all(snapshots.docs.map(function(entry){ return deleteDoc(entry.ref); }));
+  },
   async deleteBlock(projectId, blockId){
     if (!cloud.user) throw new Error('Sign in first');
     await deleteDoc(doc(db, 'projects', projectId, 'blocks', blockId));

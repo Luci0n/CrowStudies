@@ -142,6 +142,13 @@ service cloud.firestore {
 
         allow read:  if signedIn() && blockRole() != null;
         allow write: if signedIn() && blockRole() in ['owner', 'editor'];
+
+        // The rows of a database block. Rules do not reach down on their own,
+        // so a row states the same membership its block does.
+        match /rows/{rowId} {
+          allow read:  if signedIn() && blockRole() != null;
+          allow write: if signedIn() && blockRole() in ['owner', 'editor'];
+        }
       }
       // Discussion, checkpoints, and CRDT updates are kept separate from the
       // project document so collaboration does not turn one document into a hotspot.
