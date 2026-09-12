@@ -649,7 +649,10 @@ body > :not(.crow-topography){ position:relative; z-index:1; }
 /* The terrain owns the entire viewport: no page-height seam or separate glow layer. */
 body{
   min-height:100vh;
-  background:var(--ground);
+  background:
+    radial-gradient(74% 72% at 12% -10%,rgba(74,66,166,.22),transparent 68%),
+    radial-gradient(66% 72% at 98% 92%,rgba(30,100,156,.13),transparent 70%),
+    var(--ground);
 }
 body > :not(.crow-topography):not(.crow-topography-grain){ position:relative; z-index:1; }
 .crow-topography-grain{
