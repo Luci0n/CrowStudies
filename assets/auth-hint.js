@@ -1,5 +1,14 @@
 (function () {
   'use strict';
+  try {
+    var theme = localStorage.getItem('crowstudies:theme');
+    if (theme === 'light' || theme === 'dark' || theme === 'dusk') document.documentElement.setAttribute('data-theme', theme);
+    else document.documentElement.removeAttribute('data-theme');
+  } catch (error) {}
+}());
+
+(function () {
+  'use strict';
   if (window.CrowTopography || document.querySelector('script[data-crow-topography]')) return;
   var script = document.createElement('script');
   script.defer = true;
