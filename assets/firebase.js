@@ -69,7 +69,7 @@ function openThemePicker(){
       button.className='theme-mode '+mode+(currentTheme()===themeId?' active':'');
       button.setAttribute('aria-label','Use '+family.name+' '+mode);
       button.setAttribute('aria-pressed',currentTheme()===themeId?'true':'false');
-      button.innerHTML='<span class="sr-only">'+family.name+' '+mode+'</span>';
+      button.innerHTML='<span class="theme-mode-label" aria-hidden="true">'+(mode==='light'?'Light mode':'Dark mode')+'</span><span class="sr-only">'+family.name+' '+mode+'</span>';
       button.onclick=function(){applyTheme(themeId);shade.remove();};
       pair.appendChild(button);
     });
