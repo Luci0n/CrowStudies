@@ -347,6 +347,36 @@
      acknowledged copy. Treat an actual content difference stamped by this
      account as an echo, not a reason to rebuild every editor card. A change
      stamped by another account is still allowed through immediately. */
+  var inFlight={}, flightMark={};
+  /* A write of ours that has left but not landed. The copy Firestore sends back
+     in the meantime cannot know about it, so our fields stay on top until the
+     write settles rather than being undone by an older truth. */
+  function holdInFlight(id, changes){
+    inFlight[id]=Object.assign(inFlight[id]||{},changes);
+    var mark=(flightMark[id]=(flightMark[id]||0)+1);
+    return function(){ if(flightMark[id]===mark){ delete inFlight[id]; delete flightMark[id]; } };
+  }
+  function adoptBlocks(next){
+    var byId={};
+    blocks.forEach(function(block){ byId[block.id]=block; });
+    var adopted=next.map(function(fresh){
+      var held=inFlight[fresh.id];
+      if(held)fresh=Object.assign({},fresh,held);
+      var mine=byId[fresh.id];
+      if(!mine)return fresh;
+      Object.keys(mine).forEach(function(key){ if(!(key in fresh))delete mine[key]; });
+      Object.assign(mine,fresh);
+      return mine;
+    });
+    /* A block made a moment ago has not been acknowledged yet. Dropping it here
+       would take it off the page until the round trip finished. */
+    var known={}; adopted.forEach(function(block){ known[block.id]=true; });
+    blocks.forEach(function(block){ if(block.pending&&!known[block.id])adopted.push(block); });
+    return adopted;
+  }
+  function liveBlock(id){
+    return blocks.filter(function(block){ return block.id===id; })[0];
+  }
   function ownBlockEcho(before, after, pending){
     /* The first snapshot is the data that opens a project. It may be stamped
        by this same editor, but it is not an echo and must draw the blocks. */
@@ -1383,6 +1413,130 @@
     search.focus();
     setTimeout(function(){ document.addEventListener('click',awayFromAddPalette); },0);
   }
+  function taskRowHTML(item, index, frozen){
+    var disabled=frozen?' disabled':'';
+    return '<div class="task-row'+(item.done?' done':'')+'" data-task-row="'+index+'">'
+      +(frozen?'':'<span class="task-grip" data-task-grip aria-hidden="true">\u283F</span>')
+      +'<input type="checkbox" data-task-check="'+index+'" '+(item.done?'checked':'')+disabled+'>'
+      +'<input class="task-text" data-task-text="'+index+'" value="'+esc(item.text)+'" placeholder="Task"'+disabled+'>'
+      +(frozen?'':'<button type="button" class="task-drop" data-task-remove="'+index+'" aria-label="Remove this task">\u00d7</button>')
+      +'</div>';
+  }
+  /* Positions are read back off the attributes, so after anything moves they
+     have to say where things are now. */
+  function renumberTasks(card){
+    var rows=card.querySelectorAll('.task-row');
+    Array.prototype.forEach.call(rows,function(row,index){
+      row.dataset.taskRow=index;
+      var check=row.querySelector('[data-task-check]'), text=row.querySelector('[data-task-text]'), drop=row.querySelector('[data-task-remove]');
+      if(check)check.dataset.taskCheck=index;
+      if(text)text.dataset.taskText=index;
+      if(drop)drop.dataset.taskRemove=index;
+    });
+  }
+  function saveTasks(card, block){
+    taskCount(card,block);
+    queuedSave(block,true,{items:block.items});
+  }
+  /* Adding, removing and moving a task all change one list on one card. None of
+     them is a reason to draw the workspace again, so none of them does. */
+  function bindTasks(card, block){
+    var list=card.querySelector('[data-task-list]');
+    if(!list)return;
+    var frozen=!card.querySelector('[data-task-grip]');
+    function rowAt(index){ return card.querySelector('.task-row[data-task-row="'+index+'"]'); }
+    function focusTask(index, atEnd){
+      var field=rowAt(index)&&rowAt(index).querySelector('[data-task-text]');
+      if(!field)return;
+      field.focus();
+      if(atEnd){ try{ field.setSelectionRange(field.value.length,field.value.length); }catch(error){} }
+    }
+    function addTask(after){
+      var at=typeof after==='number'?after+1:block.items.length;
+      block.items.splice(at,0,{ text:'', done:false });
+      var row=document.createElement('div');
+      row.innerHTML=taskRowHTML(block.items[at],at,false);
+      row=row.firstChild;
+      var neighbour=rowAt(at);
+      if(neighbour)list.insertBefore(row,neighbour); else list.appendChild(row);
+      renumberTasks(card);
+      bindTaskRow(card,block,row);
+      focusTask(at,false);
+      saveTasks(card,block);
+    }
+    function dropTask(index){
+      if(block.items.length<2){ block.items=[{ text:'', done:false }]; var only=rowAt(0); if(only){ var field=only.querySelector('[data-task-text]'); if(field)field.value=''; only.classList.remove('done'); var tick=only.querySelector('[data-task-check]'); if(tick)tick.checked=false; } saveTasks(card,block); return; }
+      block.items.splice(index,1);
+      var row=rowAt(index);
+      if(row&&row.parentNode)row.parentNode.removeChild(row);
+      renumberTasks(card);
+      focusTask(Math.max(0,index-1),true);
+      saveTasks(card,block);
+    }
+    function bindTaskRow(card, block, row){
+      var text=row.querySelector('[data-task-text]'), check=row.querySelector('[data-task-check]'), drop=row.querySelector('[data-task-remove]'), grip=row.querySelector('[data-task-grip]');
+      if(text){
+        text.oninput=function(){ block.items[+text.dataset.taskText].text=text.value; taskCount(card,block); queuedSave(block,false,{items:block.items}); };
+        text.onkeydown=function(event){
+          var at=+text.dataset.taskText;
+          if(event.key==='Enter'){ event.preventDefault(); addTask(at); return; }
+          if(event.key==='Backspace'&&!text.value){ event.preventDefault(); dropTask(at); }
+        };
+      }
+      if(check)check.onchange=function(){
+        block.items[+check.dataset.taskCheck].done=check.checked;
+        row.classList.toggle('done',check.checked);
+        saveTasks(card,block);
+      };
+      if(drop)drop.onclick=function(){ dropTask(+drop.dataset.taskRemove); };
+      if(grip)bindTaskDrag(card,block,list,row,grip);
+    }
+    Array.prototype.forEach.call(card.querySelectorAll('.task-row'),function(row){ bindTaskRow(card,block,row); });
+    var add=card.querySelector('[data-add-task]');
+    if(add&&!frozen)add.onclick=function(){ addTask(); };
+  }
+  /* The same pointer handling the cards use: the row follows the pointer, the
+     others make room, and the list is written down once at the end. A mouse, a
+     finger and a pen all raise these, which the HTML5 drag events do not. */
+  function bindTaskDrag(card, block, list, row, grip){
+    grip.onpointerdown=function(event){
+      if(event.button&&event.button!==0)return;
+      event.preventDefault();
+      var pointer=event.pointerId;
+      var from=+row.dataset.taskRow;
+      row.classList.add('is-dragging');
+      try{ grip.setPointerCapture(pointer); }catch(error){}
+      function others(){
+        return Array.prototype.filter.call(list.children,function(node){ return node!==row&&node.classList.contains('task-row'); });
+      }
+      function move(step){
+        var y=step.clientY;
+        var moved=false;
+        others().forEach(function(node){
+          if(moved)return;
+          var box=node.getBoundingClientRect(), middle=box.top+box.height/2;
+          var before=node.compareDocumentPosition(row)&Node.DOCUMENT_POSITION_FOLLOWING;
+          if(before&&y<middle){ list.insertBefore(row,node); moved=true; }
+          else if(!before&&y>middle){ list.insertBefore(row,node.nextSibling); moved=true; }
+        });
+      }
+      function stop(){
+        grip.onpointermove=null; grip.onpointerup=null; grip.onpointercancel=null;
+        try{ grip.releasePointerCapture(pointer); }catch(error){}
+        row.classList.remove('is-dragging');
+        var to=Array.prototype.indexOf.call(list.children,row);
+        if(to>=0&&to!==from){
+          var moved=block.items.splice(from,1)[0];
+          block.items.splice(to,0,moved);
+          renumberTasks(card);
+          saveTasks(card,block);
+        }
+      }
+      grip.onpointermove=move;
+      grip.onpointerup=stop;
+      grip.onpointercancel=stop;
+    };
+  }
   function blockHTML(block){
     var labels=BLOCK_LABELS;
     var prompt=block.type==='idea'?'Capture a possibility, question, or connection…':block.type==='lesson'?'Teach the idea in a few clear lines…':'Write something…';
@@ -1398,12 +1552,7 @@
       var written=block.items.filter(function(item){ return (item.text||'').trim(); });
       var left=written.filter(function(item){ return !item.done; }).length;
       body='<div class="task-list" data-task-list>'+block.items.map(function(item,i){
-        return '<div class="task-row'+(item.done?' done':'')+'" data-task-row="'+i+'"'+(frozen?'':' draggable="true"')+'>'
-          +(frozen?'':'<span class="task-grip" aria-hidden="true">\u283F</span>')
-          +'<input type="checkbox" data-task-check="'+i+'" '+(item.done?'checked':'')+disabled+'>'
-          +'<input class="task-text" data-task-text="'+i+'" value="'+esc(item.text)+'" placeholder="Task"'+disabled+'>'
-          +(frozen?'':'<button type="button" class="task-drop" data-task-remove="'+i+'" aria-label="Remove this task">\u00d7</button>')
-          +'</div>';
+        return taskRowHTML(item,i,frozen);
       }).join('')+'</div><div class="task-foot"><span class="task-count">'
         +(written.length?(left?left+' left of '+written.length:'all '+written.length+' done'):'')
         +'</span>'+(frozen?'':'<button class="add-task" data-add-task>+ Add task</button>')+'</div>';
@@ -1419,7 +1568,7 @@
         extra='<div class="lesson-actions"><button class="btn ghost sm" data-practice-lesson>Preview and practice</button><button class="btn ghost sm" data-export-lesson>Export</button><button class="btn ghost sm" data-import-lesson'+disabled+'>Import</button></div>';
       }
     }
-    if(block.type==='table') body='<div class="table-tools"><span>Drag across cells to select</span><button data-table-row'+disabled+'>+ Row</button><button data-table-col'+disabled+'>+ Column</button><button data-remove-row'+disabled+'>− Row</button><button data-remove-col'+disabled+'>− Column</button>'+(frozen?'':'<button data-table-design>Design</button>')+'</div><div class="table-frame"><div class="block-body block-table'+(block.tableZebra?' zebra':'')+(block.tableDense?' dense':'')+'" data-body contenteditable="'+editable+'" data-placeholder="Create a simple table…">'+(block.body?cleanHTML(block.body):TABLE_DEFAULT)+'</div><div class="table-resizers"></div></div>';
+    if(block.type==='table') body='<div class="table-tools"><span>Drag across cells to select a row or a column</span>'+(frozen?'':'<button data-table-design>Design</button><span class="table-selection" data-table-selection hidden><b>Selected</b><button type="button" data-remove-row>Delete row</button><button type="button" data-remove-col>Delete column</button></span>')+'</div><div class="table-frame"><div class="block-body block-table'+(block.tableZebra?' zebra':'')+(block.tableDense?' dense':'')+'" data-body contenteditable="'+editable+'" data-placeholder="Create a simple table…">'+(block.body?cleanHTML(block.body):TABLE_DEFAULT)+'</div><div class="table-resizers"></div>'+(frozen?'':'<button type="button" class="table-add table-add-col" data-table-col title="Add a column" aria-label="Add a column">+</button><button type="button" class="table-add table-add-row" data-table-row title="Add a row" aria-label="Add a row">+</button>')+'</div>';
     if(block.type==='image'){
       var picker='<input data-image-upload type="file" accept="image/jpeg,image/png,image/webp" hidden>';
       body=(block.imageUrl
@@ -1450,7 +1599,8 @@
       delete saveTimers[block.id]; delete savePatches[block.id];
       markShown();
       var writer=cloud().patchBlock||cloud().saveBlock;
-      writer(activeProject.id,block.id,changes).catch(function(){});
+      var landed=holdInFlight(block.id,changes);
+      writer(activeProject.id,block.id,changes).then(landed,landed);
     };
     if(immediate) commit(); else saveTimers[block.id]=setTimeout(commit,70);
   }
@@ -1750,6 +1900,10 @@
     function paint(){
       Array.prototype.forEach.call(table.querySelectorAll('.selected-cell'),function(cell){ cell.classList.remove('selected-cell'); });
       var span=spanOf(picked);
+      /* Taking a row or a column away is about the one you are pointing at, so
+         it is offered where the pointing happens and nowhere else. */
+      var chooser=card.querySelector('[data-table-selection]');
+      if(chooser)chooser.hidden=!span;
       if(!span)return;
       for(var r=span.top;r<=span.bottom;r++){
         var row=table.rows[r];
@@ -2019,64 +2173,7 @@
       if(code)code.oninput=function(){ block.body=code.textContent; queuedSave(block,false,{body:block.body}); };
       var design=card.querySelector('[data-table-design]');
       if(design)design.onclick=function(event){ event.stopPropagation(); openTableDesign(card,block,design.parentNode); };
-      /* A list you can work down without reaching for the mouse: return starts
-         the next task, and backspace on an empty one takes it away again. */
-      card.querySelectorAll('[data-task-text]').forEach(function(input){
-        input.onkeydown=function(event){
-          var at=+input.dataset.taskText;
-          if(event.key==='Enter'){
-            event.preventDefault();
-            block.items.splice(at+1,0,{ text:'', done:false });
-            render(); queuedSave(block,true,{items:block.items});
-            var next=root.querySelector('[data-block="'+block.id+'"] [data-task-text="'+(at+1)+'"]');
-            if(next)next.focus();
-            return;
-          }
-          if(event.key==='Backspace'&&!input.value&&block.items.length>1){
-            event.preventDefault();
-            block.items.splice(at,1);
-            render(); queuedSave(block,true,{items:block.items});
-            var back=root.querySelector('[data-block="'+block.id+'"] [data-task-text="'+Math.max(0,at-1)+'"]');
-            if(back){ back.focus(); try{ back.setSelectionRange(back.value.length,back.value.length); }catch(error){} }
-          }
-        };
-        input.addEventListener('input',function(){ taskCount(card,block); });
-      });
-      card.querySelectorAll('[data-task-remove]').forEach(function(button){
-        button.onclick=function(){
-          block.items.splice(+button.dataset.taskRemove,1);
-          if(!block.items.length)block.items=[{ text:'', done:false }];
-          render(); queuedSave(block,true,{items:block.items});
-        };
-      });
-      card.querySelectorAll('[data-task-check]').forEach(function(input){
-        /* Added alongside the handler that saves, rather than over it: this one
-           only has to show what the tick means. */
-        input.addEventListener('change',function(){
-          var row=input.closest('.task-row');
-          if(row)row.classList.toggle('done',input.checked);
-          taskCount(card,block);
-        });
-      });
-      var carrying=null;
-      card.querySelectorAll('.task-row[draggable]').forEach(function(row){
-        row.addEventListener('dragstart',function(event){
-          carrying=+row.dataset.taskRow; row.classList.add('is-dragging');
-          try{ event.dataTransfer.effectAllowed='move'; event.dataTransfer.setData('text/plain',String(carrying)); }catch(error){}
-        });
-        row.addEventListener('dragend',function(){ row.classList.remove('is-dragging'); });
-        row.addEventListener('dragover',function(event){ event.preventDefault(); row.classList.add('is-over'); });
-        row.addEventListener('dragleave',function(){ row.classList.remove('is-over'); });
-        row.addEventListener('drop',function(event){
-          event.preventDefault(); row.classList.remove('is-over');
-          var to=+row.dataset.taskRow;
-          if(carrying===null||carrying===to)return;
-          var moved=block.items.splice(carrying,1)[0];
-          block.items.splice(to,0,moved);
-          carrying=null;
-          render(); queuedSave(block,true,{items:block.items});
-        });
-      });
+      bindTasks(card,block);
     });
     bindDrag();
   }
@@ -2401,7 +2498,7 @@
     stopBlocks=cloud().watchBlocks(projectId,function(list,ours){
       if(!activeProject||activeProject.id!==projectId)return;
       var before=blocks;
-      var next=list.map(normalizeBlock);
+      var next=adoptBlocks(list.map(normalizeBlock));
       var mark=blocksSignature(next);
       var localEcho=ownBlockEcho(before,next,ours);
       blocks=next;
