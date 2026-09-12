@@ -649,19 +649,6 @@ body > :not(.crow-topography){ position:relative; z-index:1; }
 /* The terrain owns the entire viewport: no page-height seam or separate glow layer. */
 body{
   min-height:100vh;
-  background:
-    radial-gradient(74% 72% at 12% -10%,rgba(74,66,166,.22),transparent 68%),
-    radial-gradient(66% 72% at 98% 92%,rgba(30,100,156,.13),transparent 70%),
-    var(--ground);
+  background:var(--ground);
 }
 body > :not(.crow-topography):not(.crow-topography-grain){ position:relative; z-index:1; }
-.crow-topography-grain{
-  position:fixed;
-  inset:0;
-  z-index:0;
-  pointer-events:none;
-  opacity:.075;
-  filter:contrast(155%);
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='.9'/%3E%3C/svg%3E");
-  background-size:120px 120px;
-}
