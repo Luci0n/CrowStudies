@@ -1579,10 +1579,47 @@
     }
     return rows;
   }
+  /* Any property can make lanes, not only a select. A select brings its own
+     choices with it; everything else is grouped by the values the rows actually
+     hold, which is what a board is for when the column is a plain word. */
   function dbGroupProp(block, view){
     var prop=view.groupBy?dbPropById(block,view.groupBy):null;
-    if(prop&&(prop.type==='select'||prop.type==='multi'))return prop;
-    return dbProps(block).filter(function(item){ return item.type==='select'; })[0]||null;
+    if(prop)return prop;
+    var props=dbProps(block);
+    return props.filter(function(item){ return item.type==='select'; })[0]||props[0]||null;
+  }
+  function dbLanes(block, prop, rows){
+    var lanes=[{ name:'', label:'No '+String(prop.name||'value').toLowerCase() }];
+    if(prop.type==='select'||prop.type==='multi'){
+      (prop.options||[]).forEach(function(name){ lanes.push({ name:name, label:name }); });
+      return lanes;
+    }
+    if(prop.type==='check')return [{ name:'', label:'Not ticked' },{ name:'yes', label:'Ticked' }];
+    var seen={};
+    rows.forEach(function(row){
+      var held=dbAsText(prop,row);
+      if(held&&!seen[held]){ seen[held]=true; }
+    });
+    Object.keys(seen).sort(function(a,b){ return a.localeCompare(b,undefined,{ sensitivity:'base' }); })
+      .forEach(function(name){ lanes.push({ name:name, label:name }); });
+    return lanes;
+  }
+  function dbInLane(prop, row, laneName){
+    if(prop.type==='check'){
+      var ticked=!!dbValue(row,prop);
+      return laneName==='yes'?ticked:!ticked;
+    }
+    if(prop.type==='select'||prop.type==='multi'){
+      var mine=dbChosen(prop,row);
+      return laneName?mine.indexOf(laneName)>=0:!mine.length;
+    }
+    var text=dbAsText(prop,row);
+    return laneName?text===laneName:!text;
+  }
+  function dbLaneValue(prop, laneName){
+    if(prop.type==='check')return laneName==='yes';
+    if(prop.type==='multi')return laneName?[laneName]:[];
+    return laneName;
   }
   function dbViewBarHTML(block, view, frozen){
     var views=dbViews(block);
@@ -1597,16 +1634,14 @@
   }
   function dbBoardHTML(block, view, rows, frozen){
     var prop=dbGroupProp(block,view);
-    if(!prop)return '<p class="db-nochoices">A board groups by a select. Add a select property, or set one under “Set up this view”.</p>';
+    if(!prop)return '<p class="db-nochoices">This database has no properties yet. Add one and the board can group by it.</p>';
     var first=dbProps(block)[0];
-    var lanes=[{ name:'', label:'No '+(prop.name||'value').toLowerCase() }].concat((prop.options||[]).map(function(name){ return { name:name, label:name }; }));
+    var lanes=dbLanes(block,prop,dbRowsOf(block.id));
     return '<div class="db-board">'+lanes.map(function(lane){
-      var held=rows.filter(function(row){
-        var mine=dbChosen(prop,row);
-        return lane.name?mine.indexOf(lane.name)>=0:!mine.length;
-      });
+      var held=rows.filter(function(row){ return dbInLane(prop,row,lane.name); });
       return '<section class="db-lane" data-db-lane="'+esc(lane.name)+'"><header>'
-        +(lane.name?chipHTML(lane.name):'<span class="db-blankmark">'+esc(lane.label)+'</span>')
+        +(lane.name?((prop.type==='select'||prop.type==='multi')?chipHTML(lane.label):'<span class="db-laneName">'+esc(lane.label)+'</span>')
+          :'<span class="db-blankmark">'+esc(lane.label)+'</span>')
         +'<b>'+held.length+'</b></header><div class="db-lane-rows">'
         +held.map(function(row){
           var title=first?dbAsText(first,row):'';
@@ -1743,7 +1778,7 @@
     bindBoard(card,block);
   }
   function closeChoiceMenu(){
-    var open=root.querySelector('.db-choices');
+    var open=document.querySelector('.db-choices');
     if(open&&open.parentNode)open.parentNode.removeChild(open);
     document.removeEventListener('click',awayFromChoiceMenu);
   }
@@ -1752,7 +1787,7 @@
     closeChoiceMenu();
   }
   function openChoiceMenu(card, block, prop, rowId, button){
-    var already=root.querySelector('.db-choices');
+    var already=document.querySelector('.db-choices');
     closeChoiceMenu();
     if(already)return;
     var row=dbRowsOf(block.id).filter(function(item){ return item.id===rowId; })[0];
@@ -1764,10 +1799,8 @@
         return '<button type="button" data-choice="'+esc(name)+'"'+(held.indexOf(name)>=0?' class="is-on"':'')+'>'+chipHTML(name)+'</button>';
       }).join(''):'<p class="db-nochoices">No choices yet. Add some from the column heading.</p>')
       +(held.length?'<div class="db-choices-foot"><button type="button" data-choice-clear>Clear</button></div>':'');
-    var frame=card.getBoundingClientRect(), spot=button.getBoundingClientRect();
-    menu.style.left=Math.max(0,spot.left-frame.left)+'px';
-    menu.style.top=(spot.bottom-frame.top+2)+'px';
-    card.appendChild(menu);
+    document.body.appendChild(menu);
+    placePanel(menu,button);
     function settle(next){
       dbWriteCell(block,rowId,prop,many?next:(next[0]||''));
       /* Only this cell changes, so only this cell is drawn again. */
@@ -1786,6 +1819,16 @@
     var clear=menu.querySelector('[data-choice-clear]');
     if(clear)clear.onclick=function(event){ event.stopPropagation(); settle([]); };
     setTimeout(function(){ document.addEventListener('click',awayFromChoiceMenu); },0);
+  }
+  /* Under whatever opened it, and never off the edge of the window. */
+  function placePanel(panel, button){
+    var spot=button.getBoundingClientRect();
+    var width=panel.offsetWidth||280, height=panel.offsetHeight||240;
+    var left=Math.min(Math.max(8,spot.left),Math.max(8,window.innerWidth-width-8));
+    var top=spot.bottom+6;
+    if(top+height>window.innerHeight-8)top=Math.max(8,spot.top-height-6);
+    panel.style.left=left+'px';
+    panel.style.top=top+'px';
   }
   function closeViewSetup(){
     var open=document.querySelector('.db-setup-panel');
@@ -1826,7 +1869,14 @@
         +'<button type="button" class="db-quiet danger" data-view-drop>Delete view</button></div>';
       wire();
     }
-    function keep(){ dbSaveViews(block); paintDatabase(card,block); }
+    /* The panel outlives the card, and a snapshot hands the block a new views
+       array while the panel is still holding the old one. Whatever was changed
+       is carried onto the copy the block actually has before it is saved. */
+    function keep(){
+      var live=dbView(block);
+      if(live&&live!==view){ Object.assign(live,view); view=live; }
+      dbSaveViews(block); paintDatabase(card,block);
+    }
     function wire(){
       panel.querySelectorAll('[data-kind]').forEach(function(choice){
         choice.onclick=function(){
@@ -1882,10 +1932,11 @@
       };
     }
     draw();
-    var frame=card.getBoundingClientRect(), spot=button.getBoundingClientRect();
-    panel.style.left=Math.max(8,spot.left-frame.left-140)+'px';
-    panel.style.top=(spot.bottom-frame.top+6)+'px';
-    card.appendChild(panel);
+    /* On the page, not on the card. A saved rule is a write, a write comes back
+       as a snapshot, and a snapshot redraws the card — which took the panel
+       down with it after every single change. */
+    document.body.appendChild(panel);
+    placePanel(panel,button);
     setTimeout(function(){ document.addEventListener('click',awayFromViewSetup); },0);
   }
   /* Moving a card from one lane to another is the one thing a board does that a
@@ -1919,7 +1970,7 @@
           var lane=under&&under.closest?under.closest('.db-lane'):null;
           if(!lane)return;
           var to=lane.dataset.dbLane||'';
-          dbWriteCell(block,rowId,prop,prop.type==='multi'?(to?[to]:[]):to);
+          dbWriteCell(block,rowId,prop,dbLaneValue(prop,to));
           paintDatabase(card,block);
         }
         item.onpointermove=over;
@@ -1929,7 +1980,7 @@
     });
   }
   function closePropMenu(){
-    var open=root.querySelector('.db-menu');
+    var open=document.querySelector('.db-menu');
     if(open&&open.parentNode)open.parentNode.removeChild(open);
     document.removeEventListener('click',awayFromPropMenu);
   }
@@ -1938,12 +1989,15 @@
     closePropMenu();
   }
   function openPropMenu(card, block, button){
-    var already=root.querySelector('.db-menu');
+    var already=document.querySelector('.db-menu');
     closePropMenu();
     if(already)return;
     var propId=button.dataset.dbProp;
-    var prop=dbProps(block).filter(function(item){ return item.id===propId; })[0];
+    var prop=dbPropById(block,propId);
     if(!prop)return;
+    /* Same again: hold the property by its id, not by the object it was when
+       the menu opened. */
+    function held(){ prop=dbPropById(block,propId)||prop; return prop; }
     var menu=document.createElement('div'); menu.className='db-menu';
     menu.innerHTML='<button type="button" data-prop-rename>Rename</button>'
       +(prop.type==='select'?'<button type="button" data-prop-options>Edit the choices</button>':'')
@@ -1952,14 +2006,13 @@
         return '<button type="button" data-prop-kind="'+pair[0]+'"'+(pair[0]===prop.type?' class="is-on"':'')+'>'+pair[1]+'</button>';
       }).join('')
       +'<div class="db-menu-head">Property</div><button type="button" class="danger" data-prop-drop>Delete</button>';
-    /* On the card, not in the table: the rows scroll sideways inside their own
-       box, and a menu opened inside it was cut off at its edge. */
-    var frame=card.getBoundingClientRect(), spot=button.getBoundingClientRect();
-    menu.style.left=Math.max(0,spot.left-frame.left)+'px';
-    menu.style.top=(spot.bottom-frame.top+4)+'px';
-    card.appendChild(menu);
+    /* On the page: the rows scroll sideways inside their own box, which cut a
+       menu off at its edge, and a card is redrawn whenever a write comes back. */
+    document.body.appendChild(menu);
+    placePanel(menu,button);
     menu.querySelector('[data-prop-rename]').onclick=async function(){
       closePropMenu();
+      held();
       var name=await askName('Rename property',prop.name||'Property','Rename');
       if(name===null)return;
       prop.name=name.trim()||prop.name;
@@ -1968,6 +2021,7 @@
     var options=menu.querySelector('[data-prop-options]');
     if(options)options.onclick=async function(){
       closePropMenu();
+      held();
       var written=await askName('The choices, separated by commas',(prop.options||[]).join(', '),'Save choices');
       if(written===null)return;
       prop.options=written.split(',').map(function(part){ return part.trim(); }).filter(function(part){ return part; });
@@ -1976,6 +2030,7 @@
     menu.querySelectorAll('[data-prop-kind]').forEach(function(choice){
       choice.onclick=function(){
         closePropMenu();
+        held();
         var was=prop.type;
         prop.type=choice.dataset.propKind;
         /* Between one choice and several, what is written stays written: a
@@ -1990,6 +2045,7 @@
     });
     menu.querySelector('[data-prop-drop]').onclick=async function(){
       closePropMenu();
+      held();
       if(dbProps(block).length<2){ await notify('This is the only property','A database keeps at least one.'); return; }
       if(!await askConfirm('Delete this property?','What is written in its column goes with it, for everyone.','Delete property'))return;
       block.props=dbProps(block).filter(function(item){ return item.id!==propId; });
@@ -2110,24 +2166,28 @@
   document.addEventListener('keydown',function(event){
     if(event.key==='Escape'&&chosenIds().length)clearChosen();
   });
+  var BAND_KEEPS_OUT='[data-block],button,input,select,textarea,a,label,[contenteditable="true"],.chosen-bar,.db-setup-panel,.db-choices,.db-menu,.section-bar,.page-bar,.project-top,.preview-bar';
   function bindMarquee(){
+    var main=root.querySelector('.studio-main');
     var grid=root.querySelector('.block-grid');
-    if(!grid||grid.dataset.bandBound)return;
-    grid.dataset.bandBound='1';
-    grid.addEventListener('pointerdown',function(event){
+    if(!main||!grid||main.dataset.bandBound)return;
+    main.dataset.bandBound='1';
+    main.addEventListener('pointerdown',function(event){
       if(event.button&&event.button!==0)return;
-      /* The grid itself, not a card on it. */
-      if(event.target!==grid)return;
+      /* Anywhere that is not a card and not something you can act on: the gaps
+         between cards are only a few pixels wide, so the empty space around and
+         below them has to work too. */
+      if(event.target.closest(BAND_KEEPS_OUT))return;
       if(readOnly||!canEdit()||previewing())return;
       var pointer=event.pointerId;
       var startX=event.clientX, startY=event.clientY;
       var adding=event.shiftKey||event.metaKey||event.ctrlKey;
       if(!adding)clearChosen();
       var band=document.createElement('div'); band.className='marquee'; band.hidden=true;
-      grid.appendChild(band);
-      var frame=grid.getBoundingClientRect();
+      main.appendChild(band);
+      var frame=main.getBoundingClientRect();
       var live=false;
-      try{ grid.setPointerCapture(pointer); }catch(error){}
+      try{ main.setPointerCapture(pointer); }catch(error){}
       function draw(step){
         var x=step.clientX, y=step.clientY;
         if(!live&&Math.abs(x-startX)<4&&Math.abs(y-startY)<4)return;
@@ -2139,8 +2199,7 @@
         band.style.width=width+'px';
         band.style.height=height+'px';
         var box={ left:left, top:top, right:left+width, bottom:top+height };
-        Array.prototype.forEach.call(grid.children,function(card){
-          if(!card.hasAttribute||!card.hasAttribute('data-block'))return;
+        Array.prototype.forEach.call(grid.querySelectorAll('[data-block]'),function(card){
           var spot=card.getBoundingClientRect();
           var touching=spot.right>box.left&&spot.left<box.right&&spot.bottom>box.top&&spot.top<box.bottom;
           if(touching)markChosen(card.dataset.block,true);
@@ -2148,15 +2207,21 @@
         });
       }
       function stop(){
-        grid.onpointermove=null; grid.onpointerup=null; grid.onpointercancel=null;
-        try{ grid.releasePointerCapture(pointer); }catch(error){}
+        main.onpointermove=null; main.onpointerup=null; main.onpointercancel=null;
+        try{ main.releasePointerCapture(pointer); }catch(error){}
         if(band.parentNode)band.parentNode.removeChild(band);
         paintChosenBar();
       }
-      grid.onpointermove=draw;
-      grid.onpointerup=stop;
-      grid.onpointercancel=stop;
+      main.onpointermove=draw;
+      main.onpointerup=stop;
+      main.onpointercancel=stop;
     });
+  }
+  function codeLinesHTML(text){
+    var count=Math.max(1,String(text||'').split('\n').length);
+    var rows=[];
+    for(var line=1;line<=count;line++)rows.push('<span>'+line+'</span>');
+    return rows.join('');
   }
   function taskRowHTML(item, index, frozen){
     var disabled=frozen?' disabled':'';
@@ -2329,7 +2394,14 @@
     /* Code is text, not markup: it is kept and shown as what was typed, so a
        stray angle bracket stays a stray angle bracket. */
     if(block.type==='database') body='<div class="db" data-db-table></div>';
-    if(block.type==='code') body='<pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+esc(plainText(block.body))+'</pre>';
+    if(block.type==='code'){
+      var written=plainText(block.body);
+      body='<div class="code-wrap"><button type="button" class="code-copy" data-code-copy title="Copy this code">'
+        +'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="9" height="9" rx="1.6"></rect><path d="M10.5 3.5v-1a1 1 0 0 0-1-1h-7a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h1"></path></svg>'
+        +'<span data-copy-word>Copy</span></button>'
+        +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div>'
+        +'<pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+esc(written)+'</pre></div></div>';
+    }
     return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-block="'+block.id+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
   }
   function queuedSave(block, immediate, patch){
@@ -2915,7 +2987,26 @@
         setTimeout(function(){ document.addEventListener('click',awayFromIconPicker); },0);
       };
       var code=card.querySelector('[data-code]');
-      if(code)code.oninput=function(){ block.body=code.textContent; queuedSave(block,false,{body:block.body}); };
+      var gutter=card.querySelector('[data-code-lines]');
+      if(code)code.oninput=function(){
+        block.body=code.textContent;
+        if(gutter)gutter.innerHTML=codeLinesHTML(block.body);
+        queuedSave(block,false,{body:block.body});
+      };
+      var copy=card.querySelector('[data-code-copy]');
+      if(copy)copy.onclick=async function(){
+        var word=copy.querySelector('[data-copy-word]');
+        try{
+          await navigator.clipboard.writeText(code?code.textContent:plainText(block.body));
+          if(word)word.textContent='Copied';
+        }catch(error){
+          /* Refused, or no clipboard to write to. Saying so beats a button that
+             looks as though it worked. */
+          if(word)word.textContent='Press ⌘/Ctrl+C';
+        }
+        copy.classList.add('is-done');
+        setTimeout(function(){ if(word)word.textContent='Copy'; copy.classList.remove('is-done'); },1600);
+      };
       var design=card.querySelector('[data-table-design]');
       if(design)design.onclick=function(event){ event.stopPropagation(); openTableDesign(card,block,design.parentNode); };
       bindTasks(card,block);
