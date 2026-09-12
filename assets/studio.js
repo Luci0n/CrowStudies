@@ -1451,7 +1451,9 @@
      Every database in the project is watched, not only the ones on screen: a
      version saved while another section was showing still has to carry their
      rows, and a restore that could not see them would quietly throw them away. */
-  var DB_KINDS=[['text','Text'],['number','Number'],['check','Tick box'],['select','Select']];
+  var DB_KINDS=[['text','Text'],['longtext','Long text'],['number','Number'],['check','Tick box'],
+    ['select','Select'],['multi','Multi-select'],['date','Date'],['url','Link'],['email','Email'],['phone','Phone']];
+  var CHIP_TONES=6;
   var dbRows={}, dbWatch={};
   function isDatabase(block){ return !!block&&block.type==='database'; }
   function dbProps(block){
@@ -1490,15 +1492,41 @@
     var held=(row.values||{})[prop.id];
     return held===undefined||held===null?'':held;
   }
+  /* A choice is worth recognising before it is read, so each one keeps the
+     same colour wherever it appears, worked out from the word itself rather
+     than stored beside it. */
+  function chipTone(value){
+    var sum=0, text=String(value||'');
+    for(var i=0;i<text.length;i++)sum=(sum*31+text.charCodeAt(i))%9973;
+    return sum%CHIP_TONES;
+  }
+  function chipHTML(value){
+    return '<span class="db-chip" data-tone="'+chipTone(value)+'">'+esc(value)+'</span>';
+  }
+  function dbChosen(prop, row){
+    var value=dbValue(row,prop);
+    if(prop.type==='multi')return Array.isArray(value)?value:(value?[value]:[]);
+    return value?[value]:[];
+  }
+  var FIELD_TYPES={ number:'number', date:'date', url:'url', email:'email', phone:'tel' };
   function dbCellHTML(prop, row, frozen){
     var value=dbValue(row,prop), off=frozen?' disabled':'';
     if(prop.type==='check')
       return '<input type="checkbox" data-db-cell="'+prop.id+'"'+(value?' checked':'')+off+'>';
-    if(prop.type==='select')
-      return '<select class="db-pick" data-db-cell="'+prop.id+'"'+off+'><option value=""></option>'
-        +(prop.options||[]).map(function(name){ return '<option'+(name===value?' selected':'')+'>'+esc(name)+'</option>'; }).join('')
-        +'</select>';
-    return '<input class="db-text" type="'+(prop.type==='number'?'number':'text')+'" data-db-cell="'+prop.id+'" value="'+esc(String(value))+'"'+off+'>';
+    if(prop.type==='select'||prop.type==='multi'){
+      var held=dbChosen(prop,row);
+      /* The browser's own menu could not be made legible against this card and
+         cropped its own text in a narrow column, so the cell shows what was
+         chosen and opens a list of its own. */
+      return '<button type="button" class="db-tags" data-db-cell="'+prop.id+'"'+off+'>'
+        +(held.length?held.map(chipHTML).join(''):'<span class="db-blankmark">Empty</span>')+'</button>';
+    }
+    if(prop.type==='longtext')
+      return '<textarea class="db-area" rows="2" data-db-cell="'+prop.id+'"'+off+'>'+esc(String(value))+'</textarea>';
+    var field='<input class="db-text" type="'+(FIELD_TYPES[prop.type]||'text')+'" data-db-cell="'+prop.id+'" value="'+esc(String(value))+'"'+off+'>';
+    if(prop.type==='url'&&value)
+      field='<span class="db-linked">'+field+'<a class="db-open" href="'+esc(String(value))+'" target="_blank" rel="noopener noreferrer" title="Open in a new tab">↗</a></span>';
+    return field;
   }
   function paintDatabase(card, block){
     var holder=card.querySelector('[data-db-table]');
@@ -1513,7 +1541,7 @@
       +'</tr></thead><tbody>'
       +(rows.length?rows.map(function(row){
         return '<tr data-db-row="'+row.id+'">'
-          +props.map(function(prop){ return '<td>'+dbCellHTML(prop,row,frozen)+'</td>'; }).join('')
+          +props.map(function(prop){ return '<td data-label="'+esc(prop.name||'Property')+'">'+dbCellHTML(prop,row,frozen)+'</td>'; }).join('')
           +(frozen?'':'<td class="db-slim"><button type="button" class="db-drop" data-db-row-remove aria-label="Delete this row">×</button></td>')
           +'</tr>';
       }).join(''):'<tr class="db-blank"><td colspan="'+(props.length+(frozen?0:1))+'">Nothing in here yet.</td></tr>')
@@ -1521,6 +1549,16 @@
       +(frozen?'':'<button type="button" class="db-new" data-db-add-row>+ New row</button>')
       +'<span class="db-count">'+rows.length+(rows.length===1?' row':' rows')+'</span></div>';
     if(!frozen)bindDatabase(card,block);
+  }
+  function recastColumn(block, prop, change){
+    dbRowsOf(block.id).forEach(function(row){
+      var held=(row.values||{})[prop.id];
+      if(held===undefined||held===null||held==='')return;
+      var next=change(held);
+      row.values=row.values||{}; row.values[prop.id]=next;
+      var patch={}; patch[prop.id]=next;
+      cloud().patchRow(activeProject.id,block.id,row.id,{ values:patch }).catch(function(){});
+    });
   }
   function dbSaveShape(block){
     block.props=dbProps(block).slice();
@@ -1545,7 +1583,10 @@
         var prop=props.filter(function(item){ return item.id===field.dataset.dbCell; })[0];
         if(!prop)return;
         if(prop.type==='check'){ field.onchange=function(){ dbWriteCell(block,rowId,prop,field.checked); }; return; }
-        if(prop.type==='select'){ field.onchange=function(){ dbWriteCell(block,rowId,prop,field.value); }; return; }
+        if(prop.type==='select'||prop.type==='multi'){
+          field.onclick=function(event){ event.stopPropagation(); openChoiceMenu(card,block,prop,rowId,field); };
+          return;
+        }
         field.onchange=function(){
           dbWriteCell(block,rowId,prop,prop.type==='number'?(field.value===''?'':Number(field.value)):field.value);
         };
@@ -1580,6 +1621,51 @@
     holder.querySelectorAll('[data-db-prop]').forEach(function(button){
       button.onclick=function(event){ event.stopPropagation(); openPropMenu(card,block,button); };
     });
+  }
+  function closeChoiceMenu(){
+    var open=root.querySelector('.db-choices');
+    if(open&&open.parentNode)open.parentNode.removeChild(open);
+    document.removeEventListener('click',awayFromChoiceMenu);
+  }
+  function awayFromChoiceMenu(event){
+    if(event.target.closest('.db-choices')||event.target.closest('.db-tags'))return;
+    closeChoiceMenu();
+  }
+  function openChoiceMenu(card, block, prop, rowId, button){
+    var already=root.querySelector('.db-choices');
+    closeChoiceMenu();
+    if(already)return;
+    var row=dbRowsOf(block.id).filter(function(item){ return item.id===rowId; })[0];
+    if(!row)return;
+    var held=dbChosen(prop,row), many=prop.type==='multi';
+    var menu=document.createElement('div'); menu.className='db-choices';
+    var options=prop.options||[];
+    menu.innerHTML=(options.length?options.map(function(name){
+        return '<button type="button" data-choice="'+esc(name)+'"'+(held.indexOf(name)>=0?' class="is-on"':'')+'>'+chipHTML(name)+'</button>';
+      }).join(''):'<p class="db-nochoices">No choices yet. Add some from the column heading.</p>')
+      +(held.length?'<div class="db-choices-foot"><button type="button" data-choice-clear>Clear</button></div>':'');
+    var frame=card.getBoundingClientRect(), spot=button.getBoundingClientRect();
+    menu.style.left=Math.max(0,spot.left-frame.left)+'px';
+    menu.style.top=(spot.bottom-frame.top+2)+'px';
+    card.appendChild(menu);
+    function settle(next){
+      dbWriteCell(block,rowId,prop,many?next:(next[0]||''));
+      /* Only this cell changes, so only this cell is drawn again. */
+      button.innerHTML=next.length?next.map(chipHTML).join(''):'<span class="db-blankmark">Empty</span>';
+      if(!many)closeChoiceMenu();
+      else openChoiceMenu(card,block,prop,rowId,button);
+    }
+    menu.querySelectorAll('[data-choice]').forEach(function(choice){
+      choice.onclick=function(event){
+        event.stopPropagation();
+        var name=choice.dataset.choice;
+        if(!many)return settle(held.indexOf(name)>=0?[]:[name]);
+        settle(held.indexOf(name)>=0?held.filter(function(item){ return item!==name; }):held.concat(name));
+      };
+    });
+    var clear=menu.querySelector('[data-choice-clear]');
+    if(clear)clear.onclick=function(event){ event.stopPropagation(); settle([]); };
+    setTimeout(function(){ document.addEventListener('click',awayFromChoiceMenu); },0);
   }
   function closePropMenu(){
     var open=root.querySelector('.db-menu');
@@ -1629,7 +1715,12 @@
     menu.querySelectorAll('[data-prop-kind]').forEach(function(choice){
       choice.onclick=function(){
         closePropMenu();
+        var was=prop.type;
         prop.type=choice.dataset.propKind;
+        /* Between one choice and several, what is written stays written: a
+           select becomes a list of one, and a list keeps its first. */
+        if(was==='select'&&prop.type==='multi')recastColumn(block,prop,function(value){ return value?[value]:[]; });
+        if(was==='multi'&&prop.type==='select')recastColumn(block,prop,function(value){ return Array.isArray(value)?(value[0]||''):(value||''); });
         /* A select with nothing to select from is a dead end, so it starts with
            something in it that can be changed. */
         if(prop.type==='select'&&!(prop.options||[]).length)prop.options=['To do','Doing','Done'];
