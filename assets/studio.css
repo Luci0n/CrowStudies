@@ -721,3 +721,10 @@
 .code-copy svg{ width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:1.4; }
 @media (hover:none){ .code-copy{ opacity:.7; } }
 .db-laneName{ color:var(--ink-2); font-size:12px; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Nothing gets picked up by the pointer while a band is being drawn, and the
+   whole page keeps the grabbing cursor while a card is being carried. */
+.studio-main.is-banding{ user-select:none; -webkit-user-select:none; }
+.studio-main.is-banding *{ cursor:default; }
+body.is-carrying{ cursor:grabbing; user-select:none; -webkit-user-select:none; }
+body.is-carrying *{ cursor:grabbing !important; }

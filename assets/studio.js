@@ -1949,33 +1949,40 @@
     board.querySelectorAll('[data-db-card]').forEach(function(item){
       item.onpointerdown=function(event){
         if(event.button&&event.button!==0)return;
-        var pointer=event.pointerId, rowId=item.dataset.dbCard, moved=false;
+        var rowId=item.dataset.dbCard, moved=false, last=event;
         var startX=event.clientX, startY=event.clientY;
-        try{ item.setPointerCapture(pointer); }catch(error){}
+        /* The pointer is followed on the window and let go there too. Captured
+           on the card, a pointer that came up anywhere else left the card
+           holding it: the cursor stayed a hand and nothing else could be
+           clicked or selected until the page was redrawn. */
         function over(step){
+          last=step;
           if(!moved&&Math.abs(step.clientX-startX)<5&&Math.abs(step.clientY-startY)<5)return;
-          moved=true; item.classList.add('is-dragging');
+          if(!moved){ moved=true; item.classList.add('is-dragging'); document.body.classList.add('is-carrying'); }
           board.querySelectorAll('.db-lane').forEach(function(lane){ lane.classList.remove('is-over'); });
           var under=document.elementFromPoint(step.clientX,step.clientY);
           var lane=under&&under.closest?under.closest('.db-lane'):null;
           if(lane)lane.classList.add('is-over');
         }
         function stop(step){
-          item.onpointermove=null; item.onpointerup=null; item.onpointercancel=null;
-          try{ item.releasePointerCapture(pointer); }catch(error){}
+          window.removeEventListener('pointermove',over);
+          window.removeEventListener('pointerup',stop);
+          window.removeEventListener('pointercancel',stop);
           item.classList.remove('is-dragging');
+          document.body.classList.remove('is-carrying');
           board.querySelectorAll('.db-lane').forEach(function(lane){ lane.classList.remove('is-over'); });
           if(!moved)return;
-          var under=document.elementFromPoint(step.clientX,step.clientY);
+          var ended=step&&step.clientX!==undefined?step:last;
+          var under=document.elementFromPoint(ended.clientX,ended.clientY);
           var lane=under&&under.closest?under.closest('.db-lane'):null;
           if(!lane)return;
           var to=lane.dataset.dbLane||'';
           dbWriteCell(block,rowId,prop,dbLaneValue(prop,to));
           paintDatabase(card,block);
         }
-        item.onpointermove=over;
-        item.onpointerup=stop;
-        item.onpointercancel=stop;
+        window.addEventListener('pointermove',over);
+        window.addEventListener('pointerup',stop);
+        window.addEventListener('pointercancel',stop);
       };
     });
   }
@@ -2179,42 +2186,59 @@
          below them has to work too. */
       if(event.target.closest(BAND_KEEPS_OUT))return;
       if(readOnly||!canEdit()||previewing())return;
-      var pointer=event.pointerId;
-      var startX=event.clientX, startY=event.clientY;
+      /* Otherwise the drag also drags a text selection across the page. */
+      event.preventDefault();
       var adding=event.shiftKey||event.metaKey||event.ctrlKey;
       if(!adding)clearChosen();
       var band=document.createElement('div'); band.className='marquee'; band.hidden=true;
       main.appendChild(band);
-      var frame=main.getBoundingClientRect();
-      var live=false;
-      try{ main.setPointerCapture(pointer); }catch(error){}
+      /* Everything is measured from the top of the document rather than the top
+         of the window, so scrolling in the middle of a drag moves the band with
+         the page instead of tearing it away from where it started. */
+      var startX=event.clientX+window.scrollX, startY=event.clientY+window.scrollY;
+      var live=false, at=null;
       function draw(step){
-        var x=step.clientX, y=step.clientY;
-        if(!live&&Math.abs(x-startX)<4&&Math.abs(y-startY)<4)return;
-        live=true; band.hidden=false;
-        var left=Math.min(x,startX), top=Math.min(y,startY);
-        var width=Math.abs(x-startX), height=Math.abs(y-startY);
-        band.style.left=(left-frame.left)+'px';
-        band.style.top=(top-frame.top)+'px';
+        if(step)at={ x:step.clientX+window.scrollX, y:step.clientY+window.scrollY };
+        if(!at)return;
+        if(!live&&Math.abs(at.x-startX)<4&&Math.abs(at.y-startY)<4)return;
+        if(!live){ live=true; band.hidden=false; main.classList.add('is-banding'); }
+        var seen=window.getSelection();
+        if(seen&&seen.removeAllRanges)seen.removeAllRanges();
+        var frame=main.getBoundingClientRect();
+        var frameX=frame.left+window.scrollX, frameY=frame.top+window.scrollY;
+        var left=Math.min(at.x,startX), top=Math.min(at.y,startY);
+        var width=Math.abs(at.x-startX), height=Math.abs(at.y-startY);
+        band.style.left=(left-frameX)+'px';
+        band.style.top=(top-frameY)+'px';
         band.style.width=width+'px';
         band.style.height=height+'px';
         var box={ left:left, top:top, right:left+width, bottom:top+height };
         Array.prototype.forEach.call(grid.querySelectorAll('[data-block]'),function(card){
           var spot=card.getBoundingClientRect();
-          var touching=spot.right>box.left&&spot.left<box.right&&spot.bottom>box.top&&spot.top<box.bottom;
+          var cardBox={ left:spot.left+window.scrollX, top:spot.top+window.scrollY,
+            right:spot.right+window.scrollX, bottom:spot.bottom+window.scrollY };
+          var touching=cardBox.right>box.left&&cardBox.left<box.right&&cardBox.bottom>box.top&&cardBox.top<box.bottom;
           if(touching)markChosen(card.dataset.block,true);
           else if(!adding)markChosen(card.dataset.block,false);
         });
       }
+      function follow(){ draw(null); }
       function stop(){
-        main.onpointermove=null; main.onpointerup=null; main.onpointercancel=null;
-        try{ main.releasePointerCapture(pointer); }catch(error){}
+        window.removeEventListener('pointermove',draw);
+        window.removeEventListener('pointerup',stop);
+        window.removeEventListener('pointercancel',stop);
+        window.removeEventListener('scroll',follow,true);
+        main.classList.remove('is-banding');
         if(band.parentNode)band.parentNode.removeChild(band);
         paintChosenBar();
       }
-      main.onpointermove=draw;
-      main.onpointerup=stop;
-      main.onpointercancel=stop;
+      /* Listening on the window, not on the panel: a pointer that comes up
+         somewhere else — over the sidebar, outside the page — must still end the
+         drag, or the workspace is left in the middle of one. */
+      window.addEventListener('pointermove',draw);
+      window.addEventListener('pointerup',stop);
+      window.addEventListener('pointercancel',stop);
+      window.addEventListener('scroll',follow,true);
     });
   }
   function codeLinesHTML(text){
@@ -2312,10 +2336,9 @@
     grip.onpointerdown=function(event){
       if(event.button&&event.button!==0)return;
       event.preventDefault();
-      var pointer=event.pointerId;
       var from=+row.dataset.taskRow;
       row.classList.add('is-dragging');
-      try{ grip.setPointerCapture(pointer); }catch(error){}
+      document.body.classList.add('is-carrying');
       function others(){
         return Array.prototype.filter.call(list.children,function(node){ return node!==row&&node.classList.contains('task-row'); });
       }
@@ -2331,9 +2354,11 @@
         });
       }
       function stop(){
-        grip.onpointermove=null; grip.onpointerup=null; grip.onpointercancel=null;
-        try{ grip.releasePointerCapture(pointer); }catch(error){}
+        window.removeEventListener('pointermove',move);
+        window.removeEventListener('pointerup',stop);
+        window.removeEventListener('pointercancel',stop);
         row.classList.remove('is-dragging');
+        document.body.classList.remove('is-carrying');
         var to=Array.prototype.indexOf.call(list.children,row);
         if(to>=0&&to!==from){
           var moved=block.items.splice(from,1)[0];
@@ -2342,9 +2367,9 @@
           saveTasks(card,block);
         }
       }
-      grip.onpointermove=move;
-      grip.onpointerup=stop;
-      grip.onpointercancel=stop;
+      window.addEventListener('pointermove',move);
+      window.addEventListener('pointerup',stop);
+      window.addEventListener('pointercancel',stop);
     };
   }
   function blockHTML(block){
@@ -2988,10 +3013,35 @@
       };
       var code=card.querySelector('[data-code]');
       var gutter=card.querySelector('[data-code-lines]');
+      /* textContent runs the lines together: the browser writes a line break
+         inside an editable pre as an element, and textContent keeps none of
+         them. innerText is the one that reads what is actually on screen. */
+      function readCode(){
+        var written=(code.innerText!==undefined?code.innerText:code.textContent)||'';
+        return written.replace(/\u00a0/g,' ').replace(/\n$/,'');
+      }
       if(code)code.oninput=function(){
-        block.body=code.textContent;
+        block.body=readCode();
         if(gutter)gutter.innerHTML=codeLinesHTML(block.body);
         queuedSave(block,false,{body:block.body});
+      };
+      if(code)code.onkeydown=function(event){
+        if(event.key==='Tab'){
+          event.preventDefault();
+          document.execCommand('insertText',false,'  ');
+          return;
+        }
+        if(event.key!=='Enter')return;
+        /* Left alone, the browser starts a new block element here and the pre
+           ends up holding a stack of divs. A newline is what belongs in code. */
+        event.preventDefault();
+        document.execCommand('insertText',false,'\n');
+      };
+      if(code)code.onpaste=function(event){
+        var text=event.clipboardData&&event.clipboardData.getData('text/plain');
+        if(text===undefined||text===null)return;
+        event.preventDefault();
+        document.execCommand('insertText',false,text);
       };
       var copy=card.querySelector('[data-code-copy]');
       if(copy)copy.onclick=async function(){
