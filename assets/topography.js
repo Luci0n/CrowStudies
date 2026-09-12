@@ -177,4 +177,4 @@
   resize();
   draw();
   window.CrowTopography = { changeSeed };
-}());
+})();
