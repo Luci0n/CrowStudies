@@ -516,6 +516,7 @@
     if(copy.type==='database'){
       if(!Array.isArray(copy.props))copy.props=[];
       if(!Array.isArray(copy.views))copy.views=[];
+      if(typeof copy.view!=='string')copy.view='';
     }
     if(copy.type==='lesson')copy.steps=lessonSteps(copy);
     return copy;
@@ -1528,12 +1529,110 @@
       field='<span class="db-linked">'+field+'<a class="db-open" href="'+esc(String(value))+'" target="_blank" rel="noopener noreferrer" title="Open in a new tab">↗</a></span>';
     return field;
   }
+  /* -------------------------------------------------------------------- views
+     The rows are the database. A view is only a way of looking at them: which
+     ones to show, in what order, and whether to lay them out as a grid or as
+     columns of cards grouped by one of their properties. Several views can look
+     at the same rows at once, and none of them changes what is stored. */
+  var DB_OPS=[['is','is'],['not','is not'],['has','contains'],['empty','is empty'],['filled','is not empty']];
+  function dbViews(block){
+    return (Array.isArray(block.views)&&block.views.length)?block.views
+      :[{ id:'first', name:'Table', kind:'table', filters:[], sort:null, groupBy:'' }];
+  }
+  function dbView(block){
+    var views=dbViews(block);
+    return views.filter(function(view){ return view.id===block.view; })[0]||views[0];
+  }
+  function dbSaveViews(block){
+    block.views=dbViews(block).slice();
+    queuedSave(block,true,{ views:block.views, view:block.view||'' });
+  }
+  function dbPropById(block, propId){
+    return dbProps(block).filter(function(prop){ return prop.id===propId; })[0];
+  }
+  function dbAsText(prop, row){
+    var held=dbValue(row,prop);
+    return Array.isArray(held)?held.join(' '):String(held);
+  }
+  function dbShownRows(block, view){
+    var rows=dbRowsOf(block.id).slice();
+    (view.filters||[]).forEach(function(rule){
+      var prop=dbPropById(block,rule.prop);
+      if(!prop)return;
+      var want=String(rule.value||'').toLowerCase();
+      rows=rows.filter(function(row){
+        var text=dbAsText(prop,row).toLowerCase();
+        if(rule.op==='empty')return !text;
+        if(rule.op==='filled')return !!text;
+        if(rule.op==='not')return text!==want;
+        if(rule.op==='has')return text.indexOf(want)>=0;
+        return text===want;
+      });
+    });
+    var sort=view.sort&&view.sort.prop?dbPropById(block,view.sort.prop):null;
+    if(sort){
+      var way=view.sort.dir==='desc'?-1:1;
+      rows.sort(function(a,b){
+        if(sort.type==='number')return ((Number(dbValue(a,sort))||0)-(Number(dbValue(b,sort))||0))*way;
+        return String(dbAsText(sort,a)).localeCompare(String(dbAsText(sort,b)),undefined,{ sensitivity:'base' })*way;
+      });
+    }
+    return rows;
+  }
+  function dbGroupProp(block, view){
+    var prop=view.groupBy?dbPropById(block,view.groupBy):null;
+    if(prop&&(prop.type==='select'||prop.type==='multi'))return prop;
+    return dbProps(block).filter(function(item){ return item.type==='select'; })[0]||null;
+  }
+  function dbViewBarHTML(block, view, frozen){
+    var views=dbViews(block);
+    return '<div class="db-views"><div class="db-tabs">'
+      +views.map(function(item){
+        return '<button type="button" class="db-tab'+(item.id===view.id?' is-on':'')+'" data-db-view="'+item.id+'">'+esc(item.name||'View')+'</button>';
+      }).join('')
+      +(frozen?'':'<button type="button" class="db-plus" data-db-add-view aria-label="Add a view" title="Add a view">+</button>')
+      +'</div>'
+      +(frozen?'':'<button type="button" class="db-setup" data-db-view-setup>Set up this view</button>')
+      +'</div>';
+  }
+  function dbBoardHTML(block, view, rows, frozen){
+    var prop=dbGroupProp(block,view);
+    if(!prop)return '<p class="db-nochoices">A board groups by a select. Add a select property, or set one under “Set up this view”.</p>';
+    var first=dbProps(block)[0];
+    var lanes=[{ name:'', label:'No '+(prop.name||'value').toLowerCase() }].concat((prop.options||[]).map(function(name){ return { name:name, label:name }; }));
+    return '<div class="db-board">'+lanes.map(function(lane){
+      var held=rows.filter(function(row){
+        var mine=dbChosen(prop,row);
+        return lane.name?mine.indexOf(lane.name)>=0:!mine.length;
+      });
+      return '<section class="db-lane" data-db-lane="'+esc(lane.name)+'"><header>'
+        +(lane.name?chipHTML(lane.name):'<span class="db-blankmark">'+esc(lane.label)+'</span>')
+        +'<b>'+held.length+'</b></header><div class="db-lane-rows">'
+        +held.map(function(row){
+          var title=first?dbAsText(first,row):'';
+          return '<article class="db-card" data-db-card="'+row.id+'">'
+            +'<b>'+(title?esc(title):'<span class="db-blankmark">Untitled</span>')+'</b>'
+            +dbProps(block).slice(1).filter(function(item){ return item.id!==prop.id&&dbChosen(item,row).length&&(item.type==='select'||item.type==='multi'); })
+              .map(function(item){ return dbChosen(item,row).map(chipHTML).join(''); }).join('')
+            +'</article>';
+        }).join('')
+        +'</div></section>';
+    }).join('')+'</div>';
+  }
   function paintDatabase(card, block){
     var holder=card.querySelector('[data-db-table]');
     if(!holder)return;
     var frozen=readOnly||!canEdit()||sectionLocked(block.sectionId)||previewing();
-    var props=dbProps(block), rows=dbRowsOf(block.id);
-    holder.innerHTML='<div class="db-scroll"><table class="db-grid"><thead><tr>'
+    var props=dbProps(block), view=dbView(block), rows=dbShownRows(block,view);
+    var all=dbRowsOf(block.id).length;
+    if(view.kind==='board'){
+      holder.innerHTML=dbViewBarHTML(block,view,frozen)+dbBoardHTML(block,view,rows,frozen)
+        +'<div class="db-foot">'+(frozen?'':'<button type="button" class="db-new" data-db-add-row>+ New row</button>')
+        +'<span class="db-count">'+dbCountText(rows.length,all)+'</span></div>';
+      if(!frozen)bindDatabase(card,block);
+      return;
+    }
+    holder.innerHTML=dbViewBarHTML(block,view,frozen)+'<div class="db-scroll"><table class="db-grid"><thead><tr>'
       +props.map(function(prop){
         return '<th data-db-head="'+prop.id+'"><button type="button" class="db-prop" data-db-prop="'+prop.id+'"'+(frozen?' disabled':'')+'>'+esc(prop.name||'Property')+'<small>'+esc(dbKindName(prop.type))+'</small></button></th>';
       }).join('')
@@ -1547,7 +1646,7 @@
       }).join(''):'<tr class="db-blank"><td colspan="'+(props.length+(frozen?0:1))+'">Nothing in here yet.</td></tr>')
       +'</tbody></table></div><div class="db-foot">'
       +(frozen?'':'<button type="button" class="db-new" data-db-add-row>+ New row</button>')
-      +'<span class="db-count">'+rows.length+(rows.length===1?' row':' rows')+'</span></div>';
+      +'<span class="db-count">'+dbCountText(rows.length,all)+'</span></div>';
     if(!frozen)bindDatabase(card,block);
   }
   function recastColumn(block, prop, change){
@@ -1559,6 +1658,12 @@
       var patch={}; patch[prop.id]=next;
       cloud().patchRow(activeProject.id,block.id,row.id,{ values:patch }).catch(function(){});
     });
+  }
+  function dbCountText(shown, all){
+    if(shown===all)return all+(all===1?' row':' rows');
+    /* Saying how many are hidden matters more than how many are left: an empty
+       view with a filter on it otherwise looks like an empty database. */
+    return shown+' of '+all+' rows';
   }
   function dbSaveShape(block){
     block.props=dbProps(block).slice();
@@ -1621,6 +1726,21 @@
     holder.querySelectorAll('[data-db-prop]').forEach(function(button){
       button.onclick=function(event){ event.stopPropagation(); openPropMenu(card,block,button); };
     });
+    holder.querySelectorAll('[data-db-view]').forEach(function(tab){
+      tab.onclick=function(){ block.view=tab.dataset.dbView; dbSaveViews(block); paintDatabase(card,block); };
+    });
+    var addView=holder.querySelector('[data-db-add-view]');
+    if(addView)addView.onclick=async function(){
+      var name=await askName('New view','e.g. Board','Add view');
+      if(name===null)return;
+      var made={ id:id(), name:name.trim()||'View', kind:'table', filters:[], sort:null, groupBy:'' };
+      block.views=dbViews(block).concat(made);
+      block.view=made.id;
+      dbSaveViews(block); paintDatabase(card,block);
+    };
+    var setup=holder.querySelector('[data-db-view-setup]');
+    if(setup)setup.onclick=function(event){ event.stopPropagation(); openViewSetup(card,block,setup); };
+    bindBoard(card,block);
   }
   function closeChoiceMenu(){
     var open=root.querySelector('.db-choices');
@@ -1666,6 +1786,147 @@
     var clear=menu.querySelector('[data-choice-clear]');
     if(clear)clear.onclick=function(event){ event.stopPropagation(); settle([]); };
     setTimeout(function(){ document.addEventListener('click',awayFromChoiceMenu); },0);
+  }
+  function closeViewSetup(){
+    var open=document.querySelector('.db-setup-panel');
+    if(open&&open.parentNode)open.parentNode.removeChild(open);
+    document.removeEventListener('click',awayFromViewSetup);
+  }
+  function awayFromViewSetup(event){
+    if(event.target.closest('.db-setup-panel')||event.target.closest('[data-db-view-setup]'))return;
+    closeViewSetup();
+  }
+  function propChoiceHTML(block, chosenId, blank){
+    return '<option value="">'+esc(blank)+'</option>'+dbProps(block).map(function(prop){
+      return '<option value="'+prop.id+'"'+(prop.id===chosenId?' selected':'')+'>'+esc(prop.name||'Property')+'</option>';
+    }).join('');
+  }
+  function openViewSetup(card, block, button){
+    var already=document.querySelector('.db-setup-panel');
+    closeViewSetup();
+    if(already)return;
+    var view=dbView(block);
+    var panel=document.createElement('div'); panel.className='db-setup-panel';
+    function draw(){
+      panel.innerHTML='<div class="db-setup-head">Layout</div>'
+        +'<div class="db-setup-row"><button type="button" class="db-kind'+(view.kind!=='board'?' is-on':'')+'" data-kind="table">Table</button>'
+        +'<button type="button" class="db-kind'+(view.kind==='board'?' is-on':'')+'" data-kind="board">Board</button></div>'
+        +(view.kind==='board'?'<div class="db-setup-head">Group by</div><div class="db-setup-row"><select data-group>'+propChoiceHTML(block,dbGroupProp(block,view)?dbGroupProp(block,view).id:'','First select')+'</select></div>':'')
+        +'<div class="db-setup-head">Sort</div><div class="db-setup-row"><select data-sort-prop>'+propChoiceHTML(block,view.sort&&view.sort.prop,'Not sorted')+'</select>'
+        +'<select data-sort-dir><option value="asc"'+(!view.sort||view.sort.dir!=='desc'?' selected':'')+'>A → Z</option><option value="desc"'+(view.sort&&view.sort.dir==='desc'?' selected':'')+'>Z → A</option></select></div>'
+        +'<div class="db-setup-head">Show only</div>'
+        +((view.filters||[]).map(function(rule,index){
+          return '<div class="db-setup-row" data-rule="'+index+'"><select data-rule-prop>'+propChoiceHTML(block,rule.prop,'Property')+'</select>'
+            +'<select data-rule-op>'+DB_OPS.map(function(pair){ return '<option value="'+pair[0]+'"'+(pair[0]===rule.op?' selected':'')+'>'+pair[1]+'</option>'; }).join('')+'</select>'
+            +(rule.op==='empty'||rule.op==='filled'?'':'<input data-rule-value value="'+esc(rule.value||'')+'" placeholder="value">')
+            +'<button type="button" class="db-rule-drop" data-rule-drop aria-label="Remove this rule">×</button></div>';
+        }).join(''))
+        +'<div class="db-setup-row"><button type="button" class="db-quiet" data-rule-add>+ Add a rule</button></div>'
+        +'<div class="db-setup-head">This view</div><div class="db-setup-row"><button type="button" class="db-quiet" data-view-rename>Rename</button>'
+        +'<button type="button" class="db-quiet danger" data-view-drop>Delete view</button></div>';
+      wire();
+    }
+    function keep(){ dbSaveViews(block); paintDatabase(card,block); }
+    function wire(){
+      panel.querySelectorAll('[data-kind]').forEach(function(choice){
+        choice.onclick=function(){
+          view.kind=choice.dataset.kind;
+          if(view.kind==='board'&&!view.groupBy){
+            var found=dbGroupProp(block,view);
+            view.groupBy=found?found.id:'';
+          }
+          draw(); keep();
+        };
+      });
+      var group=panel.querySelector('[data-group]');
+      if(group)group.onchange=function(){ view.groupBy=group.value; keep(); };
+      var sortProp=panel.querySelector('[data-sort-prop]'), sortDir=panel.querySelector('[data-sort-dir]');
+      if(sortProp)sortProp.onchange=function(){
+        view.sort=sortProp.value?{ prop:sortProp.value, dir:sortDir.value }:null;
+        keep();
+      };
+      if(sortDir)sortDir.onchange=function(){
+        if(!sortProp.value)return;
+        view.sort={ prop:sortProp.value, dir:sortDir.value }; keep();
+      };
+      panel.querySelectorAll('[data-rule]').forEach(function(line){
+        var index=+line.dataset.rule, rule=(view.filters||[])[index];
+        if(!rule)return;
+        line.querySelector('[data-rule-prop]').onchange=function(event){ rule.prop=event.target.value; keep(); };
+        line.querySelector('[data-rule-op]').onchange=function(event){ rule.op=event.target.value; draw(); keep(); };
+        var value=line.querySelector('[data-rule-value]');
+        if(value)value.onchange=function(){ rule.value=value.value; keep(); };
+        line.querySelector('[data-rule-drop]').onclick=function(){
+          view.filters=(view.filters||[]).filter(function(item,at){ return at!==index; });
+          draw(); keep();
+        };
+      });
+      panel.querySelector('[data-rule-add]').onclick=function(){
+        var first=dbProps(block)[0];
+        view.filters=(view.filters||[]).concat({ prop:first?first.id:'', op:'is', value:'' });
+        draw(); keep();
+      };
+      panel.querySelector('[data-view-rename]').onclick=async function(){
+        closeViewSetup();
+        var name=await askName('Rename view',view.name||'View','Rename');
+        if(name===null)return;
+        view.name=name.trim()||view.name; keep();
+      };
+      panel.querySelector('[data-view-drop]').onclick=async function(){
+        closeViewSetup();
+        if(dbViews(block).length<2){ await notify('This is the only view','A database keeps at least one way of looking at it.'); return; }
+        if(!await askConfirm('Delete this view?','The rows stay where they are. Only this way of looking at them goes.','Delete view'))return;
+        block.views=dbViews(block).filter(function(item){ return item.id!==view.id; });
+        block.view=block.views[0].id;
+        keep();
+      };
+    }
+    draw();
+    var frame=card.getBoundingClientRect(), spot=button.getBoundingClientRect();
+    panel.style.left=Math.max(8,spot.left-frame.left-140)+'px';
+    panel.style.top=(spot.bottom-frame.top+6)+'px';
+    card.appendChild(panel);
+    setTimeout(function(){ document.addEventListener('click',awayFromViewSetup); },0);
+  }
+  /* Moving a card from one lane to another is the one thing a board does that a
+     table cannot: it writes the property the lanes are made of. */
+  function bindBoard(card, block){
+    var board=card.querySelector('.db-board');
+    if(!board)return;
+    var view=dbView(block), prop=dbGroupProp(block,view);
+    if(!prop)return;
+    board.querySelectorAll('[data-db-card]').forEach(function(item){
+      item.onpointerdown=function(event){
+        if(event.button&&event.button!==0)return;
+        var pointer=event.pointerId, rowId=item.dataset.dbCard, moved=false;
+        var startX=event.clientX, startY=event.clientY;
+        try{ item.setPointerCapture(pointer); }catch(error){}
+        function over(step){
+          if(!moved&&Math.abs(step.clientX-startX)<5&&Math.abs(step.clientY-startY)<5)return;
+          moved=true; item.classList.add('is-dragging');
+          board.querySelectorAll('.db-lane').forEach(function(lane){ lane.classList.remove('is-over'); });
+          var under=document.elementFromPoint(step.clientX,step.clientY);
+          var lane=under&&under.closest?under.closest('.db-lane'):null;
+          if(lane)lane.classList.add('is-over');
+        }
+        function stop(step){
+          item.onpointermove=null; item.onpointerup=null; item.onpointercancel=null;
+          try{ item.releasePointerCapture(pointer); }catch(error){}
+          item.classList.remove('is-dragging');
+          board.querySelectorAll('.db-lane').forEach(function(lane){ lane.classList.remove('is-over'); });
+          if(!moved)return;
+          var under=document.elementFromPoint(step.clientX,step.clientY);
+          var lane=under&&under.closest?under.closest('.db-lane'):null;
+          if(!lane)return;
+          var to=lane.dataset.dbLane||'';
+          dbWriteCell(block,rowId,prop,prop.type==='multi'?(to?[to]:[]):to);
+          paintDatabase(card,block);
+        }
+        item.onpointermove=over;
+        item.onpointerup=stop;
+        item.onpointercancel=stop;
+      };
+    });
   }
   function closePropMenu(){
     var open=root.querySelector('.db-menu');
@@ -1735,6 +1996,167 @@
       dbSaveShape(block); paintDatabase(card,block);
     };
     setTimeout(function(){ document.addEventListener('click',awayFromPropMenu); },0);
+  }
+  /* ------------------------------------------------------- picking out blocks
+     Dragging across the space between cards draws a band and takes in whatever
+     it touches, so a handful of blocks can be dealt with at once. The band only
+     starts on the grid itself: anywhere inside a card, the pointer still
+     belongs to what it landed on. */
+  var chosen={};
+  function chosenIds(){ return Object.keys(chosen).filter(function(id){ return chosen[id]; }); }
+  function clearChosen(){
+    chosen={};
+    root.querySelectorAll('.studio-block.is-chosen').forEach(function(card){ card.classList.remove('is-chosen'); });
+    paintChosenBar();
+  }
+  function markChosen(id, on){
+    if(on)chosen[id]=true; else delete chosen[id];
+    var card=root.querySelector('[data-block="'+id+'"]');
+    if(card)card.classList.toggle('is-chosen',!!on);
+  }
+  function paintChosenBar(){
+    /* On the page rather than in the workspace: the panels it would sit inside
+       carry a backdrop filter, and anything fixed inside one of those is held
+       to that box instead of the window. */
+    var bar=document.querySelector('.chosen-bar');
+    var ids=chosenIds();
+    if(!ids.length){ if(bar&&bar.parentNode)bar.parentNode.removeChild(bar); return; }
+    if(!bar){
+      bar=document.createElement('div'); bar.className='chosen-bar';
+      document.body.appendChild(bar);
+    }
+    bar.innerHTML='<b data-chosen-count></b>'
+      +'<button type="button" data-chosen-move>Move to…</button>'
+      +'<button type="button" data-chosen-copy>Duplicate</button>'
+      +'<button type="button" class="danger" data-chosen-delete>Delete</button>'
+      +'<button type="button" class="quiet" data-chosen-clear>Done</button>';
+    bar.querySelector('[data-chosen-count]').textContent=ids.length+(ids.length===1?' block':' blocks');
+    bar.querySelector('[data-chosen-clear]').onclick=function(){ clearChosen(); };
+    bar.querySelector('[data-chosen-delete]').onclick=deleteChosen;
+    bar.querySelector('[data-chosen-copy]').onclick=duplicateChosen;
+    bar.querySelector('[data-chosen-move]').onclick=function(event){ event.stopPropagation(); openMoveMenu(bar.querySelector('[data-chosen-move]')); };
+  }
+  function chosenBlocks(){
+    var ids=chosenIds();
+    return blocks.filter(function(block){ return ids.indexOf(block.id)>=0; });
+  }
+  async function deleteChosen(){
+    var picked=chosenBlocks();
+    if(!picked.length)return;
+    if(!await askConfirm('Delete '+picked.length+' blocks?','They are removed from the project for everyone it is shared with.','Delete blocks'))return;
+    var ids={}; picked.forEach(function(block){ ids[block.id]=true; });
+    blocks=blocks.filter(function(block){ return !ids[block.id]; });
+    clearChosen();
+    render();
+    for(var i=0;i<picked.length;i++){
+      var block=picked[i];
+      try{
+        if(block.type==='database')await cloud().removeAllRows(activeProject.id,block.id);
+        await cloud().deleteBlock(activeProject.id,block.id);
+        if(block.imageSlot)cloud().deleteProjectImage(activeProject.id,block.imageSlot);
+      }catch(error){}
+    }
+  }
+  function duplicateChosen(){
+    var picked=chosenBlocks();
+    if(!picked.length)return;
+    clearChosen();
+    var made=picked.map(function(block){
+      var copy=Object.assign({},block,{ id:id(), order:(block.order||Date.now())+0.5, pending:true });
+      delete copy.updatedAt; delete copy.updatedBy;
+      if(copy.type==='image')copy.imageSlot='';
+      /* A copy of a database would point at the original's rows, which are not
+         copied with it, so it starts empty rather than pretending to hold them. */
+      blocks.push(copy);
+      return copy;
+    });
+    render();
+    made.forEach(function(copy){
+      cloud().saveBlock(activeProject.id,copy.id,copy).then(function(){ copy.pending=false; }).catch(function(){ copy.pending=false; });
+    });
+  }
+  function closeMoveMenu(){
+    var open=document.querySelector('.move-menu');
+    if(open&&open.parentNode)open.parentNode.removeChild(open);
+    document.removeEventListener('click',awayFromMoveMenu);
+  }
+  function awayFromMoveMenu(event){
+    if(event.target.closest('.move-menu')||event.target.closest('[data-chosen-move]'))return;
+    closeMoveMenu();
+  }
+  function openMoveMenu(button){
+    var already=root.querySelector('.move-menu');
+    closeMoveMenu();
+    if(already)return;
+    var sections=(activeProject&&activeProject.sections)||[];
+    var menu=document.createElement('div'); menu.className='move-menu';
+    menu.innerHTML='<div class="move-head">Move to</div><button type="button" data-move-to="">Unsorted</button>'
+      +sections.map(function(section){ return '<button type="button" data-move-to="'+section.id+'">'+esc(section.title)+'</button>'; }).join('');
+    button.parentNode.appendChild(menu);
+    menu.querySelectorAll('[data-move-to]').forEach(function(choice){
+      choice.onclick=function(){
+        var to=choice.dataset.moveTo;
+        var picked=chosenBlocks();
+        closeMoveMenu(); clearChosen();
+        picked.forEach(function(block){
+          block.sectionId=to; block.pageId='';
+          queuedSave(block,true,{ sectionId:to, pageId:'' });
+        });
+        render();
+      };
+    });
+    setTimeout(function(){ document.addEventListener('click',awayFromMoveMenu); },0);
+  }
+  document.addEventListener('keydown',function(event){
+    if(event.key==='Escape'&&chosenIds().length)clearChosen();
+  });
+  function bindMarquee(){
+    var grid=root.querySelector('.block-grid');
+    if(!grid||grid.dataset.bandBound)return;
+    grid.dataset.bandBound='1';
+    grid.addEventListener('pointerdown',function(event){
+      if(event.button&&event.button!==0)return;
+      /* The grid itself, not a card on it. */
+      if(event.target!==grid)return;
+      if(readOnly||!canEdit()||previewing())return;
+      var pointer=event.pointerId;
+      var startX=event.clientX, startY=event.clientY;
+      var adding=event.shiftKey||event.metaKey||event.ctrlKey;
+      if(!adding)clearChosen();
+      var band=document.createElement('div'); band.className='marquee'; band.hidden=true;
+      grid.appendChild(band);
+      var frame=grid.getBoundingClientRect();
+      var live=false;
+      try{ grid.setPointerCapture(pointer); }catch(error){}
+      function draw(step){
+        var x=step.clientX, y=step.clientY;
+        if(!live&&Math.abs(x-startX)<4&&Math.abs(y-startY)<4)return;
+        live=true; band.hidden=false;
+        var left=Math.min(x,startX), top=Math.min(y,startY);
+        var width=Math.abs(x-startX), height=Math.abs(y-startY);
+        band.style.left=(left-frame.left)+'px';
+        band.style.top=(top-frame.top)+'px';
+        band.style.width=width+'px';
+        band.style.height=height+'px';
+        var box={ left:left, top:top, right:left+width, bottom:top+height };
+        Array.prototype.forEach.call(grid.children,function(card){
+          if(!card.hasAttribute||!card.hasAttribute('data-block'))return;
+          var spot=card.getBoundingClientRect();
+          var touching=spot.right>box.left&&spot.left<box.right&&spot.bottom>box.top&&spot.top<box.bottom;
+          if(touching)markChosen(card.dataset.block,true);
+          else if(!adding)markChosen(card.dataset.block,false);
+        });
+      }
+      function stop(){
+        grid.onpointermove=null; grid.onpointerup=null; grid.onpointercancel=null;
+        try{ grid.releasePointerCapture(pointer); }catch(error){}
+        if(band.parentNode)band.parentNode.removeChild(band);
+        paintChosenBar();
+      }
+      grid.onpointermove=draw;
+      grid.onpointerup=stop;
+      grid.onpointercancel=stop;
+    });
   }
   function taskRowHTML(item, index, frozen){
     var disabled=frozen?' disabled':'';
@@ -1908,7 +2330,7 @@
        stray angle bracket stays a stray angle bracket. */
     if(block.type==='database') body='<div class="db" data-db-table></div>';
     if(block.type==='code') body='<pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+esc(plainText(block.body))+'</pre>';
-    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+'" data-block="'+block.id+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
+    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-block="'+block.id+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
   }
   function queuedSave(block, immediate, patch){
     var old=saveTimers[block.id]; if(old) clearTimeout(old);
@@ -2499,6 +2921,8 @@
       bindTasks(card,block);
     });
     bindDrag();
+    bindMarquee();
+    paintChosenBar();
   }
   async function deleteActiveProject(){if(!await askConfirm('Delete project?', 'This removes the project and every block inside it. This cannot be undone.', 'Delete project'))return;var removed=activeProject.id;activeProject=null;blocks=[];view='project';render();try{await cloud().deleteProject(removed);await loadProjects();}catch(error){studioError='The project could not be deleted. Try again.';render();}}
   /* Blocks reorder by dragging the grip. The card leaves the layout and
