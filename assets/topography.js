@@ -5,12 +5,16 @@
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const primary = document.createElement('canvas');
   const outgoing = document.createElement('canvas');
+  const grain = document.createElement('div');
   primary.className = 'crow-topography';
   outgoing.className = 'crow-topography crow-topography-outgoing';
+  grain.className = 'crow-topography-grain';
   primary.setAttribute('aria-hidden', 'true');
   outgoing.setAttribute('aria-hidden', 'true');
+  grain.setAttribute('aria-hidden', 'true');
   document.body.prepend(outgoing);
   document.body.prepend(primary);
+  document.body.append(grain);
 
   const display = primary.getContext('2d');
   const outgoingDisplay = outgoing.getContext('2d');
