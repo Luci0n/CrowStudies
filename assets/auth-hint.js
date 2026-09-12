@@ -2,7 +2,7 @@
   'use strict';
   try {
     var theme = localStorage.getItem('crowstudies:theme');
-    if (theme === 'light' || theme === 'dark' || theme === 'dusk') document.documentElement.setAttribute('data-theme', theme);
+    if (['gruvbox-light','gruvbox-dark','monokai-light','monokai-dark','runner-light','runner-dark'].indexOf(theme) >= 0) document.documentElement.setAttribute('data-theme', theme);
     else document.documentElement.removeAttribute('data-theme');
   } catch (error) {}
 }());
@@ -14,8 +14,8 @@
   script.defer = true;
   script.dataset.crowTopography = 'true';
   script.src = document.currentScript && document.currentScript.src
-    ? new URL('topography.js?v=topography-20260912n', document.currentScript.src).href
-    : 'assets/topography.js?v=topography-20260912n';
+    ? new URL('topography.js?v=topography-20260912o', document.currentScript.src).href
+    : 'assets/topography.js?v=topography-20260912o';
   document.head.appendChild(script);
 }());
 
@@ -26,7 +26,7 @@
   var style = document.createElement('link');
   style.rel = 'stylesheet';
   style.dataset.crowTopographyStyle = 'true';
-  style.href = source ? new URL('site.css?v=topography-20260912n', source).href : 'assets/site.css?v=topography-20260912n';
+  style.href = source ? new URL('site.css?v=topography-20260912o', source).href : 'assets/site.css?v=topography-20260912o';
   document.head.appendChild(style);
 }());
 
