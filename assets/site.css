@@ -671,8 +671,8 @@ body > :not(.crow-topography):not(.crow-topography-grain){ position:relative; z-
 }
 
 /* Floating account UI must sit above the glass page layers. */
-body > .account-popover{ position:fixed; z-index:60; }
-body > .app-overlay{ position:fixed; z-index:70; }
+body > .account-popover{ position:fixed !important; z-index:60 !important; }
+body > .app-overlay{ position:fixed !important; z-index:70 !important; }
 .theme-dialog{ width:min(100%,520px); }
 .theme-choices{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:4px 0 18px; }
 .theme-choice{ display:flex; align-items:center; gap:10px; min-height:74px; padding:10px; border:1px solid var(--line); border-radius:10px; background:color-mix(in srgb,var(--well) 76%,transparent); color:var(--ink); text-align:left; }
