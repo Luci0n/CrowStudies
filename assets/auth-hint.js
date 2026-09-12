@@ -5,8 +5,8 @@
   script.defer = true;
   script.dataset.crowTopography = 'true';
   script.src = document.currentScript && document.currentScript.src
-    ? new URL('topography.js', document.currentScript.src).href
-    : 'assets/topography.js';
+    ? new URL('topography.js?v=topography-20260912b', document.currentScript.src).href
+    : 'assets/topography.js?v=topography-20260912b';
   document.head.appendChild(script);
 }());
 
