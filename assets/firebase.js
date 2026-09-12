@@ -36,6 +36,11 @@ const THEME_OPTIONS=[
   {id:'runner-light',name:'City Runner · Light',note:'White rooftops and red routes'},
   {id:'runner-dark',name:'City Runner · Dark',note:'Night glass with signal red'}
 ];
+const THEME_FAMILIES=[
+  {id:'gruvbox',name:'Gruvbox',light:'gruvbox-light',dark:'gruvbox-dark'},
+  {id:'monokai',name:'Monokai Machine',light:'monokai-light',dark:'monokai-dark'},
+  {id:'runner',name:'City Runner',light:'runner-light',dark:'runner-dark'}
+];
 function currentTheme(){
   try{return localStorage.getItem(THEME_KEY)||'system';}catch(error){return 'system';}
 }
@@ -52,22 +57,34 @@ function openThemePicker(){
   var title=document.createElement('h2'); title.textContent='Choose a theme';
   var intro=document.createElement('p'); intro.textContent='Themes apply across CrowStudies and stay on this device.';
   var choices=document.createElement('div'); choices.className='theme-choices';
-  THEME_OPTIONS.forEach(function(option){
-    var button=document.createElement('button');
-    button.type='button';
-    button.className='theme-choice theme-'+option.id+(currentTheme()===option.id?' active':'');
-    button.setAttribute('aria-pressed',currentTheme()===option.id?'true':'false');
-    button.innerHTML='<span class="theme-swatch" aria-hidden="true"></span><span><b>'+option.name+'</b><small>'+option.note+'</small></span>';
-    button.onclick=function(){applyTheme(option.id);shade.remove();};
-    choices.appendChild(button);
+  THEME_FAMILIES.forEach(function(family){
+    var card=document.createElement('section');
+    var selected=currentTheme()===family.light||currentTheme()===family.dark;
+    card.className='theme-family theme-'+family.id+(selected?' active':'');
+    var name=document.createElement('h3'); name.textContent=family.name;
+    var pair=document.createElement('div'); pair.className='theme-pair';
+    ['light','dark'].forEach(function(mode){
+      var themeId=family[mode], button=document.createElement('button');
+      button.type='button';
+      button.className='theme-mode '+mode+(currentTheme()===themeId?' active':'');
+      button.setAttribute('aria-label','Use '+family.name+' '+mode);
+      button.setAttribute('aria-pressed',currentTheme()===themeId?'true':'false');
+      button.innerHTML='<span class="sr-only">'+family.name+' '+mode+'</span>';
+      button.onclick=function(){applyTheme(themeId);shade.remove();};
+      pair.appendChild(button);
+    });
+    card.appendChild(name); card.appendChild(pair); choices.appendChild(card);
   });
+  var system=document.createElement('button'); system.type='button'; system.className='theme-system-choice'+(currentTheme()==='system'?' active':'');
+  system.textContent='Use system appearance'; system.setAttribute('aria-pressed',currentTheme()==='system'?'true':'false');
+  system.onclick=function(){applyTheme('system');shade.remove();};
   var done=document.createElement('button'); done.type='button'; done.className='btn ghost wide'; done.textContent='Close';
   done.onclick=function(){shade.remove();};
-  dialog.appendChild(title); dialog.appendChild(intro); dialog.appendChild(choices); dialog.appendChild(done);
+  dialog.appendChild(title); dialog.appendChild(intro); dialog.appendChild(choices); dialog.appendChild(system); dialog.appendChild(done);
   shade.appendChild(dialog); shade.onclick=function(event){if(event.target===shade)shade.remove();};
   shade.addEventListener('keydown',function(event){if(event.key==='Escape')shade.remove();});
   document.body.appendChild(shade);
-  setTimeout(function(){var active=dialog.querySelector('.theme-choice.active');(active||done).focus();},0);
+  setTimeout(function(){var active=dialog.querySelector('.theme-mode.active,.theme-system-choice.active');(active||done).focus();},0);
 }
 function overlay(options){
   return new Promise(function(resolve){
