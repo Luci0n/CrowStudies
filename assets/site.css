@@ -685,3 +685,79 @@ body > .app-overlay{ position:fixed !important; z-index:70 !important; }
 .theme-light .theme-swatch{ background:linear-gradient(135deg,#fafbff 0 33%,#dbe2f0 33% 56%,#a78bfa 56%); }
 .theme-dusk .theme-swatch{ background:linear-gradient(135deg,#15101d 0 33%,#3b1e40 33% 56%,#d67cbe 56%); }
 @media(max-width:480px){ .theme-choices{ grid-template-columns:1fr; } }
+
+
+/* Theme families: every palette has its own light and dark surface, not just a new accent. */
+:root[data-theme="gruvbox-light"]{
+  --ground:#fbf1c7; --card:#f2e5bc; --card-2:#ebdbb2; --well:#f9e9b5;
+  --line:#d5c4a1; --line-strong:#bdae93;
+  --ink:#3c3836; --ink-2:#665c54; --ink-3:#928374;
+  --brand:#af3a03; --brand-shelf:#8f2f00; --brand-soft:#f2dca0;
+  --good:#79740e; --good-shelf:#5e6108; --good-soft:#e7e2aa;
+  --bad:#cc241d; --bad-shelf:#9d0006; --bad-soft:#f2c4ae;
+  --gold:#b57614; --gold-shelf:#8a5b0a;
+  --key-white:#fff7db; --key-white-2:#d8c99f; --key-black:#504945; --key-black-2:#282828;
+  color-scheme:light;
+}
+:root[data-theme="gruvbox-dark"]{
+  --ground:#282828; --card:#3c3836; --card-2:#504945; --well:#1d2021;
+  --line:#665c54; --line-strong:#7c6f64;
+  --ink:#ebdbb2; --ink-2:#d5c4a1; --ink-3:#a89984;
+  --brand:#d79921; --brand-shelf:#b57614; --brand-soft:#55451c;
+  --good:#b8bb26; --good-shelf:#98971a; --good-soft:#3f4820;
+  --bad:#fb4934; --bad-shelf:#cc241d; --bad-soft:#552820;
+  --gold:#fabd2f; --gold-shelf:#d79921;
+  --key-white:#ebdbb2; --key-white-2:#bdae93; --key-black:#3c3836; --key-black-2:#1d2021;
+  color-scheme:dark;
+}
+:root[data-theme="monokai-light"]{
+  --ground:#fafafa; --card:#f0f0eb; --card-2:#e5e5de; --well:#f7f7f2;
+  --line:#c9c9bd; --line-strong:#a9a99c;
+  --ink:#272822; --ink-2:#55564b; --ink-3:#797a6d;
+  --brand:#d81b60; --brand-shelf:#ad1457; --brand-soft:#f8d3df;
+  --good:#618b00; --good-shelf:#4d7000; --good-soft:#e3edbc;
+  --bad:#d35400; --bad-shelf:#a84300; --bad-soft:#f8d7bd;
+  --gold:#9c7a00; --gold-shelf:#7c6200;
+  --key-white:#fffefa; --key-white-2:#d8d8cf; --key-black:#3b3c35; --key-black-2:#191a17;
+  color-scheme:light;
+}
+:root[data-theme="monokai-dark"]{
+  --ground:#272822; --card:#3e3d32; --card-2:#49483e; --well:#1f201b;
+  --line:#5a594d; --line-strong:#777568;
+  --ink:#f8f8f2; --ink-2:#d2d2c9; --ink-3:#a6a69a;
+  --brand:#f92672; --brand-shelf:#bd1450; --brand-soft:#542033;
+  --good:#a6e22e; --good-shelf:#7cae16; --good-soft:#35451c;
+  --bad:#fd971f; --bad-shelf:#c66b0f; --bad-soft:#57351a;
+  --gold:#e6db74; --gold-shelf:#bcb051;
+  --key-white:#f8f8f2; --key-white-2:#c5c5b7; --key-black:#3e3d32; --key-black-2:#1f201b;
+  color-scheme:dark;
+}
+:root[data-theme="runner-light"]{
+  --ground:#f5f8fb; --card:#e8eef5; --card-2:#dce6f0; --well:#ffffff;
+  --line:#bfcddd; --line-strong:#8fa4ba;
+  --ink:#17212d; --ink-2:#425364; --ink-3:#708193;
+  --brand:#e5324a; --brand-shelf:#b51f34; --brand-soft:#f9d8de;
+  --good:#008eab; --good-shelf:#006f87; --good-soft:#cbeef4;
+  --bad:#e5324a; --bad-shelf:#b51f34; --bad-soft:#f9d8de;
+  --gold:#e8a119; --gold-shelf:#b9780c;
+  --key-white:#ffffff; --key-white-2:#cfdae5; --key-black:#263544; --key-black-2:#101820;
+  color-scheme:light;
+}
+:root[data-theme="runner-dark"]{
+  --ground:#101923; --card:#172532; --card-2:#213442; --well:#0b1219;
+  --line:#395264; --line-strong:#51728a;
+  --ink:#f3f8fb; --ink-2:#c4d4df; --ink-3:#91a9b8;
+  --brand:#ff3e57; --brand-shelf:#c9253b; --brand-soft:#542333;
+  --good:#2bc6d6; --good-shelf:#168c9a; --good-soft:#123b43;
+  --bad:#ff5a70; --bad-shelf:#c93b4e; --bad-soft:#552330;
+  --gold:#f7c94d; --gold-shelf:#be9227;
+  --key-white:#f3f8fb; --key-white-2:#b7c8d5; --key-black:#20313d; --key-black-2:#0a1117;
+  color-scheme:dark;
+}
+.theme-system .theme-swatch{ background:linear-gradient(135deg,#f5f8fb 0 33%,#b8c7d8 33% 56%,#202a35 56%); }
+.theme-gruvbox-light .theme-swatch{ background:linear-gradient(135deg,#fbf1c7 0 33%,#d79921 33% 56%,#3c3836 56%); }
+.theme-gruvbox-dark .theme-swatch{ background:linear-gradient(135deg,#282828 0 33%,#d79921 33% 56%,#ebdbb2 56%); }
+.theme-monokai-light .theme-swatch{ background:linear-gradient(135deg,#fafafa 0 33%,#f92672 33% 56%,#272822 56%); }
+.theme-monokai-dark .theme-swatch{ background:linear-gradient(135deg,#272822 0 33%,#a6e22e 33% 56%,#f92672 56%); }
+.theme-runner-light .theme-swatch{ background:linear-gradient(135deg,#f5f8fb 0 33%,#e5324a 33% 56%,#008eab 56%); }
+.theme-runner-dark .theme-swatch{ background:linear-gradient(135deg,#101923 0 33%,#ff3e57 33% 56%,#2bc6d6 56%); }
