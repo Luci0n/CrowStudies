@@ -619,7 +619,6 @@ body{
     radial-gradient(60% 65% at 92% 95%,#111a35 0%,transparent 62%),
     var(--ground);
 }
-body > :not(.crow-topography){ position:relative; z-index:1; }
 .crow-topography{
   position:fixed; inset:0; z-index:0; width:100%; height:100%;
   pointer-events:none; opacity:0;
@@ -656,7 +655,6 @@ body{
   min-height:100vh;
   background:var(--ground);
 }
-body > :not(.crow-topography):not(.crow-topography-grain){ position:relative; z-index:1; }
 
 :root[data-theme="dusk"]{
   --ground:#15101d; --card:#241a31; --card-2:#30213f; --well:#1b1425;
@@ -786,3 +784,23 @@ body > .app-overlay{ position:fixed !important; z-index:70 !important; }
 .theme-system-choice{ width:100%; margin:0 0 10px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--ink-2); font:700 13px/1.2 inherit; }
 .theme-system-choice:hover,.theme-system-choice.active{ border-color:var(--brand); color:var(--brand); background:color-mix(in srgb,var(--brand-soft) 46%,transparent); }
 @media(max-width:540px){ .theme-choices{ grid-template-columns:1fr; } .theme-pair{ height:70px; } .theme-family h3{text-align:left;} }
+
+/* Only structural page roots sit over terrain; dynamic overlays keep their own depth. */
+body > .sitehead,
+body > main,
+body > #app,
+body > .sitefoot,
+body > footer{ position:relative; z-index:1; }
+body > .studio-upgrade-overlay,
+body > .studio-practice-overlay,
+body > .upgrade-slash{ position:fixed !important; z-index:80 !important; }
+
+.theme-mode-label{ position:absolute; z-index:5; padding:4px 6px; border-radius:5px; background:rgba(9,12,18,.42); color:#fff; font:800 10px/1 "IBM Plex Mono",monospace; letter-spacing:.01em; text-shadow:0 1px 2px rgba(0,0,0,.65); pointer-events:none; opacity:.82; transition:opacity .16s ease,transform .16s ease,background .16s ease; }
+.theme-mode.light .theme-mode-label{ top:9px; left:9px; }
+.theme-mode.dark .theme-mode-label{ right:9px; bottom:9px; }
+.theme-mode.light{ transform-origin:top left; }
+.theme-mode.dark{ transform-origin:bottom right; }
+.theme-mode.light:hover{ z-index:2; transform:translate(-2px,-2px) scale(1.035); }
+.theme-mode.dark:hover{ z-index:2; transform:translate(2px,2px) scale(1.035); }
+.theme-mode:hover .theme-mode-label,.theme-mode.active .theme-mode-label{ opacity:1; background:rgba(9,12,18,.66); transform:scale(1.05); }
+.theme-mode:active{ filter:brightness(.94); }
