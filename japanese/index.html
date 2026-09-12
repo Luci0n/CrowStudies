@@ -430,7 +430,19 @@ var HanziWriter=function(){"use strict";var t,e,r;const i="undefined"==typeof wi
     var writer=HanziWriter.create(host,q.kana,{width:300,height:300,padding:18,showOutline:true,showCharacter:false,strokeColor:'#f1f4fb',outlineColor:'#374154',drawingColor:'#d64a86',highlightColor:'#f2b94b',drawingWidth:26,drawingFadeDuration:900,charDataLoader:function(ch){return fetch('../assets/kana-data/'+encodeURIComponent(ch)+'.json').then(function(r){if(!r.ok)throw new Error('Kana data unavailable');return r.json();});}});
     var started=false, expectedStroke=0, memoryMode=localStorage.getItem('crowstudies:japanese:memory-writing')==='1';
     var promptHeading=area.querySelector('.qhead');
-    function setMemoryMode(on){ memoryMode=on; memoryInput.checked=on; memoryState.textContent=on?'On':'Off'; localStorage.setItem('crowstudies:japanese:memory-writing',on?'1':'0'); if(promptHeading) promptHeading.hidden=on; if(on) writer.hideOutline({duration:0}); else writer.showOutline({duration:0}); }
+    var promptOriginal=promptHeading?promptHeading.innerHTML:'';
+    function kanaScript(ch){ var code=(ch||'').charCodeAt(0); if(code>=0x30A0&&code<=0x30FF)return 'katakana'; if(code>=0x3041&&code<=0x309F)return 'hiragana'; return ''; }
+    /* Hiding the heading takes away the character, which is the point, but it
+       also took away the only thing saying which of the two alphabets to write
+       it in: the reading underneath is the same for へ and ヘ. */
+    function setPrompt(hide){
+      if(!promptHeading)return;
+      var script=hide?kanaScript(q.kana):'';
+      if(script){ promptHeading.hidden=false; promptHeading.textContent='Write this in '+script+'.'; }
+      else if(hide){ promptHeading.hidden=true; }
+      else { promptHeading.hidden=false; promptHeading.innerHTML=promptOriginal; }
+    }
+    function setMemoryMode(on){ memoryMode=on; memoryInput.checked=on; memoryState.textContent=on?'On':'Off'; localStorage.setItem('crowstudies:japanese:memory-writing',on?'1':'0'); setPrompt(on); if(on) writer.hideOutline({duration:0}); else writer.showOutline({duration:0}); }
     function setState(active){ stage.classList.toggle('locked',!active); stage.classList.toggle('ready',active); stage.classList.remove('watching'); host.setAttribute('aria-disabled',active?'false':'true'); }
     function start(){ if(started)return; started=true; expectedStroke=0; setState(true); status.textContent=memoryMode?'Memory mode: the character and outline are hidden. Draw the first stroke.':'Draw the first stroke. The guide appears after one miss.'; writer.quiz({leniency:1.1,showHintAfterMisses:memoryMode?999:1,onMistake:function(){status.textContent='That is not the next stroke. Try again, or use Show next stroke.';},onCorrectStroke:function(info){expectedStroke=info.strokeNum+1;window.CrowStroke.clearHint(host);status.textContent='Stroke '+info.strokeNum+' is in. Keep going.';},onComplete:function(){status.textContent='Complete.';stage.classList.add('done');api.finish(true);}}); }
     var watch=document.createElement('button'); watch.className='btn ghost'; watch.textContent='Watch order';
