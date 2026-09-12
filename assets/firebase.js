@@ -26,6 +26,46 @@ function closeAccountMenu(){
   var menu=document.querySelector('.account-popover');
   if (menu) menu.remove();
 }
+const THEME_KEY='crowstudies:theme';
+const THEME_OPTIONS=[
+  {id:'system',name:'System',note:'Follow your device'},
+  {id:'dark',name:'Midnight',note:'The current dark surface'},
+  {id:'light',name:'Light',note:'Clean paper and ink'},
+  {id:'dusk',name:'Dusk',note:'Warm violet afterglow'}
+];
+function currentTheme(){
+  try{return localStorage.getItem(THEME_KEY)||'system';}catch(error){return 'system';}
+}
+function applyTheme(theme){
+  var choice=THEME_OPTIONS.some(function(option){return option.id===theme;})?theme:'system';
+  if(choice==='system')document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme',choice);
+  try{localStorage.setItem(THEME_KEY,choice);}catch(error){}
+}
+function openThemePicker(){
+  var shade=document.createElement('div'), dialog=document.createElement('section');
+  shade.className='app-overlay'; dialog.className='app-dialog theme-dialog';
+  dialog.setAttribute('role','dialog'); dialog.setAttribute('aria-modal','true');
+  var title=document.createElement('h2'); title.textContent='Choose a theme';
+  var intro=document.createElement('p'); intro.textContent='Themes apply across CrowStudies and stay on this device.';
+  var choices=document.createElement('div'); choices.className='theme-choices';
+  THEME_OPTIONS.forEach(function(option){
+    var button=document.createElement('button');
+    button.type='button';
+    button.className='theme-choice theme-'+option.id+(currentTheme()===option.id?' active':'');
+    button.setAttribute('aria-pressed',currentTheme()===option.id?'true':'false');
+    button.innerHTML='<span class="theme-swatch" aria-hidden="true"></span><span><b>'+option.name+'</b><small>'+option.note+'</small></span>';
+    button.onclick=function(){applyTheme(option.id);shade.remove();};
+    choices.appendChild(button);
+  });
+  var done=document.createElement('button'); done.type='button'; done.className='btn ghost wide'; done.textContent='Close';
+  done.onclick=function(){shade.remove();};
+  dialog.appendChild(title); dialog.appendChild(intro); dialog.appendChild(choices); dialog.appendChild(done);
+  shade.appendChild(dialog); shade.onclick=function(event){if(event.target===shade)shade.remove();};
+  shade.addEventListener('keydown',function(event){if(event.key==='Escape')shade.remove();});
+  document.body.appendChild(shade);
+  setTimeout(function(){var active=dialog.querySelector('.theme-choice.active');(active||done).focus();},0);
+}
 function overlay(options){
   return new Promise(function(resolve){
     var shade=document.createElement('div'); shade.className='app-overlay';
@@ -77,10 +117,11 @@ function showAccountMenu(button, user){
   var rect=button.getBoundingClientRect(), menu=document.createElement('div'); menu.className='account-popover';
   menu.style.top=(rect.bottom+8)+'px'; menu.style.right=Math.max(12,window.innerWidth-rect.right)+'px';
   var who=document.createElement('strong'); who.textContent='@'+((cloud.profile&&cloud.profile.username)||user._profile&&user._profile.username||user.displayName||user.email||'account');
+  var themes=document.createElement('button'); themes.textContent='Themes'; themes.onclick=function(){ closeAccountMenu(); openThemePicker(); };
   var settings=document.createElement('button'); settings.textContent='Account settings'; settings.onclick=function(){ closeAccountMenu(); openAccountSettings(); };
   var signout=document.createElement('button'); signout.textContent='Sign out'; signout.className='danger';
   signout.onclick=async function(){ closeAccountMenu(); if(await overlay({title:'Sign out?',body:'Your saved progress will stay in your account. You can sign in again whenever you want.',confirmLabel:'Sign out',danger:true})) cloud.signOut(); };
-  menu.appendChild(who); menu.appendChild(settings); menu.appendChild(signout); document.body.appendChild(menu);
+  menu.appendChild(who); menu.appendChild(themes); menu.appendChild(settings); menu.appendChild(signout); document.body.appendChild(menu);
 }
 async function validateAvatar(file){
   if(!file||['image/jpeg','image/png','image/webp'].indexOf(file.type)<0||file.size>2*1024*1024)throw new Error('Choose a JPEG, PNG, or WebP image under 2 MB.');
