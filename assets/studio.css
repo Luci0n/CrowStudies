@@ -471,3 +471,29 @@
   .project-actions .btn{ flex:0 0 auto; }
   .project-title{ overflow-wrap:normal; word-break:normal; hyphens:auto; }
 }
+
+/* ---------- more kinds of block, and a way to change your mind ---------- */
+/* Kept beside the grip and the cross, and revealed the same way: a card at rest
+   shows its content, not its controls. */
+.block-more{ position:absolute; top:10px; right:66px; padding:1px 5px; border:0; border-radius:5px; background:transparent; color:var(--ink-3); font-size:17px; line-height:1; opacity:0; transition:opacity .2s ease, background .2s ease, color .2s ease; }
+.studio-block:hover .block-more,.studio-block:focus-within .block-more,.block-more:focus-visible{ opacity:1; }
+.block-more:hover{ background:var(--glass-lift); color:var(--brand); }
+@media (hover:none){ .block-more{ opacity:.62; } }
+.block-menu{ position:absolute; z-index:6; top:34px; right:10px; min-width:170px; max-height:330px; overflow:auto; padding:5px; border:1px solid var(--line); border-radius:9px; background:var(--card); box-shadow:0 16px 34px #0006; display:grid; }
+.block-menu-head{ padding:7px 8px 4px; color:var(--ink-3); font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
+.block-menu button{ border:0; border-radius:6px; background:transparent; color:var(--ink-2); text-align:left; padding:7px 8px; font-family:inherit; font-weight:700; font-size:12px; }
+.block-menu button:hover{ background:var(--glass-lift); color:var(--ink); }
+
+.block-quote,.block-code{ outline:none; overflow-wrap:anywhere; }
+.block-quote:empty::before,.block-code:empty::before{ content:attr(data-placeholder); color:var(--ink-3); }
+.block-quote{ margin:8px 0 0; padding:2px 0 2px 14px; border-left:3px solid var(--brand); color:var(--ink-2); font-size:15px; font-style:italic; line-height:1.6; }
+.callout-row{ display:flex; align-items:flex-start; gap:10px; margin-top:8px; padding:10px; border:1px solid var(--glass-edge); border-radius:9px; background:var(--glass-lift); }
+.callout-row .block-body{ flex:1 1 auto; min-height:28px; margin:0; padding:0; }
+.studio-block:hover .callout-row .block-body,.studio-block:focus-within .callout-row .block-body{ background:transparent; }
+.callout-icon{ flex:0 0 auto; padding:2px 4px; border:0; border-radius:7px; background:transparent; font-size:19px; line-height:1; }
+.callout-icon:hover{ background:var(--glass-deep); }
+.block-code{ margin:8px 0 0; padding:11px 12px; border:1px solid var(--glass-edge); border-radius:9px; background:color-mix(in srgb,#05070e 55%,transparent); color:var(--ink-2); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.5; white-space:pre-wrap; }
+.block-rule{ height:1px; margin:16px 0 6px; background:var(--glass-edge); }
+.studio-block.quote .block-kicker{ color:var(--ink-3); }
+.studio-block.callout .block-kicker{ color:var(--gold); }
+.studio-block.code .block-kicker{ color:var(--ink-3); }

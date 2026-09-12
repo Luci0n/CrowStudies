@@ -468,13 +468,14 @@
   function sectionPages(sectionId){ var section=findSection(sectionId); return section&&Array.isArray(section.pages)?section.pages:[]; }
   function sectionLocked(sectionId){ var section=findSection(sectionId); return !!(section&&section.locked); }
   function normalizeBlock(block){
-    var copy=Object.assign({},block), supported=['note','tasks','status','milestone','schedule','idea','lesson','table','image'];
+    var copy=Object.assign({},block), supported=['note','tasks','status','milestone','schedule','idea','lesson','table','image','quote','callout','code','divider'];
     if(copy.type==='task')copy.type='tasks';
     if(supported.indexOf(copy.type)<0)copy.type='note';
     if(!Array.isArray(copy.items))copy.items=[];
     if(typeof copy.title!=='string')copy.title='';
     if(typeof copy.body!=='string')copy.body='';
     ['lessonSection','lessonBlurb','lessonIcon','lessonColor','lessonHint'].forEach(function(key){ if(typeof copy[key]!=='string')copy[key]=''; });
+    if(typeof copy.icon!=='string')copy.icon='';
     if(copy.type==='lesson')copy.steps=lessonSteps(copy);
     return copy;
   }
@@ -906,7 +907,7 @@
     var actions=previewing()
       ? '<button class="btn sm" data-restore-preview>Restore this version</button>'
       : '<button class="btn ghost sm" data-toggle-view>'+ (readOnly?'Edit project':'View project') +'</button><button class="btn ghost sm" data-new-section>+ Section</button>';
-    return previewBarHTML()+'<div class="project-top"><div class="project-heading"><h1 class="project-title">'+esc(activeProject.title)+'</h1><div class="project-meta"><span class="'+(shared?'shared':'private')+'">'+esc(access)+'</span><span>'+esc(overview)+'</span></div><div class="project-presence" hidden><span>Viewing now</span><div class="collab-people" data-collab-people aria-label="People viewing this project"></div></div></div><div class="project-actions">'+actions+'</div></div><div class="section-bar"><button class="section-filter '+(activeSection==='all'?'active':'')+'" data-section="all">All</button><button class="section-filter '+(activeSection===''?'active':'')+'" data-section="">Unsorted</button>'+sectionButtons+'</div>'+pageBar+(locked?'<p class="section-lock-note">This section is locked. Unlock it from its cog menu to edit.</p>':'')+'<div class="block-grid">'+shown.map(blockHTML).join('')+'</div><div class="add-row '+(locked?'is-locked':'')+'"><span>'+ (locked?'This section is locked':'Add a block') +'</span>'+['note','tasks','status','milestone','schedule','idea','lesson','table','image'].map(function(type){return '<button class="add-card" data-add="'+type+'"'+(locked?' disabled':'')+'>'+type+'</button>';}).join('')+'</div>';
+    return previewBarHTML()+'<div class="project-top"><div class="project-heading"><h1 class="project-title">'+esc(activeProject.title)+'</h1><div class="project-meta"><span class="'+(shared?'shared':'private')+'">'+esc(access)+'</span><span>'+esc(overview)+'</span></div><div class="project-presence" hidden><span>Viewing now</span><div class="collab-people" data-collab-people aria-label="People viewing this project"></div></div></div><div class="project-actions">'+actions+'</div></div><div class="section-bar"><button class="section-filter '+(activeSection==='all'?'active':'')+'" data-section="all">All</button><button class="section-filter '+(activeSection===''?'active':'')+'" data-section="">Unsorted</button>'+sectionButtons+'</div>'+pageBar+(locked?'<p class="section-lock-note">This section is locked. Unlock it from its cog menu to edit.</p>':'')+'<div class="block-grid">'+shown.map(blockHTML).join('')+'</div><div class="add-row '+(locked?'is-locked':'')+'"><span>'+ (locked?'This section is locked':'Add a block') +'</span>'+['note','tasks','status','milestone','schedule','idea','quote','callout','code','divider','lesson','table','image'].map(function(type){return '<button class="add-card" data-add="'+type+'"'+(locked?' disabled':'')+'>'+type+'</button>';}).join('')+'</div>';
   }
   function personName(uid){
     var people=(activeProject&&activeProject.people)||{};
@@ -1149,8 +1150,84 @@
     queuedSave(block,true);
   }
 
+  var CALLOUT_ICON='\uD83D\uDCA1';
+  var BLOCK_LABELS={note:'Note',tasks:'Task list',status:'Status',milestone:'Milestone',schedule:'Schedule',idea:'Idea inbox',lesson:'Practice lesson',table:'Table',image:'Image',quote:'Quote',callout:'Callout',code:'Code',divider:'Divider'};
+  /* The kinds whose content is text at heart, so one can become another with
+     nothing lost on the way. A lesson, a table and an image are left out: their
+     shape is the block, and there is nowhere for it to go. */
+  var TURN_INTO=['note','idea','quote','callout','code','tasks','status','milestone','schedule'];
+  function plainText(html){ var holder=document.createElement('div'); holder.innerHTML=html||''; return holder.textContent||''; }
+  function textLines(html){
+    var holder=document.createElement('div'); holder.innerHTML=html||'';
+    var parts=holder.querySelectorAll('li,p,div,h1,h2,h3');
+    var lines=parts.length?Array.prototype.map.call(parts,function(node){ return node.textContent||''; })
+                          :String(holder.textContent||'').split('\n');
+    return lines.map(function(line){ return line.trim(); }).filter(function(line){ return line; });
+  }
+  /* Turning a block into another kind keeps every field it arrived with: a task
+     list that becomes a note still carries its items, so turning it back brings
+     them with it, and an older version of the project restores as it was. */
+  function turnInto(block, type){
+    if(!block||block.type===type)return;
+    var patch={ type:type };
+    if(type!=='tasks'&&block.type==='tasks'&&!plainText(block.body).trim()){
+      var written=(block.items||[]).filter(function(item){ return (item.text||'').trim(); });
+      if(written.length)patch.body='<ul>'+written.map(function(item){ return '<li>'+esc(item.text)+'</li>'; }).join('')+'</ul>';
+    }
+    if(type==='tasks'&&!(block.items||[]).filter(function(item){ return (item.text||'').trim(); }).length){
+      var lines=textLines(block.body);
+      if(lines.length)patch.items=lines.map(function(text){ return { text:text, done:false }; });
+    }
+    if(type==='callout'&&!block.icon)patch.icon=CALLOUT_ICON;
+    Object.assign(block,patch);
+    render();
+    queuedSave(block,true,patch);
+  }
+  function duplicateBlock(block){
+    var copy=Object.assign({},block,{ id:id(), order:(block.order||Date.now())+0.5, pending:true });
+    delete copy.updatedAt; delete copy.updatedBy;
+    /* An uploaded picture belongs to one block: the copy shows the same address
+       but does not own the file, so deleting either cannot take the other's
+       picture with it. */
+    if(copy.type==='image')copy.imageSlot='';
+    blocks.push(copy);
+    render();
+    cloud().saveBlock(activeProject.id,copy.id,copy).then(function(){
+      copy.pending=false;
+      var card=root.querySelector('[data-block="'+copy.id+'"]');
+      if(card){ card.classList.remove('is-pending'); var dot=card.querySelector('.save-dot'); if(dot)dot.remove(); }
+    }).catch(function(){ copy.pending=false; });
+  }
+  function closeBlockMenu(){
+    var open=root.querySelector('.block-menu');
+    if(open&&open.parentNode)open.parentNode.removeChild(open);
+    document.removeEventListener('click',awayFromBlockMenu);
+  }
+  function awayFromBlockMenu(event){
+    if(event.target.closest('.block-menu')||event.target.closest('[data-block-menu]'))return;
+    closeBlockMenu();
+  }
+  /* Built when it is asked for and thrown away after, rather than rendered into
+     the page: opening a menu is not a reason to rebuild every card. */
+  function openBlockMenu(card, block){
+    var already=card.querySelector('.block-menu');
+    closeBlockMenu();
+    if(already)return;
+    var menu=document.createElement('div'); menu.className='block-menu';
+    var rows=[];
+    if(TURN_INTO.indexOf(block.type)>=0){
+      rows.push('<div class="block-menu-head">Turn into</div>');
+      TURN_INTO.forEach(function(type){ if(type!==block.type)rows.push('<button type="button" data-turn="'+type+'">'+BLOCK_LABELS[type]+'</button>'); });
+    }
+    rows.push('<div class="block-menu-head">This block</div><button type="button" data-duplicate>Duplicate</button>');
+    menu.innerHTML=rows.join('');
+    card.appendChild(menu);
+    menu.querySelectorAll('[data-turn]').forEach(function(button){ button.onclick=function(){ closeBlockMenu(); turnInto(block,button.dataset.turn); }; });
+    menu.querySelector('[data-duplicate]').onclick=function(){ closeBlockMenu(); duplicateBlock(block); };
+    setTimeout(function(){ document.addEventListener('click',awayFromBlockMenu); },0);
+  }
   function blockHTML(block){
-    var labels={note:'Note',tasks:'Task list',status:'Status',milestone:'Milestone',schedule:'Schedule',idea:'Idea inbox',lesson:'Practice lesson',table:'Table',image:'Image'};
+    var labels=BLOCK_LABELS;
     var prompt=block.type==='idea'?'Capture a possibility, question, or connection…':block.type==='lesson'?'Teach the idea in a few clear lines…':'Write something…';
     var frozen=readOnly||!canEdit()||sectionLocked(block.sectionId);
     var editable=frozen?'false':'true', disabled=frozen?' disabled':'';
@@ -1180,7 +1257,13 @@
           : '<label class="image-drop" data-image-drop><span class="image-drop-mark" aria-hidden="true">+</span><b>Choose an image</b><small>or drop one here · JPEG, PNG, WebP up to 1.5 MB</small>'+picker+'</label>'))
         +(frozen?'':'<input class="image-url" data-image-url value="'+esc(block.imageUrl||'')+'" placeholder="or paste an image address">');
     }
-    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+'" data-block="'+block.id+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button><div class="block-kicker">'+labels[block.type]+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+labels[block.type].toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
+    if(block.type==='quote') body='<blockquote class="block-quote" data-body contenteditable="'+editable+'" data-placeholder="Worth keeping in someone else\u2019s words\u2026">'+cleanHTML(block.body)+'</blockquote>';
+    if(block.type==='callout') body='<div class="callout-row"><button type="button" class="callout-icon" data-callout-icon'+disabled+' title="Change the icon">'+esc(block.icon||CALLOUT_ICON)+'</button><div class="block-body" data-body contenteditable="'+editable+'" data-placeholder="Something to keep in view\u2026">'+cleanHTML(block.body)+'</div></div>';
+    /* Code is text, not markup: it is kept and shown as what was typed, so a
+       stray angle bracket stays a stray angle bracket. */
+    if(block.type==='code') body='<pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+esc(plainText(block.body))+'</pre>';
+    if(block.type==='divider') body='<div class="block-rule" aria-hidden="true"></div>';
+    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+'" data-block="'+block.id+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
   }
   function queuedSave(block, immediate, patch){
     var old=saveTimers[block.id]; if(old) clearTimeout(old);
@@ -1733,6 +1816,22 @@
     root.querySelectorAll('[data-block]').forEach(function(card){
       var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0];
       if(block&&block.type==='table')bindTable(card,block);
+    });
+    root.querySelectorAll('[data-block]').forEach(function(card){
+      var block=blocks.filter(function(item){ return item.id===card.dataset.block; })[0];
+      if(!block)return;
+      var more=card.querySelector('[data-block-menu]');
+      if(more)more.onclick=function(event){ event.stopPropagation(); openBlockMenu(card,block); };
+      var icon=card.querySelector('[data-callout-icon]');
+      if(icon)icon.onclick=async function(){
+        var chosen=await askName('Callout icon',CALLOUT_ICON,'Use this icon');
+        if(chosen===null)return;
+        block.icon=(chosen.trim()||CALLOUT_ICON).slice(0,2);
+        icon.textContent=block.icon;
+        queuedSave(block,true,{icon:block.icon});
+      };
+      var code=card.querySelector('[data-code]');
+      if(code)code.oninput=function(){ block.body=code.textContent; queuedSave(block,false,{body:block.body}); };
     });
     bindDrag();
   }
