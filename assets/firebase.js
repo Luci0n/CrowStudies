@@ -29,9 +29,12 @@ function closeAccountMenu(){
 const THEME_KEY='crowstudies:theme';
 const THEME_OPTIONS=[
   {id:'system',name:'System',note:'Follow your device'},
-  {id:'dark',name:'Midnight',note:'The current dark surface'},
-  {id:'light',name:'Light',note:'Clean paper and ink'},
-  {id:'dusk',name:'Dusk',note:'Warm violet afterglow'}
+  {id:'gruvbox-light',name:'Gruvbox · Light',note:'Warm paper and retro ink'},
+  {id:'gruvbox-dark',name:'Gruvbox · Dark',note:'Earthy amber after dark'},
+  {id:'monokai-light',name:'Monokai Machine · Light',note:'Clean metal with neon syntax'},
+  {id:'monokai-dark',name:'Monokai Machine · Dark',note:'Charcoal, lime, and hot pink'},
+  {id:'runner-light',name:'City Runner · Light',note:'White rooftops and red routes'},
+  {id:'runner-dark',name:'City Runner · Dark',note:'Night glass with signal red'}
 ];
 function currentTheme(){
   try{return localStorage.getItem(THEME_KEY)||'system';}catch(error){return 'system';}
