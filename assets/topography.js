@@ -128,8 +128,7 @@
         colour.addColorStop(0, 'rgba(99,142,255,.38)');
         colour.addColorStop(.52, 'rgba(147,112,255,.50)');
         colour.addColorStop(1, 'rgba(86,188,238,.34)');
-        context.shadowColor = 'rgba(116,94,255,.20)';
-        context.shadowBlur = 6;
+        context.shadowBlur = 0;
         context.lineWidth = 1.22;
       } else {
         colour.addColorStop(0, 'rgba(104,143,224,.14)');
