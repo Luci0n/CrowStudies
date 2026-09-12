@@ -65,6 +65,122 @@
   };
   let landscape = makeLandscape(randomSeed());
 
+  /* The terrain is a slow drift over a smooth field, but every frame used to
+     rebuild the whole thing from scratch: a height sample per grid point per
+     hill, a theme read that forced a style recalculation, and thirty-six fresh
+     gradients. That came to about twenty-six milliseconds a frame, so it ran at
+     roughly six frames a second and stuttered.
+
+     What does not change between frames is worked out once: where each grid
+     point sits in the warped space, the fixed part of its height, and the
+     gradients. What is left per frame is one exponential per point per hill,
+     over a field sampled every other point and smoothly filled back in, which
+     the shape of the terrain is far too broad to notice. */
+  let cell = 13, columns = 0, rows = 0;
+  const COARSE = 2;
+  let fieldColumns = 0, fieldRows = 0;
+  let warpX = null, warpY = null, restingHeight = null, fieldHeight = null, values = null;
+  let palette = null, glowFill = null, majorStroke = null, minorStroke = null;
+
+  function readPalette() {
+    const style = getComputedStyle(document.documentElement);
+    const pick = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
+    palette = {
+      glowA: pick('--terrain-glow-a', '76,68,168'),
+      glowB: pick('--terrain-glow-b', '29,40,95'),
+      majorA: pick('--terrain-major-a', '99,142,255'),
+      majorB: pick('--terrain-major-b', '147,112,255'),
+      majorC: pick('--terrain-major-c', '86,188,238'),
+      minorA: pick('--terrain-minor-a', '104,143,224'),
+      minorB: pick('--terrain-minor-b', '129,111,218'),
+      minorC: pick('--terrain-minor-c', '81,158,212')
+    };
+    glowFill = null;
+  }
+
+  function buildPaints() {
+    if (!palette) readPalette();
+    glowFill = context.createRadialGradient(width * .13, height * .03, 0, width * .13, height * .03, Math.max(width, height) * .82);
+    glowFill.addColorStop(0, 'rgba(' + palette.glowA + ',.22)');
+    glowFill.addColorStop(.54, 'rgba(' + palette.glowB + ',.09)');
+    glowFill.addColorStop(1, 'rgba(9,11,18,0)');
+    majorStroke = context.createLinearGradient(0, 0, width, height);
+    majorStroke.addColorStop(0, 'rgba(' + palette.majorA + ',.38)');
+    majorStroke.addColorStop(.52, 'rgba(' + palette.majorB + ',.50)');
+    majorStroke.addColorStop(1, 'rgba(' + palette.majorC + ',.34)');
+    minorStroke = context.createLinearGradient(0, 0, width, height);
+    minorStroke.addColorStop(0, 'rgba(' + palette.minorA + ',.14)');
+    minorStroke.addColorStop(.55, 'rgba(' + palette.minorB + ',.21)');
+    minorStroke.addColorStop(1, 'rgba(' + palette.minorC + ',.13)');
+  }
+
+  function buildField() {
+    cell = Math.max(11, Math.min(13, Math.round(width / 108)));
+    columns = Math.ceil(width / cell) + 1;
+    rows = Math.ceil(height / cell) + 1;
+    fieldColumns = Math.ceil((columns - 1) / COARSE) + 1;
+    fieldRows = Math.ceil((rows - 1) / COARSE) + 1;
+    const count = fieldColumns * fieldRows;
+    warpX = new Float32Array(count);
+    warpY = new Float32Array(count);
+    restingHeight = new Float32Array(count);
+    fieldHeight = new Float32Array(count);
+    values = new Float32Array(columns * rows);
+    for (let row = 0; row < fieldRows; row++) {
+      for (let column = 0; column < fieldColumns; column++) {
+        const u = column * COARSE * cell / width;
+        const v = row * COARSE * cell / height;
+        const px = u + .052 * Math.sin(v * 7.2) + .026 * Math.sin(u * 5.1 + v * 3.4);
+        const py = v + .047 * Math.sin(u * 6.0 - .6) + .022 * Math.cos(v * 6.7 - u * 2.2);
+        const at = row * fieldColumns + column;
+        warpX[at] = px;
+        warpY[at] = py;
+        restingHeight[at] = -.23 + .075 * Math.sin(px * 4.1 + py * 1.8) + .045 * Math.cos(py * 5.3 - px * 1.2);
+      }
+    }
+  }
+
+  function raiseHills(time) {
+    const count = fieldColumns * fieldRows;
+    fieldHeight.set(restingHeight);
+    for (let hill = 0; hill < landscape.length; hill++) {
+      const form = landscape[hill];
+      const phase = form[7];
+      const centreX = form[0] + .007 * Math.sin(time * .33 + phase);
+      const centreY = form[1] + .006 * Math.cos(time * .29 + phase * .8);
+      const spreadX = 1 / (form[2] * form[2]);
+      const spreadY = 1 / (form[3] * form[3]);
+      const cosine = Math.cos(form[5]), sine = Math.sin(form[5]);
+      const amp = form[4] * (1 + form[6] * Math.sin(time * .43 + phase));
+      for (let at = 0; at < count; at++) {
+        const dx = warpX[at] - centreX, dy = warpY[at] - centreY;
+        const along = dx * cosine + dy * sine;
+        const across = dy * cosine - dx * sine;
+        fieldHeight[at] += amp * Math.exp(-(along * along * spreadX + across * across * spreadY));
+      }
+    }
+  }
+
+  function fillBetween() {
+    for (let row = 0; row < rows; row++) {
+      const sourceRow = row / COARSE;
+      const rowA = Math.min(fieldRows - 1, sourceRow | 0);
+      const rowB = Math.min(fieldRows - 1, rowA + 1);
+      const downwards = sourceRow - rowA;
+      const offsetA = rowA * fieldColumns, offsetB = rowB * fieldColumns;
+      const out = row * columns;
+      for (let column = 0; column < columns; column++) {
+        const sourceColumn = column / COARSE;
+        const columnA = Math.min(fieldColumns - 1, sourceColumn | 0);
+        const columnB = Math.min(fieldColumns - 1, columnA + 1);
+        const across = sourceColumn - columnA;
+        const top = fieldHeight[offsetA + columnA] + (fieldHeight[offsetA + columnB] - fieldHeight[offsetA + columnA]) * across;
+        const bottom = fieldHeight[offsetB + columnA] + (fieldHeight[offsetB + columnB] - fieldHeight[offsetB + columnA]) * across;
+        values[out + column] = top + (bottom - top) * downwards;
+      }
+    }
+  }
+
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     width = window.innerWidth;
@@ -74,6 +190,8 @@
     primary.style.width = outgoing.style.width = width + 'px';
     primary.style.height = outgoing.style.height = height + 'px';
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    buildField();
+    buildPaints();
     lastFrame = -Infinity;
   }
 
@@ -83,45 +201,21 @@
   };
 
   function draw(now = 0) {
-    if (!reduce && now - lastFrame < 105) {
+    if (!reduce && now - lastFrame < 32) {
       requestAnimationFrame(draw);
       return;
     }
     lastFrame = now;
     const time = reduce ? 0 : now * .00012;
-    const theme = getComputedStyle(document.documentElement);
-    const terrain = (name, fallback) => theme.getPropertyValue(name).trim() || fallback;
-    const rgba = (name, alpha, fallback) => 'rgba(' + terrain(name, fallback) + ',' + alpha + ')';
+    if (!values) buildField();
+    if (!glowFill) buildPaints();
     context.clearRect(0, 0, width, height);
-    const glow = context.createRadialGradient(width * .13, height * .03, 0, width * .13, height * .03, Math.max(width, height) * .82);
-    glow.addColorStop(0, rgba('--terrain-glow-a', '.22', '76,68,168'));
-    glow.addColorStop(.54, rgba('--terrain-glow-b', '.09', '29,40,95'));
-    glow.addColorStop(1, 'rgba(9,11,18,0)');
-    context.fillStyle = glow;
+    context.fillStyle = glowFill;
     context.fillRect(0, 0, width, height);
-    const cell = Math.max(11, Math.min(13, Math.round(width / 108)));
-    const columns = Math.ceil(width / cell) + 1;
-    const rows = Math.ceil(height / cell) + 1;
 
-    const heightAt = (x, y) => {
-      const u = x / width, v = y / height;
-      const px = u + .052 * Math.sin(v * 7.2) + .026 * Math.sin(u * 5.1 + v * 3.4);
-      const py = v + .047 * Math.sin(u * 6.0 - .6) + .022 * Math.cos(v * 6.7 - u * 2.2);
-      let level = -.23 + .075 * Math.sin(px * 4.1 + py * 1.8) + .045 * Math.cos(py * 5.3 - px * 1.2);
-      landscape.forEach(([cx,cy,rx,ry,amp,angle,wobble,phase]) => {
-        const dx = px - (cx + .007 * Math.sin(time * .33 + phase));
-        const dy = py - (cy + .006 * Math.cos(time * .29 + phase * .8));
-        const cosine = Math.cos(angle), sine = Math.sin(angle);
-        const along = dx * cosine + dy * sine;
-        const across = -dx * sine + dy * cosine;
-        const pulse = 1 + wobble * Math.sin(time * .43 + phase);
-        level += amp * pulse * Math.exp(-(along * along / (rx * rx) + across * across / (ry * ry)));
-      });
-      return level;
-    };
-    const values = Array.from({ length: rows }, (_, row) =>
-      Array.from({ length: columns }, (_, column) => heightAt(column * cell, row * cell))
-    );
+    raiseHills(time);
+    fillBetween();
+
     const edgePoint = (edge, level, column, row, a, b, c, d) => {
       const points = [[column * cell,row * cell,a],[(column + 1) * cell,row * cell,b],[(column + 1) * cell,(row + 1) * cell,c],[column * cell,(row + 1) * cell,d]];
       const pair = [[0,1],[1,2],[2,3],[3,0]][edge];
@@ -133,34 +227,27 @@
     for (let band = 0; band < 18; band++) {
       const level = -.20 + band * .102;
       context.beginPath();
-      for (let row = 0; row < rows - 1; row++) for (let column = 0; column < columns - 1; column++) {
-        const a = values[row][column], b = values[row][column + 1], c = values[row + 1][column + 1], d = values[row + 1][column];
-        const mask = (a > level ? 1 : 0) | (b > level ? 2 : 0) | (c > level ? 4 : 0) | (d > level ? 8 : 0);
-        (table[mask] || []).forEach(([first, last]) => {
-          const start = edgePoint(first, level, column, row, a, b, c, d);
-          const end = edgePoint(last, level, column, row, a, b, c, d);
-          context.moveTo(start.x, start.y);
-          context.lineTo(end.x, end.y);
-        });
+      for (let row = 0; row < rows - 1; row++) {
+        const here = row * columns, below = here + columns;
+        for (let column = 0; column < columns - 1; column++) {
+          const a = values[here + column], b = values[here + column + 1];
+          const c = values[below + column + 1], d = values[below + column];
+          const mask = (a > level ? 1 : 0) | (b > level ? 2 : 0) | (c > level ? 4 : 0) | (d > level ? 8 : 0);
+          if (mask === 0 || mask === 15) continue;
+          const edges = table[mask];
+          if (!edges) continue;
+          for (let pair = 0; pair < edges.length; pair++) {
+            const start = edgePoint(edges[pair][0], level, column, row, a, b, c, d);
+            const end = edgePoint(edges[pair][1], level, column, row, a, b, c, d);
+            context.moveTo(start.x, start.y);
+            context.lineTo(end.x, end.y);
+          }
+        }
       }
       const major = band % 5 === 0;
-      const colour = context.createLinearGradient(0, 0, width, height);
-      if (major) {
-        colour.addColorStop(0, rgba('--terrain-major-a', '.38', '99,142,255'));
-        colour.addColorStop(.52, rgba('--terrain-major-b', '.50', '147,112,255'));
-        colour.addColorStop(1, rgba('--terrain-major-c', '.34', '86,188,238'));
-        context.shadowBlur = 0;
-        context.lineWidth = 1.22;
-      } else {
-        colour.addColorStop(0, rgba('--terrain-minor-a', '.14', '104,143,224'));
-        colour.addColorStop(.55, rgba('--terrain-minor-b', '.21', '129,111,218'));
-        colour.addColorStop(1, rgba('--terrain-minor-c', '.13', '81,158,212'));
-        context.shadowBlur = 0;
-        context.lineWidth = .72;
-      }
-      context.strokeStyle = colour;
+      context.strokeStyle = major ? majorStroke : minorStroke;
+      context.lineWidth = major ? 1.22 : .72;
       context.stroke();
-      context.shadowBlur = 0;
     }
     if (texturePattern) {
       context.globalAlpha = .10;
@@ -206,5 +293,12 @@
   });
   resize();
   draw();
+  new MutationObserver(() => { readPalette(); lastFrame = -Infinity; })
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme', 'style'] });
+  try {
+    window.matchMedia('(prefers-color-scheme: dark)')
+      .addEventListener('change', () => { readPalette(); lastFrame = -Infinity; });
+  } catch (error) {}
+
   window.CrowTopography = { changeSeed };
 })();

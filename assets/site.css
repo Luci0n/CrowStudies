@@ -103,7 +103,7 @@ button:focus-visible, select:focus-visible, a:focus-visible, input:focus-visible
   text-decoration:none; color:var(--ink-2); font-size:15px; font-weight:800;
   padding:8px 12px; border-radius:6px;
 }
-.sitenav a:hover{ background:var(--well); color:var(--ink); }
+.sitenav a:hover{ background:var(--glass-lift); color:var(--ink); }
 .sitenav a[aria-current="page"]{ background:var(--brand-soft); color:var(--brand); }
 /* Signed out this is a button that says so. Signed in it becomes the round
    badge of initials that opens the account menu. */
@@ -136,7 +136,7 @@ button:focus-visible, select:focus-visible, a:focus-visible, input:focus-visible
 .account-popover,.section-popover{ animation:pop-in .2s cubic-bezier(.22,1,.36,1) both; }
 .account-popover{ position:fixed; z-index:30; width:210px; padding:8px; border:1px solid var(--line-strong); border-radius:10px; background:var(--card); box-shadow:0 18px 40px #0008; }
 .account-popover strong{ display:block; padding:9px 10px 11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:750 14px/1.2 "Space Grotesk",sans-serif; }
-.account-popover button{ width:100%; border:0; border-radius:6px; padding:10px; background:transparent; color:var(--ink-2); text-align:left; font:750 13px/1 inherit; }
+.account-popover button{ width:100%; border:0; border-radius:6px; padding:10px; background:transparent; color:var(--ink-2); text-align:left; font-family:inherit; font-weight:750; font-size:13px; line-height:1; }
 .account-popover button:hover:not(:disabled){ background:var(--well); color:var(--ink); }
 .account-popover button:disabled{ opacity:.45; cursor:default; }
 .account-popover button.danger:hover{ color:var(--bad); }
@@ -191,7 +191,7 @@ button:focus-visible, select:focus-visible, a:focus-visible, input:focus-visible
   font-size:24px; line-height:1; padding:6px 10px; border-radius:6px;
   font-family:"Space Grotesk",sans-serif;
 }
-.iconbtn:hover{ color:var(--ink); background:var(--well); }
+.iconbtn:hover{ color:var(--ink); background:var(--glass-lift); }
 
 /* ---------- hub ---------- */
 .hub{ max-width:940px; margin:0 auto; padding:26px 16px 10px; }
@@ -209,7 +209,7 @@ button:focus-visible, select:focus-visible, a:focus-visible, input:focus-visible
   border-radius:8px; padding:20px; text-decoration:none; color:var(--ink);
   transition:border-color .15s ease, transform .06s ease, background .15s ease;
 }
-a.subject:hover{ border-color:var(--s); background:var(--card-2); }
+a.subject:hover{ border-color:var(--s); background:var(--glass-lift); backdrop-filter:var(--frost-lift); -webkit-backdrop-filter:var(--frost-lift); }
 a.subject:active{ transform:translateY(3px); border-bottom-width:2px; margin-bottom:3px; }
 .subject .mark{
   width:46px; height:46px; border-radius:7px; display:grid; place-items:center;
@@ -232,7 +232,7 @@ a.subject:active{ transform:translateY(3px); border-bottom-width:2px; margin-bot
   border-radius:10px; text-decoration:none; color:var(--ink);
   transition:border-color .15s ease, transform .06s ease, background .15s ease;
 }
-.door:hover{ border-color:var(--s); background:var(--card-2); }
+.door:hover{ border-color:var(--s); background:var(--glass-lift); backdrop-filter:var(--frost-lift); -webkit-backdrop-filter:var(--frost-lift); }
 .door:active{ transform:translateY(3px); }
 .door .mark{
   width:52px; height:52px; border-radius:9px; display:grid; place-items:center;
@@ -326,7 +326,7 @@ a.subject:active{ transform:translateY(3px); border-bottom-width:2px; margin-bot
   border-radius:7px; padding:9px 106px 9px 11px; text-align:left;
   transition:border-color .15s ease, transform .06s ease, background .15s ease;
 }
-.unit:hover{ border-color:var(--u); background:var(--card-2); }
+.unit:hover{ border-color:var(--u); background:var(--glass-lift); backdrop-filter:var(--frost-lift); -webkit-backdrop-filter:var(--frost-lift); }
 .unit:active{ transform:translateY(2px); }
 .disc{
   width:40px; height:40px; border-radius:7px; flex:none;
@@ -403,17 +403,55 @@ a.subject:active{ transform:translateY(3px); border-bottom-width:2px; margin-bot
 .speakbtn::before{ content:'🔊'; font-size:14px; line-height:1; }
 .speakbtn:hover{ color:var(--brand); border-color:var(--brand); background:var(--brand-soft); }
 
-/* ---------- handwriting state ---------- */
-.writer-stage{ position:relative; width:max-content; max-width:100%; margin:0 auto; border-radius:10px; }
-.writer-stage.locked .writerbox{ pointer-events:none; opacity:.38; filter:grayscale(.45); }
-.writer-stage.watching .writerbox{ pointer-events:none; opacity:1; filter:none; }
-/* One-word state chip. The line under the buttons carries the instructions. */
-.writer-lock-note{
-  display:block; width:max-content; margin:10px auto 0; padding:5px 12px;
-  background:var(--card); border:1px dashed var(--brand); border-radius:999px;
-  color:var(--ink-3); font-size:11px; font-weight:800; letter-spacing:.09em; text-transform:uppercase;
+/* ---------- handwriting ---------- */
+/* The character sits in a practice square with a centre cross and diagonals,
+   the guide people actually learn to write on. Before this it floated in an
+   empty panel with nothing to place it against. */
+.writing{
+  display:grid; gap:14px; justify-items:center;
+  padding:16px; border:1px solid var(--line); border-radius:12px; background:var(--well);
 }
-.writer-actions .btn:disabled{ cursor:default; filter:saturate(.55); opacity:.7; }
+.writer-top{ display:flex; align-items:center; justify-content:center; width:100%; min-height:34px; }
+.writer-stage{
+  position:relative; width:min(320px,100%); aspect-ratio:1; border-radius:12px;
+  border:1px solid var(--line-strong); background:var(--card);
+  transition:border-color .2s ease, box-shadow .2s ease;
+}
+.writer-stage::before{
+  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; opacity:.55;
+  background-image:
+    linear-gradient(to bottom, transparent calc(50% - .5px), var(--line-strong) calc(50% - .5px), var(--line-strong) calc(50% + .5px), transparent calc(50% + .5px)),
+    linear-gradient(to right,  transparent calc(50% - .5px), var(--line-strong) calc(50% - .5px), var(--line-strong) calc(50% + .5px), transparent calc(50% + .5px)),
+    linear-gradient(to bottom right, transparent calc(50% - .5px), var(--line) calc(50% - .5px), var(--line) calc(50% + .5px), transparent calc(50% + .5px)),
+    linear-gradient(to bottom left,  transparent calc(50% - .5px), var(--line) calc(50% - .5px), var(--line) calc(50% + .5px), transparent calc(50% + .5px));
+}
+.writerbox{ position:absolute; inset:0; touch-action:none; }
+.writerbox svg{ display:block; width:100%; height:100%; }
+/* The frame carries the state, so there is no separate badge appearing and
+   disappearing and shifting everything under it. */
+.writer-stage.locked .writerbox{ pointer-events:none; opacity:.45; filter:grayscale(.4); }
+.writer-stage.watching{ border-color:var(--gold); box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 18%,transparent); }
+.writer-stage.watching .writerbox{ pointer-events:none; opacity:1; filter:none; }
+.writer-stage.ready{ border-color:var(--brand); box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 20%,transparent); }
+.writer-stage.done{ border-color:var(--good); box-shadow:0 0 0 3px color-mix(in srgb,var(--good) 20%,transparent); }
+.writer-status{
+  min-height:38px; max-width:34ch; margin:0; text-align:center;
+  color:var(--ink-2); font-size:14px; font-weight:700; line-height:1.35;
+}
+.writer-actions{ display:flex; justify-content:center; gap:8px; flex-wrap:wrap; width:100%; }
+.writer-actions .btn{ flex:1 1 auto; min-width:128px; width:auto; padding:11px 14px; font-size:14px; }
+.writer-actions .btn:disabled{ cursor:default; filter:saturate(.55); opacity:.65; }
+
+/* The stroke hint, drawn here rather than by the writing library. */
+.stroke-hint{ pointer-events:none; transition:opacity .4s ease; }
+.stroke-hint.is-leaving{ opacity:0; }
+.stroke-hint-shape{ fill:var(--gold); opacity:.28; }
+.stroke-hint-travel{
+  fill:none; stroke:var(--gold); stroke-width:34; stroke-linecap:round; stroke-linejoin:round; opacity:.95;
+}
+@media(max-width:560px){
+  .writer-actions .btn{ min-width:0; }
+}
 .memory-switch{
   display:inline-flex; align-items:center; gap:10px; min-height:42px; padding:6px 8px 6px 12px;
   border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--ink-2);
@@ -518,7 +556,9 @@ a.subject:active{ transform:translateY(3px); border-bottom-width:2px; margin-bot
 
 /* ---------- generic content cards (lesson pages) ---------- */
 .card{
-  background:var(--card); border:2px solid var(--line); border-radius:20px;
+  isolation:isolate;
+  background:color-mix(in srgb,var(--card) 74%,transparent); border:2px solid var(--glass-edge); border-radius:20px;
+  backdrop-filter:var(--frost); -webkit-backdrop-filter:var(--frost);
   padding:22px; margin-bottom:16px;
 }
 .card h2{ font-size:27px; margin-bottom:8px; }
@@ -581,9 +621,9 @@ main.hub,#app,.studio-shell{ animation:page-in .34s cubic-bezier(.2,.75,.28,1) b
 .home-intro h1{ margin:0; font-size:clamp(42px,7vw,72px); line-height:.98; letter-spacing:-.055em; }
 .home-intro>p:last-child{ max-width:52ch; margin:18px 0 0; color:var(--ink-2); font-size:18px; line-height:1.55; }
 .home-paths{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:52px; }
-.home-path{ min-height:220px; display:flex; flex-direction:column; padding:24px; border:1px solid var(--line); border-radius:12px; text-decoration:none; color:var(--ink); background:var(--card); transition:border-color .22s ease, background .22s ease, transform .22s ease; }
+.home-path{ isolation:isolate; backdrop-filter:var(--frost); -webkit-backdrop-filter:var(--frost); min-height:220px; display:flex; flex-direction:column; padding:24px; border:1px solid var(--glass-edge); border-radius:12px; text-decoration:none; color:var(--ink); background:var(--glass); transition:border-color .22s ease, background .22s ease, transform .22s ease; }
 .home-path.learn{ border-top:3px solid var(--brand); }.home-path.make{ border-top:3px solid var(--good); }
-.home-path:hover{ background:var(--card-2); transform:translateY(-2px); }.home-path.learn:hover{ border-color:var(--brand); }.home-path.make:hover{ border-color:var(--good); }
+.home-path:hover{ background:var(--glass-lift); transform:translateY(-2px); }.home-path.learn:hover{ border-color:var(--brand); }.home-path.make:hover{ border-color:var(--good); }
 .home-path-kicker{ color:var(--ink-3); font:800 11px/1 "IBM Plex Mono",monospace; letter-spacing:.08em; text-transform:uppercase; }
 .home-path h2{ margin:16px 0 8px; font-size:30px; }.home-path p{ margin:0; color:var(--ink-2); line-height:1.5; }
 .home-path>span:last-child{ margin-top:auto; padding-top:22px; font:800 13px/1 "IBM Plex Mono",monospace; }.home-path.learn>span:last-child{color:var(--brand);}.home-path.make>span:last-child{color:var(--good);}
@@ -631,19 +671,33 @@ body{
 .sitehead{
   position:sticky; top:0; z-index:20;
   border-bottom-color:color-mix(in srgb,var(--line) 56%,transparent);
-  background:color-mix(in srgb,var(--card) 16%,transparent);
+  background:color-mix(in srgb,var(--card) 62%,transparent);
   box-shadow:0 12px 34px rgba(4,7,18,.10);
-  backdrop-filter:blur(2px) saturate(115%);
-  -webkit-backdrop-filter:blur(2px) saturate(115%);
+}
+/* One set of terms for every frosted surface, so Studio and the courses agree.
+   Hovering thickens the frost and lets a little less through, rather than
+   dropping an opaque slab over the terrain. */
+:root{
+  --glass:color-mix(in srgb,var(--card) 14%,transparent);
+  --glass-lift:color-mix(in srgb,var(--card-2) 22%,transparent);
+  --glass-deep:color-mix(in srgb,var(--card) 32%,transparent);
+  --glass-edge:color-mix(in srgb,var(--line) 55%,transparent);
+  --frost:blur(2px) saturate(110%);
+  --frost-lift:blur(4px) saturate(116%);
+  --frost-deep:blur(6px) saturate(118%);
 }
 .subject,.door,.stat,.unit,.demo,.course-tab,.speakbtn,.btn.ghost{
-  background:color-mix(in srgb,var(--card) 20%,transparent);
-  border-color:color-mix(in srgb,var(--line) 55%,transparent);
-  backdrop-filter:blur(2px) saturate(115%);
-  -webkit-backdrop-filter:blur(2px) saturate(115%);
+  isolation:isolate;
+  background:var(--glass);
+  border-color:var(--glass-edge);
+  backdrop-filter:var(--frost);
+  -webkit-backdrop-filter:var(--frost);
+  transition:background .22s ease, border-color .22s ease;
 }
 .subject:hover,.door:hover,.unit:hover,.course-tab:not(.active):hover,.btn.ghost:hover{
-  background:color-mix(in srgb,var(--card-2) 28%,transparent);
+  background:var(--glass-lift);
+  backdrop-filter:var(--frost-lift);
+  -webkit-backdrop-filter:var(--frost-lift);
 }
 @media (prefers-reduced-motion: reduce){
   .crow-topography{ transition:none; }
@@ -781,7 +835,7 @@ body > .app-overlay{ position:fixed !important; z-index:70 !important; }
 .theme-monokai .dark{ background:linear-gradient(135deg,#272822 0 42%,#a6e22e 42% 66%,#f92672 66%); }
 .theme-runner .light{ background:linear-gradient(135deg,#f5f8fb 0 42%,#e5324a 42% 66%,#008eab 66%); }
 .theme-runner .dark{ background:linear-gradient(135deg,#101923 0 42%,#ff3e57 42% 66%,#2bc6d6 66%); }
-.theme-system-choice{ width:100%; margin:0 0 10px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--ink-2); font:700 13px/1.2 inherit; }
+.theme-system-choice{ width:100%; margin:0 0 10px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--ink-2); font-family:inherit; font-weight:700; font-size:13px; line-height:1.2; }
 .theme-system-choice:hover,.theme-system-choice.active{ border-color:var(--brand); color:var(--brand); background:color-mix(in srgb,var(--brand-soft) 46%,transparent); }
 @media(max-width:540px){ .theme-choices{ grid-template-columns:1fr; } .theme-pair{ height:70px; } .theme-family h3{text-align:left;} }
 

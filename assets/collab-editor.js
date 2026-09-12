@@ -29,7 +29,9 @@ async function mount(host, options){
   if(!config.url || live.has(options.documentName)) return null;
   host.dataset.collabActive='true';
   host.oninput=null; // Never leave the old HTML/Firestore writer attached.
-  host.textContent='Connecting collaborative note…';
+  /* The note keeps the text it is already showing until the editor is ready to
+     take over. Emptying it here collapsed every shared note to a single line
+     for the length of a round trip, and the page jumped twice for it. */
   const ydoc=new Y.Doc();
   const offline=new IndexeddbPersistence('crowstudies:'+options.documentName,ydoc);
   const token=await options.user.getIdToken();
@@ -42,6 +44,7 @@ async function mount(host, options){
     onStatus:({status})=>options.onStatus&&options.onStatus(status),
   });
   const user={name:'@'+options.username,color:colorFor(options.user.uid),avatar:options.avatarUrl||undefined};
+  host.textContent='';
   const editor=new Editor({
     element:host,
     editable:!options.readOnly,

@@ -158,7 +158,12 @@ service cloud.firestore {
         function historyRole() { return project().get('members', {}).get(request.auth.uid, null); }
         allow read: if signedIn() && historyRole() != null;
         allow create: if signedIn() && historyRole() in ['owner','editor'] && request.resource.data.authorId == me();
-        allow update, delete: if false;
+        /* Naming a version is the only edit it accepts; the copy of the
+           project it holds can never be rewritten after the fact. */
+        allow update: if signedIn() && historyRole() in ['owner','editor']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['label','kind']);
+        /* Studio keeps its own automatic versions from piling up. */
+        allow delete: if signedIn() && historyRole() in ['owner','editor'];
       }
       match /collab/{blockId} {
         function project() { return get(/databases/$(database)/documents/projects/$(projectId)).data; }

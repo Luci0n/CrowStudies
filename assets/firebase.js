@@ -1,7 +1,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-storage.js';
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, query, orderBy, where, onSnapshot, arrayUnion, arrayRemove, writeBatch, increment } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, deleteField, serverTimestamp, query, orderBy, limit, where, onSnapshot, arrayUnion, arrayRemove, writeBatch, increment } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyBKaA8fPVgQQdcAFTcHB7_byGcnQahcd2Y',
@@ -227,7 +227,10 @@ const cloud = {
         try{ var profile=await getDoc(doc(db,'profiles',uid)); if(profile.exists())people[uid]=Object.assign({},people[uid]||{},{name:profile.data().username,avatarUrl:profile.data().avatarUrl||''}); }catch(error){}
       }));
     }));
-    list.sort(function(a, b){ return (b.updatedAt && b.updatedAt.seconds || 0) - (a.updatedAt && a.updatedAt.seconds || 0); });
+    /* By name, so the list holds still. Ordering it by the last write meant
+       every keystroke and every deleted block could lift a project to the top
+       and shuffle the rest down around it while you were working in one. */
+    list.sort(function(a, b){ return String(a.title||'').localeCompare(String(b.title||''), undefined, { sensitivity:'base' }); });
     return list;
   },
   /* Anything left for this address by someone else, not yet accepted. */
@@ -357,13 +360,36 @@ const cloud = {
     if(!cloud.user||!/^image-(0[1-9]|1[0-9]|20)$/.test(String(slot||'')))return;
     try{await deleteObject(ref(storage,'projects/'+projectId+'/images/'+slot));}catch(error){}
   },
-  async listHistory(projectId){
-    const snapshots=await getDocs(query(cloud.historyRef(projectId),orderBy('createdMs','desc')));
+  /* A version carries a whole copy of the project, so the list view asks for
+     the newest stretch rather than the lot, and reads the contents of one
+     version only when somebody opens it. */
+  async listHistory(projectId, howMany){
+    const snapshots=await getDocs(query(cloud.historyRef(projectId),orderBy('createdMs','desc'),limit(howMany||80)));
     return snapshots.docs.map(function(entry){return Object.assign({id:entry.id},entry.data());});
   },
-  async saveHistory(projectId, label, snapshot){
+  async readHistory(projectId, revisionId){
+    const entry=await getDoc(doc(db,'projects',projectId,'history',revisionId));
+    return entry.exists()?Object.assign({id:entry.id},entry.data()):null;
+  },
+  /* kind is 'named' for a checkpoint somebody asked for by name, 'auto' for
+     one Studio took on its own after a stretch of editing. */
+  async saveHistory(projectId, label, snapshot, kind){
     if(!cloud.user)throw new Error('Sign in first');
-    await addDoc(cloud.historyRef(projectId),{label:String(label||'Checkpoint'),snapshot:snapshot,author:(cloud.profile&&cloud.profile.username)||'someone',authorId:cloud.user.uid,createdMs:Date.now()});
+    const created=await addDoc(cloud.historyRef(projectId),{
+      label:String(label||'Checkpoint'), kind:kind==='auto'?'auto':'named', snapshot:snapshot,
+      author:(cloud.profile&&cloud.profile.username)||'someone', authorId:cloud.user.uid, createdMs:Date.now()
+    });
+    return created.id;
+  },
+  /* Naming an automatic version is what keeps it: only unnamed ones are ever
+     cleared away. */
+  async nameHistory(projectId, revisionId, label){
+    if(!cloud.user)throw new Error('Sign in first');
+    await updateDoc(doc(db,'projects',projectId,'history',revisionId),{label:String(label||'Checkpoint'),kind:'named'});
+  },
+  async removeHistory(projectId, revisionId){
+    if(!cloud.user)throw new Error('Sign in first');
+    await deleteDoc(doc(db,'projects',projectId,'history',revisionId));
   },
   async ensureCollabText(projectId, blockId, seed){
     const target=cloud.collabRef(projectId,blockId), existing=await getDoc(target);
@@ -411,7 +437,10 @@ const cloud = {
           try{ var profile=await getDoc(doc(db,'profiles',uid)); if(profile.exists())people[uid]=Object.assign({},people[uid]||{},{name:profile.data().username,avatarUrl:profile.data().avatarUrl||''}); }catch(error){}
         }));
       })).then(function(){
-        list.sort(function(a, b){ return (b.updatedAt && b.updatedAt.seconds || 0) - (a.updatedAt && a.updatedAt.seconds || 0); });
+        /* By name, so the list holds still. Ordering it by the last write meant
+       every keystroke and every deleted block could lift a project to the top
+       and shuffle the rest down around it while you were working in one. */
+    list.sort(function(a, b){ return String(a.title||'').localeCompare(String(b.title||''), undefined, { sensitivity:'base' }); });
         onChange(list);
       });
     }, onError || function(){});

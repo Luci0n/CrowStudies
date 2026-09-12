@@ -7,7 +7,7 @@
 <meta name="description" content="Learn Mandarin tones, useful radicals, starter Chinese characters, and stroke order through short drills.">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+SC:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <script src="../assets/theme.js?v=palette-families-20260912"></script>
-<link rel="stylesheet" href="../assets/site.css?v=topography-20260912q">
+<link rel="stylesheet" href="../assets/site.css?v=projects-crumb-20260912">
 <style>
   .zh{ font-family:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif; }
   .disc{ font-family:"Noto Sans SC","Space Grotesk",sans-serif; font-size:25px; }
@@ -22,23 +22,17 @@
   .tone .tone-mark{ display:block; margin:5px 0 2px; color:var(--gold); font:650 38px/.8 "Space Grotesk",sans-serif; }
   .tone .tone-label{ display:block; color:var(--ink-3); font-size:11px; font-weight:700; }
   .hanzi-prompt{ font:500 104px/1 "Noto Sans SC",sans-serif; color:var(--ink); margin:0 0 12px; text-align:center; }
-  .writing{ background:var(--well); border:1px solid var(--line); border-radius:8px; padding:14px; }
-  .writerbox{ width:270px; max-width:100%; margin:0 auto; touch-action:none; }
-  .writerbox svg{ display:block; width:100%; height:auto; }
-  .writer-status{ min-height:22px; text-align:center; color:var(--ink-3); font-size:14px; font-weight:700; margin:8px 0 0; }
-  .writer-actions{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; }
-  .writer-actions .btn{ width:auto; padding:11px 15px; font-size:14px; }
   .radical-list{ display:grid; grid-template-columns:repeat(2,1fr); gap:9px; }
   .radical-list div{ display:flex; flex-direction:column; align-items:flex-start; min-height:164px; background:var(--card); border:1px solid var(--line); padding:10px; }
   .radical-list b{ display:block; font:500 32px/1 "Noto Sans SC",sans-serif; color:var(--brand); }
   .radical-list .speakbtn{ margin:12px 0 0; margin-top:auto; }
   .hanzi-card .speakbtn{ grid-column:2; justify-self:start; margin:10px 0 0; }
   .radical-list span{ color:var(--ink-3); font-size:13px; font-weight:700; }
-  @media(max-width:560px){ .hanzi-card{ grid-template-columns:82px 1fr; gap:10px; }.hanzi-card .glyph{ font-size:68px; }.tone-grid{ grid-template-columns:repeat(3,1fr); }.writerbox{ width:250px; } }
+  @media(max-width:560px){ .hanzi-card{ grid-template-columns:82px 1fr; gap:10px; }.hanzi-card .glyph{ font-size:68px; }.tone-grid{ grid-template-columns:repeat(3,1fr); } }
 </style>
 </head>
 <body>
-<script src="../assets/topography.js?v=topography-20260912q"></script>
+<script src="../assets/topography.js?v=terrain-smooth-20260912"></script>
 <header class="sitehead">
   <div class="inner">
     <a class="wordmark" href="../"><span class="wordmark-icon" aria-hidden="true"></span>CrowStudies</a>
@@ -46,7 +40,7 @@
   </div>
 </header>
 <div id="app"></div>
-<script type="module" src="../assets/firebase.js?v=theme-corners-overlays-20260912"></script>
+<script type="module" src="../assets/firebase.js?v=steady-list-20260912"></script>
 <script>
 /**
  * Hanzi Writer v3.7.3 | https://chanind.github.io/hanzi-writer
@@ -56,6 +50,7 @@ var HanziWriter=function(){"use strict";var t,e,r;const i="undefined"==typeof wi
 //# sourceMappingURL=hanzi-writer.min.js.map
 
 </script>
+<script src="../assets/stroke-practice.js?v=kana-kanjivg-20260912"></script>
 <script src="../assets/quiz.js?v=separate-guest-progress-20260910"></script>
 <script>
 (function(){
@@ -174,22 +169,23 @@ var HanziWriter=function(){"use strict";var t,e,r;const i="undefined"==typeof wi
   function orderDemo(lines){ var d=el('div','demo'); d.innerHTML='<div class="radical-list">'+lines.map(function(x){return '<div><b class="zh">'+x.h+'</b><span>'+x.t+'</span></div>';}).join('')+'</div>'; return d; }
   function orderQ(){ return {type:'mcq',tag:'stroke order',headline:'For a character with a left and right side, what is the usual starting rule?',sub:'This is a guide. The reference animation always gives the exact sequence.',choices:['Write the right side first','Write the left side first','Draw every outer line first','Start at the bottom'],correctIndex:1,explain:'The usual rule is left before right. Other useful defaults are top before bottom, horizontal before vertical when they cross, and enclosing strokes last.'}; }
   function writingType(area,q,api){
-    var box=el('div','writing'), stage=el('div','writer-stage locked'), host=el('div','writerbox'), lockNote=el('div','writer-lock-note','Locked'), status=el('div','writer-status','Watch the order, then press Start drawing.'), actions=el('div','writer-actions');
-    stage.appendChild(host); box.appendChild(stage); box.appendChild(lockNote); box.appendChild(actions); box.appendChild(status); area.appendChild(box);
-    var writer=HanziWriter.create(host,q.hanzi,{width:270,height:270,padding:12,showOutline:true,showCharacter:false,strokeColor:'#f1f4fb',outlineColor:'#374154',drawingColor:'#e07136',highlightColor:'#f2b94b',drawingWidth:26,drawingFadeDuration:900,charDataLoader:function(ch){ return fetch('../assets/hanzi-data/'+encodeURIComponent(ch)+'.json').then(function(r){ if(!r.ok) throw new Error('Character data unavailable'); return r.json(); }); }});
+    var box=el('div','writing'), stage=el('div','writer-stage locked'), host=el('div','writerbox'), status=el('div','writer-status','Draw the first stroke. Watch order will show you how.'), actions=el('div','writer-actions');
+    stage.appendChild(host); box.appendChild(stage); box.appendChild(status); box.appendChild(actions); area.appendChild(box);
+    var writer=HanziWriter.create(host,q.hanzi,{width:300,height:300,padding:18,showOutline:true,showCharacter:false,strokeColor:'#f1f4fb',outlineColor:'#374154',drawingColor:'#e07136',highlightColor:'#f2b94b',drawingWidth:26,drawingFadeDuration:900,charDataLoader:function(ch){ return fetch('../assets/hanzi-data/'+encodeURIComponent(ch)+'.json').then(function(r){ if(!r.ok) throw new Error('Character data unavailable'); return r.json(); }); }});
     var started=false, expectedStroke=0, memoryMode=localStorage.getItem('crowstudies:chinese:memory-writing')==='1';
     var promptHeading=area.querySelector('.qhead');
     function setMemoryMode(on){ memoryMode=on; memoryInput.checked=on; memoryState.textContent=on?'On':'Off'; localStorage.setItem('crowstudies:chinese:memory-writing',on?'1':'0'); if(promptHeading) promptHeading.hidden=on; if(on) writer.hideOutline({duration:0}); else writer.showOutline({duration:0}); }
-    function setState(active){ stage.classList.toggle('locked',!active); stage.classList.toggle('ready',active); stage.classList.remove('watching'); lockNote.hidden=active; lockNote.textContent='Locked'; host.setAttribute('aria-disabled',active?'false':'true'); tryBtn.disabled=active; tryBtn.textContent=active?'Drawing active':'Start drawing'; hint.disabled=!active; memoryInput.disabled=active; }
-    function start(){ if(started)return; started=true; expectedStroke=0; setState(true); status.textContent=memoryMode?'Memory mode: the character and outline are hidden. Draw the first stroke.':'Drawing is active. Draw the first stroke; the guide appears after one miss.'; writer.quiz({leniency:1.1,showHintAfterMisses:1,onMistake:function(){ status.textContent='That is not the next stroke. Try again, or use Show next stroke.'; },onCorrectStroke:function(info){ expectedStroke=info.strokeNum+1; status.textContent='Stroke '+info.strokeNum+' is in. Keep going.'; },onComplete:function(){ status.textContent='Complete.'; api.finish(true); }}); }
-    var watch=el('button','btn ghost','Watch order'), tryBtn=el('button','btn','Start drawing'), hint=el('button','btn ghost','Show next stroke'), memoryToggle=el('label','memory-switch');
+    function setState(active){ stage.classList.toggle('locked',!active); stage.classList.toggle('ready',active); stage.classList.remove('watching'); host.setAttribute('aria-disabled',active?'false':'true'); }
+    function start(){ if(started)return; started=true; expectedStroke=0; setState(true); status.textContent=memoryMode?'Memory mode: the character and outline are hidden. Draw the first stroke.':'Draw the first stroke. The guide appears after one miss.'; writer.quiz({leniency:1.1,showHintAfterMisses:1,onMistake:function(){ status.textContent='That is not the next stroke. Try again, or use Show next stroke.'; },onCorrectStroke:function(info){ expectedStroke=info.strokeNum+1; window.CrowStroke.clearHint(host); status.textContent='Stroke '+info.strokeNum+' is in. Keep going.'; },onComplete:function(){ status.textContent='Complete.'; stage.classList.add('done'); api.finish(true); }}); }
+    var watch=el('button','btn ghost','Watch order'), hint=el('button','btn ghost','Show next stroke'), memoryToggle=el('label','memory-switch');
     memoryToggle.innerHTML='<span class="memory-label">Practice from memory <small id="memory-state">Off</small></span><input type="checkbox" role="switch" aria-label="Practice from memory"><i aria-hidden="true"></i>';
     var memoryInput=memoryToggle.querySelector('input'), memoryState=memoryToggle.querySelector('#memory-state');
-    watch.onclick=function(){ writer.cancelQuiz(); started=false; setState(false); stage.classList.add('watching'); lockNote.textContent='Watching'; status.textContent='Watch the sequence, then press Start drawing when you are ready.'; writer.animateCharacter({strokeAnimationSpeed:1.2,delayBetweenStrokes:220}); };
-    tryBtn.onclick=start; hint.onclick=function(){ if(!started) return; writer.highlightStroke(expectedStroke); status.textContent='The highlighted stroke is next.'; }; memoryInput.onchange=function(){ if(started) return; setMemoryMode(memoryInput.checked); status.textContent=memoryMode?'Memory mode is on. Only the pinyin and meaning remain visible.':'Guided mode is on. The reference outline is visible.'; };
-    actions.appendChild(watch); actions.appendChild(tryBtn); actions.appendChild(hint); box.insertBefore(memoryToggle,stage);
+    watch.onclick=function(){ writer.cancelQuiz(); started=false; setState(false); stage.classList.add('watching'); status.textContent='Watch the order. You can write again as soon as it finishes.'; writer.animateCharacter({strokeAnimationSpeed:1.2,delayBetweenStrokes:220,onComplete:function(){ start(); }}); };
+    hint.onclick=function(){ if(!started) start(); status.textContent='This is the next stroke, drawn in its own direction.'; window.CrowStroke.showStroke(host,'../assets/hanzi-data/'+encodeURIComponent(q.hanzi)+'.json',expectedStroke).then(function(shown){ if(!shown) status.textContent='There is no stroke left to show.'; }); }; memoryInput.onchange=function(){ if(started) return; setMemoryMode(memoryInput.checked); status.textContent=memoryMode?'Memory mode is on. Only the pinyin and meaning remain visible.':'Guided mode is on. The reference outline is visible.'; };
+    actions.appendChild(watch); actions.appendChild(hint); var top=el('div','writer-top'); top.appendChild(memoryToggle); box.insertBefore(top,stage);
     setMemoryMode(memoryMode);
     setState(false);
+    setTimeout(function(){ window.CrowStroke.fit(host,300); start(); },0);
   }
   function cycleWrite(pool){ var order=[],index=0; return function(){ if(index>=order.length){order=shuffle(pool);index=0;} return writeQ(order[index++]); }; }
   function fullRadicalReviewGen(pool){ var order=[],index=0,mode=0; return function(){ if(index>=order.length){order=shuffle(pool);index=0;} var x=order[index++],kind=mode++%2; return kind===0?radicalMeaningQ([x].concat(shuffle(pool.filter(function(y){return y!==x;})).slice(0,3))):radicalPinyinQ([x].concat(shuffle(pool.filter(function(y){return y!==x;})).slice(0,3))); }; }

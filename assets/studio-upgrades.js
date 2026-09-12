@@ -53,28 +53,235 @@ async function showTasks(){
   if(!entries.length)holder.innerHTML='<p class="upgrade-copy">Add a Task list block to collect work here.</p>';
   entries.forEach(row=>{const label=document.createElement('label');label.className='upgrade-task';label.innerHTML='<input type="checkbox" '+(row.item.done?'checked':'')+'><span>'+esc(row.item.text||'Untitled task')+'</span><small>'+esc(row.block.title||'Untitled block')+'</small>';label.querySelector('input').onchange=async e=>{const items=(row.block.items||[]).map(x=>Object.assign({},x));items[row.index].done=e.target.checked;row.block.items=items;await cloud().patchBlock(id,row.block.id,{items});};holder.appendChild(label);});
 }
-async function snapshot(){
-  const id=projectId();if(!id)return;
-  const label=window.prompt('Name this checkpoint','Before changes');if(label===null)return;
-  const projects=await cloud().listProjects(), project=projects.filter(x=>x.id===id)[0];const blocks=await cloud().listBlocks(id);
-  await cloud().saveHistory(id,label,{project:{title:project.title,sections:project.sections||[]},blocks});
-  closeOverlay();showHistory();
+/* Studio's own prompts live inside its closure, so the panel builds its two
+   on the same overlay it uses for everything else. */
+function ask(title, body, confirmLabel){
+  return new Promise(function(settle){
+    const box=overlay(title,'<p class="upgrade-copy">'+esc(body).replace(/\n/g,'<br>')+'</p>'
+      +'<div class="upgrade-history-actions"><button class="btn ghost sm" data-no>Cancel</button><button class="btn sm" data-yes>'+esc(confirmLabel||'Continue')+'</button></div>');
+    let answered=false;
+    const finish=function(value){ if(answered)return; answered=true; closeOverlay(); settle(value); };
+    box.querySelector('[data-yes]').onclick=function(){ finish(true); };
+    box.querySelector('[data-no]').onclick=function(){ finish(false); };
+    box.querySelector('.upgrade-close').onclick=function(){ finish(false); };
+  });
+}
+function tell(title, body){ return ask(title, body, 'OK'); }
+/* ------------------------------------------------------------------ history
+   A project keeps two kinds of version. One you ask for by name, before a
+   change you are not sure about. The other Studio takes on its own once you
+   have edited and then stopped for a while, so there is something to go back
+   to even when nobody thought to save one.
+
+   Opening a version never touches the project. It puts Studio into a reading
+   state over the old copy, with live updates paused and editing refused, and
+   only Restore writes anything back. */
+
+const QUIET_MS = 45000;      /* a pause this long ends a stretch of editing */
+const LONGEST_MS = 600000;   /* and a stretch never runs longer than this  */
+const KEEP_AUTOMATIC = 25;   /* named versions are kept for good           */
+
+let dirtySince = 0, lastEdit = 0, savingVersion = false;
+let lastSavedMark = '', autosaveProject = '';
+
+function studio(){ return window.CrowStudio; }
+function versionMark(data){
+  if(!data)return '';
+  const tidy = (block) => {
+    const copy = Object.assign({}, block);
+    delete copy.updatedAt; delete copy.updatedBy; delete copy.pending;
+    return copy;
+  };
+  try{
+    return JSON.stringify({
+      title:(data.project&&data.project.title)||'',
+      sections:(data.project&&data.project.sections)||[],
+      blocks:(data.blocks||[]).map(tidy)
+    });
+  }catch(error){ return ''; }
+}
+function markDirty(){
+  const id = studio() && studio().projectId();
+  if(!id || (studio().previewing && studio().previewing()))return;
+  if(id !== autosaveProject){ autosaveProject = id; lastSavedMark = ''; dirtySince = 0; }
+  lastEdit = Date.now();
+  if(!dirtySince) dirtySince = lastEdit;
+}
+/* Every write Studio makes passes through the cloud object, so marking an edit
+   here catches all of them at once, including ones added later. */
+function watchEdits(){
+  const c = cloud();
+  if(!c || c.__historyWatched)return;
+  c.__historyWatched = true;
+  ['saveBlock','patchBlock','deleteBlock','saveProject'].forEach(function(name){
+    const original = c[name];
+    if(typeof original !== 'function')return;
+    c[name] = function(){ markDirty(); return original.apply(this, arguments); };
+  });
+}
+async function autosaveTick(){
+  if(savingVersion || !dirtySince)return;
+  const s = studio();
+  if(!s || !s.projectId() || !s.canEdit() || (s.previewing && s.previewing()))return;
+  const now = Date.now();
+  const settled = now - lastEdit >= QUIET_MS;
+  const overdue = now - dirtySince >= LONGEST_MS;
+  if(!settled && !overdue)return;
+  const data = s.snapshot();
+  const mark = versionMark(data);
+  /* Undoing an edit back to where it started leaves nothing worth keeping. */
+  if(!data || !mark || mark === lastSavedMark){ dirtySince = 0; return; }
+  savingVersion = true;
+  try{
+    const id = s.projectId();
+    await cloud().saveHistory(id, 'Automatic version', data, 'auto');
+    lastSavedMark = mark; dirtySince = 0;
+    await pruneAutomatic(id);
+  }catch(error){
+    /* An offline moment should not cost the next attempt. */
+    dirtySince = now - LONGEST_MS + 60000;
+  }finally{ savingVersion = false; }
+}
+/* Named versions are kept because somebody chose them. Automatic ones are a
+   safety net, so only the most recent stretch of them is worth the room. */
+async function pruneAutomatic(projectId){
+  try{
+    const list = await cloud().listHistory(projectId);
+    const spare = list.filter(x => (x.kind || 'named') === 'auto').slice(KEEP_AUTOMATIC);
+    for(const old of spare) await cloud().removeHistory(projectId, old.id);
+  }catch(error){}
+}
+
+function whenSaved(ms){
+  const then = new Date(ms || 0), now = new Date();
+  const time = then.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+  if(then.toDateString() === now.toDateString())return 'Today, ' + time;
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+  if(then.toDateString() === yesterday.toDateString())return 'Yesterday, ' + time;
+  return then.toLocaleDateString([], { month:'short', day:'numeric', year:then.getFullYear()===now.getFullYear()?undefined:'numeric' }) + ', ' + time;
+}
+
+async function saveCheckpoint(){
+  const s = studio(), id = s && s.projectId();
+  if(!id)return;
+  const label = window.prompt('Name this version', 'Before changes');
+  if(label === null)return;
+  const data = s.snapshot();
+  await cloud().saveHistory(id, label.trim() || 'Checkpoint', data, 'named');
+  lastSavedMark = versionMark(data); dirtySince = 0;
+  showHistory();
+}
+async function nameVersion(entry){
+  const id = studio() && studio().projectId();
+  if(!id)return;
+  const label = window.prompt('Name this version', 'Version from ' + whenSaved(entry.createdMs));
+  if(label === null)return;
+  try{ await cloud().nameHistory(id, entry.id, label.trim() || 'Named version'); }
+  catch(error){ await tell('This version could not be named', 'Firebase turned the change down. The history rules in your console need to allow an owner or editor to change a version’s label.'); return; }
+  showHistory();
+}
+/* Reading a version is a separate request, because the list deliberately does
+   not carry every copy of the project with it. */
+async function openVersion(entry){
+  const id = studio() && studio().projectId();
+  if(!id)return;
+  const full = entry.snapshot ? entry : await cloud().readHistory(id, entry.id);
+  if(!full || !full.snapshot){ await tell('This version could not be opened', 'Its contents are missing.'); return; }
+  closeOverlay();
+  studio().openPreview(full);
 }
 async function duplicateRevision(revision){
-  const c=cloud(), data=revision.snapshot;if(!data)return;
-  const id=await c.createProject((data.project&&data.project.title||'Project')+' copy');
-  await c.saveProject(id,{title:(data.project&&data.project.title||'Project')+' copy',sections:data.project.sections||[]});
-  await Promise.all((data.blocks||[]).map((b,i)=>{const copy=Object.assign({},b,{id:'restored-'+Date.now()+'-'+i,order:Date.now()+i});return c.saveBlock(id,copy.id,copy);}));
-  closeOverlay();refreshProject(id);
+  const c = cloud(), data = revision.snapshot;
+  if(!data)return;
+  const title = (data.project && data.project.title || 'Project') + ' copy';
+  const id = await c.createProject(title);
+  await c.saveProject(id, { title:title, sections:(data.project && data.project.sections) || [] });
+  await Promise.all((data.blocks || []).map((b, i) => {
+    const copy = Object.assign({}, b, { id:'restored-' + Date.now() + '-' + i, order:Date.now() + i });
+    return c.saveBlock(id, copy.id, copy);
+  }));
+  closeOverlay();
+  refreshProject(id);
+}
+/* Restoring is the one thing here that changes the project everyone shares, so
+   it says plainly what it will do, and takes a version of the present first. */
+async function restoreVersion(entry){
+  const s = studio(), id = s && s.projectId();
+  if(!id)return;
+  const full = entry.snapshot ? entry : await cloud().readHistory(id, entry.id);
+  if(!full || !full.snapshot)return;
+  const when = whenSaved(full.createdMs);
+  const ok = await ask('Restore this version?',
+    'The project goes back to how it was on ' + when + '. Work added since then is removed, for everyone this project is shared with.\n\n'
+    + 'A version of the project as it stands right now is saved first, so this can be undone from the same list.',
+    'Restore this version');
+  if(!ok)return;
+  const before = s.snapshot();
+  try{ await cloud().saveHistory(id, 'Before restoring “' + (full.label || 'a version') + '”', before, 'named'); }catch(error){}
+  closeOverlay();
+  await s.restore(full.snapshot);
+  if(s.previewing())s.closePreview(); else await s.reload(id);
+}
+
+function versionRowHTML(entry, automatic){
+  const who = entry.author ? 'by @' + esc(entry.author) : '';
+  const label = automatic ? whenSaved(entry.createdMs) : esc(entry.label || 'Named version');
+  const note = automatic ? who : whenSaved(entry.createdMs) + (who ? ' · ' + who : '');
+  return '<div class="upgrade-history-line"><b>' + label + '</b>'
+    + (automatic ? '' : '<em class="version-tag">named</em>')
+    + '<span>' + note + '</span></div>'
+    + '<div class="version-actions">'
+    + '<button class="btn ghost sm" data-act="view">View</button>'
+    + '<button class="btn ghost sm" data-act="restore">Restore</button>'
+    + (automatic ? '<button class="btn ghost sm" data-act="name">Name this version</button>' : '')
+    + '<button class="btn ghost sm" data-act="copy">Make a copy</button>'
+    + '</div>';
 }
 async function showHistory(){
-  const id=projectId();if(!id)return;
-  const box=overlay('Version history','<div class="upgrade-history-actions"><button class="btn sm" data-checkpoint>Save checkpoint</button></div><div class="upgrade-history-list"></div>');
-  box.querySelector('[data-checkpoint]').onclick=snapshot;
-  const list=await cloud().listHistory(id), holder=box.querySelector('.upgrade-history-list');
-  if(!list.length)holder.innerHTML='<p class="upgrade-copy">No checkpoints yet. Save one before a major change, then you can safely make a copy of it later.</p>';
-  list.forEach(item=>{const row=document.createElement('div');row.className='upgrade-history';row.innerHTML='<b>'+esc(item.label)+'</b><span>by @'+esc(item.author||'someone')+' · '+new Date(item.createdMs||0).toLocaleString()+'</span><button class="btn ghost sm">Duplicate this version</button>';row.querySelector('button').onclick=()=>duplicateRevision(item);holder.appendChild(row);});
+  const s = studio(), id = s && s.projectId();
+  if(!id)return;
+  const box = overlay('Version history',
+    '<p class="upgrade-copy">Studio saves a version on its own after you edit and then stop for a while. Save one by name before anything you might want to come back from.</p>'
+    + '<div class="upgrade-history-actions"><button class="btn sm" data-checkpoint>Name a version of right now</button></div>'
+    + '<div class="upgrade-history-list"><p class="upgrade-copy">Loading…</p></div>');
+  box.querySelector('[data-checkpoint]').onclick = saveCheckpoint;
+  const holder = box.querySelector('.upgrade-history-list');
+  let list = [];
+  try{ list = await cloud().listHistory(id); }
+  catch(error){ holder.innerHTML = '<p class="upgrade-copy">This project’s history could not be read.</p>'; return; }
+  if(!list.length){
+    holder.innerHTML = '<p class="upgrade-copy">No versions yet. One is saved automatically the first time you edit this project and then pause.</p>';
+    return;
+  }
+  holder.innerHTML = '';
+  list.forEach(function(entry){
+    const automatic = (entry.kind || 'named') === 'auto';
+    const row = document.createElement('div');
+    row.className = 'upgrade-history' + (automatic ? ' is-auto' : '');
+    row.innerHTML = versionRowHTML(entry, automatic);
+    row.querySelectorAll('[data-act]').forEach(function(button){
+      button.onclick = function(){
+        const act = button.dataset.act;
+        if(act === 'view')return openVersion(entry);
+        if(act === 'restore')return restoreVersion(entry);
+        if(act === 'name')return nameVersion(entry);
+        return duplicateRevision(entry);
+      };
+    });
+    holder.appendChild(row);
+  });
 }
+/* The Restore button on the preview bar comes back through here, so the
+   warning is worded the same way wherever it is reached from. */
+window.CrowStudioHistory = {
+  confirmRestore:function(){
+    const s = studio();
+    if(!s || !s.previewing())return;
+    restoreVersion(s.previewEntry());
+  },
+  open:showHistory
+};
+
 async function showComments(blockId){
   const id=projectId();if(!id)return;
   const box=overlay('Comments','<div class="upgrade-comments"></div><form class="upgrade-comment-form"><textarea placeholder="Write a comment. Use @username to mention someone."></textarea><button class="btn sm">Comment</button></form>');
@@ -124,5 +331,6 @@ function decorate(){
   root.querySelectorAll('[data-block]').forEach(card=>{bindComment(card);});
   bindSlash();
 }
-function start(){if(!root){return;}observer=new MutationObserver(()=>setTimeout(decorate,0));observer.observe(root,{childList:true,subtree:true});setInterval(decorate,700);decorate();}
+window.CrowStudioUpgrades={decorate:function(){ decorate(); }};
+function start(){if(!root){return;}observer=new MutationObserver(()=>setTimeout(decorate,0));observer.observe(root,{childList:true,subtree:true});setInterval(decorate,700);setInterval(function(){watchEdits();autosaveTick();},5000);decorate();}
 start();

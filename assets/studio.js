@@ -2,6 +2,41 @@
   'use strict';
   var root=document.querySelector('#studio');
   var activeProject=null, activeSection='all', activePage='all', openSectionMenu='', blocks=[], saveTimers={}, savePatches={}, studioError='', view='project', readOnly=false, loadingProject=false;
+  /* Looking at an old version is a place Studio stands in, not a copy it
+     makes. The live project is set aside in liveState, the watchers are let
+     go so nothing arrives while you read, and every write is refused. */
+  var preview=null, liveState=null;
+  var SIDE_KEY='crowstudies:studio:projects-open';
+  function narrow(){ try{ return window.matchMedia('(max-width:780px)').matches; }catch(error){ return false; } }
+  var sideOpen=narrow()?false:(function(){ try{ return localStorage.getItem(SIDE_KEY)!=='0'; }catch(error){ return true; } }());
+  /* Folding the list away is not worth a redraw: it would close every shared
+     note on the page and take the cursor with it. */
+  function setSide(open){
+    sideOpen=open;
+    if(!narrow()){ try{ localStorage.setItem(SIDE_KEY,open?'1':'0'); }catch(error){} }
+    root.classList.toggle('side-closed',!open);
+    var side=root.querySelector('.studio-side');
+    if(side)side.classList.toggle('is-open',open);
+    var scrim=root.querySelector('.side-scrim');
+    if(scrim)scrim.hidden=!open;
+    root.querySelectorAll('[data-side-toggle]').forEach(function(button){ button.setAttribute('aria-expanded',open?'true':'false'); });
+  }
+  function sideToggleHTML(where){
+    /* The handle keeps still. In the sidebar it is the first thing in the
+       header, and when the column folds down to a rail it is all that is left
+       there — same corner, same size, so it is where you left it either way.
+       The copy in the main column is for a phone, where the sidebar is a
+       drawer that takes its own handle off the screen with it. */
+    return '<div class="studio-crumb'+(where?' '+where:'')+'"><button type="button" class="side-toggle" data-side-toggle aria-expanded="'+(sideOpen?'true':'false')+'" title="Show or hide your projects"><span class="side-toggle-mark" aria-hidden="true"></span><span class="side-toggle-label">Projects</span></button></div>';
+  }
+  try{
+    window.matchMedia('(max-width:780px)').addEventListener('change',function(event){
+      /* A drawer that survived a rotation would be sitting on top of the work. */
+      if(event.matches&&sideOpen)setSide(false);
+      else if(!event.matches){ try{ setSide(localStorage.getItem(SIDE_KEY)!=='0'); }catch(error){ setSide(true); } }
+    });
+  }catch(error){}
+  function previewing(){ return !!preview; }
   /* Escapes quotes too: these strings are also dropped into attribute values. */
   function esc(value){ var n=document.createElement('div'); n.textContent=value||''; return n.innerHTML.replace(/"/g,'&quot;'); }
   function id(){ return (crypto.randomUUID && crypto.randomUUID()) || ('block-'+Date.now()+'-'+Math.random().toString(16).slice(2)); }
@@ -284,13 +319,29 @@
      the grid, so one drop used to echo back as a burst of redraws. What is on
      screen is compared with what arrived, ignoring the timestamps the server
      rewrites, and an echo of our own work is dropped. */
+  /* Firestore does not promise to hand a document's fields back in any
+     particular order, and the order does change: the copy of a write echoed
+     back locally and the copy the server acknowledges can carry the same data
+     with its keys arranged differently. JSON.stringify writes keys in the order
+     it finds them, so one unchanged project read twice produced two different
+     strings, every write looked like news, and the whole workspace was redrawn
+     for it. Sorting the keys makes the comparison about content and nothing
+     else. */
+  function stableJSON(value){
+    if(Array.isArray(value))return '['+value.map(stableJSON).join(',')+']';
+    if(value&&typeof value==='object')
+      return '{'+Object.keys(value).sort().map(function(key){
+        return JSON.stringify(key)+':'+stableJSON(value[key]);
+      }).join(',')+'}';
+    return JSON.stringify(value===undefined?null:value);
+  }
   function withoutStamps(value){
     var copy=Object.assign({}, value);
     delete copy.updatedAt; delete copy.updatedBy; delete copy.createdAt; delete copy.pending;
     return copy;
   }
   function blocksSignature(list){
-    return list.map(function(block){ return JSON.stringify(withoutStamps(block)); }).join('\u0000');
+    return list.map(function(block){ return stableJSON(withoutStamps(block)); }).join('\u0000');
   }
   /* Firestore first reports this browser's pending write, then reports the
      acknowledged copy. Treat an actual content difference stamped by this
@@ -308,7 +359,7 @@
     var changed=false;
     for(var id in nextById){
       var previous=oldById[id], current=nextById[id];
-      if(!previous||JSON.stringify(withoutStamps(previous))!==JSON.stringify(withoutStamps(current))){
+      if(!previous||stableJSON(withoutStamps(previous))!==stableJSON(withoutStamps(current))){
         changed=true;
         if(current.updatedBy!==mine)return false;
       }
@@ -321,9 +372,16 @@
     }
     return changed;
   }
+  /* `people` is not project data: it is names and avatars fetched from
+     profiles and folded into the copies the list keeps. The single-project
+     watcher delivers the raw document without it, so comparing the two as-is
+     reported a difference on every write and redrew the whole workspace. What
+     actually decides who is in a project is `members`, which is compared. */
   function projectSignature(project){
     if(!project)return '';
-    return JSON.stringify(withoutStamps(project));
+    var copy=withoutStamps(project);
+    delete copy.people;
+    return stableJSON(copy);
   }
   /* Whatever is already drawn counts as seen. Anything that changes a block and
      puts the result on screen itself says so here, so the write coming back
@@ -472,7 +530,7 @@
     for(var i=0;i<oldShown.length;i++)if(oldShown[i].id!==nextShown[i].id)return false;
     var changed=false, blocked=false;
     nextShown.forEach(function(block,index){
-      if(JSON.stringify(withoutStamps(oldShown[index]))===JSON.stringify(withoutStamps(block)))return;
+      if(stableJSON(withoutStamps(oldShown[index]))===stableJSON(withoutStamps(block)))return;
       var card=root.querySelector('[data-block="'+block.id+'"]');
       if(!card){ blocked=true; return; }
       if(card.contains(document.activeElement)){
@@ -514,6 +572,7 @@
     if(window.CrowUI)window.CrowUI.notice({title:'Live collaboration is unavailable',body:'Your project still saves normally, but viewer status and cursors could not connect. Check the Firestore presence rules and reload.'});
   }
   function sendPresence(force){
+    if(previewing())return;
     var state=presenceState(); if(!state)return;
     var key=JSON.stringify(state), now=Date.now();
     if(!force&&key===lastPresenceKey)return;
@@ -588,7 +647,7 @@
     var role=cloud().role?cloud().role(project):'owner', other=projectCompanions(project);
     var owner=(project.people&&project.people[project.owner]&&project.people[project.owner].name)||'Another person';
     var detail=shared?'Shared by '+owner+' · '+(role==='viewer'?'view only':'can edit'):(other?other+(other===1?' collaborator':' collaborators'):'Private');
-    return '<div class="project-row '+(shared?'is-shared':'is-personal')+'"><button class="project-item '+(current?'active ':'')+(shared?'shared':'')+'" data-project="'+project.id+'" title="'+esc(project.title)+'"><span class="project-row-title">'+esc(project.title)+'</span><small>'+esc(detail)+'</small></button>'+(current?'<button class="project-cog" data-project-settings title="Project settings" aria-label="Project settings">⚙</button>':'')+'</div>';
+    return '<div class="project-row '+(shared?'is-shared':'is-personal')+'"><button class="project-item '+(current?'active ':'')+(shared?'shared':'')+'" data-project="'+project.id+'" title="'+esc(project.title)+'"><span class="project-row-title">'+esc(project.title)+'</span><small>'+esc(detail)+'</small></button>'+'<button class="project-cog" data-project-settings="'+project.id+'" title="Settings for '+esc(project.title)+'" aria-label="Settings for '+esc(project.title)+'">&#9881;</button></div>';
   }
   function projectListHTML(projects){
     var personal=projects.filter(ownsProject), shared=projects.filter(function(project){ return !ownsProject(project); });
@@ -598,6 +657,27 @@
     }
     return group('Your projects','personal',personal)+group('Shared with you','shared',shared)
       || '<p class="project-list-empty">No projects yet.</p>';
+  }
+  /* Settings is another page of the same project rather than a different
+     place, so it arrives as one: the browser holds the panel that is leaving
+     over the one arriving and fades between them. Anyone who has asked for
+     less motion, and any browser without view transitions, gets the redraw on
+     its own — the same page, just immediately. */
+  function renderSwitch(){
+    var still=false;
+    try{ still=window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(error){}
+    if(still||typeof document.startViewTransition!=='function'){ render(); return; }
+    var page=document.documentElement;
+    page.classList.add('studio-switch');
+    var done=function(){ page.classList.remove('studio-switch'); };
+    try{
+      var move=document.startViewTransition(function(){ render(); });
+      /* A transition the browser decides not to run — a tab in the background,
+         another one already going — still redraws the page, and only reports
+         the skip. There is nothing to recover from, so it is not an error. */
+      if(move&&move.finished&&move.finished.catch)move.finished.catch(function(){}).then(done,done);
+      else done();
+    }catch(error){ done(); render(); }
   }
   function render(){
     /* A structural redraw closes open document providers. Normal remote note
@@ -620,18 +700,29 @@
       root.querySelector('[data-retry-studio]').onclick=function(){ studioError=''; loadProjects(); }; return;
     }
     var projects=window.__crowProjects||[];
-    root.innerHTML='<aside class="studio-side"><div class="studio-sidehead"><h2>Projects</h2><div class="side-actions"><button class="btn ghost sm" data-import-project title="Import a project from a .json file">Import</button><button class="btn sm" data-new-project>New</button></div></div><div class="project-list">'+projectListHTML(projects)+'</div></aside><main class="studio-main '+((readOnly||!canEdit())?'read-only':'')+'">'+(activeProject ? (view==='settings'?settingsHTML():projectHTML()) : '<div class="studio-empty"><h1>Make a project</h1><p>Collect study notes, plans, schedules, ideas, and your own practice cards in one place.</p><button class="btn" data-new-project>New project</button><button class="btn ghost" data-example-project>Add the example project</button><button class="btn ghost" data-import-project>Import a project</button></div>')+'</main>';
+    root.classList.toggle('side-closed',!sideOpen);
+    root.innerHTML='<div class="side-scrim" data-side-close'+(sideOpen?'':' hidden')+'></div><aside class="studio-side'+(sideOpen?' is-open':'')+'">'+sideToggleHTML('in-rail')+'<div class="studio-sidehead"><h2>Projects</h2><div class="side-actions"><button class="btn ghost sm" data-import-project title="Import a project from a .json file">Import</button><button class="btn sm" data-new-project>New</button></div></div><div class="project-list">'+projectListHTML(projects)+'</div></aside><main class="studio-main '+((readOnly||!canEdit())?'read-only':'')+(previewing()?' in-preview':'')+'">'+sideToggleHTML('on-top')+(activeProject ? (view==='settings'?settingsHTML():projectHTML()) : '<div class="studio-empty"><h1>Make a project</h1><p>Collect study notes, plans, schedules, ideas, and your own practice cards in one place.</p><button class="btn" data-new-project>New project</button><button class="btn ghost" data-example-project>Add the example project</button><button class="btn ghost" data-import-project>Import a project</button></div>')+'</main>';
     bind();
     mountCollaborativeEditors();
+    /* Tasks, History and the comment rows are added by the upgrades script,
+       which used to hear about a redraw from a MutationObserver and act on the
+       next tick — after the browser had already painted the page without them,
+       so the header shuffled a frame later. Asking for them here puts them in
+       before anything is shown. */
+    try{ if(window.CrowStudioUpgrades&&window.CrowStudioUpgrades.decorate)window.CrowStudioUpgrades.decorate(); }catch(error){}
     setTimeout(paintPresence,0);
   }
   function mountCollaborativeEditors(){
+    /* A shared note is a live document. Mounting one here would quietly put
+       today's text inside a page that is meant to be showing an old one. */
+    if(previewing())return;
     if(!window.CrowCollab||!window.CrowCollab.enabled()||!activeProject||!cloud().user)return;
     root.querySelectorAll('[data-block].note [data-body]').forEach(function(body){
       var card=body.closest('[data-block]'), block=blocks.filter(function(item){return item.id===card.dataset.block;})[0];
       if(!block||body.dataset.collabActive==='true')return;
+      /* The plain toolbar stays until the shared one exists, so the row is
+         never missing from the card in between. */
       var oldTools=card.querySelector('.rich-tools');
-      if(oldTools)oldTools.hidden=true;
       window.CrowCollab.mount(body,{
         documentName:'project:'+activeProject.id+':block:'+block.id,
         user:cloud().user,
@@ -639,6 +730,8 @@
         avatarUrl:(cloud().profile&&cloud().profile.avatarUrl)||'',
         readOnly:readOnly||!canEdit()||sectionLocked(block.sectionId),
         onStatus:function(status){ card.classList.toggle('collab-offline',status!=='connected'); }
+      }).then(function(entry){
+        if(entry&&oldTools)oldTools.hidden=true;
       }).catch(function(error){
         body.dataset.collabActive='';
         if(oldTools)oldTools.hidden=false;
@@ -682,6 +775,117 @@
       closeSectionMenu();
     },true);
   }
+  function whenSaved(ms){
+    var then=new Date(ms||0), now=new Date();
+    var sameDay=then.toDateString()===now.toDateString();
+    var time=then.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+    return sameDay?'today at '+time:then.toLocaleDateString([], { month:'long', day:'numeric' })+' at '+time;
+  }
+  /* The one thing on the page that says you are not where you left off. It
+     stays put at the top while you read, and both ways out are on it. */
+  function previewBarHTML(){
+    if(!previewing())return '';
+    var who=preview.author?' · saved by '+esc(preview.author):'';
+    return '<div class="preview-bar" role="status"><span class="preview-dot" aria-hidden="true"></span>'
+      +'<div class="preview-said"><b>'+esc(preview.label||'Earlier version')+'</b>'
+      +'<span>Viewing a version from '+esc(whenSaved(preview.createdMs))+who+'. Nothing here can be edited, and live changes from other people are paused.</span></div>'
+      +'<button class="btn ghost sm" data-exit-preview>Back to the current version</button></div>';
+  }
+  function enterPreview(entry){
+    if(!activeProject||!entry||!entry.snapshot)return false;
+    if(!preview)liveState={ project:activeProject, blocks:blocks, readOnly:readOnly, section:activeSection, page:activePage, view:view };
+    dropWatchers();
+    var data=entry.snapshot;
+    preview={ id:entry.id, label:entry.label, kind:entry.kind, createdMs:entry.createdMs, author:entry.author, snapshot:data };
+    /* The version stores what the project said, not who could see it, so the
+       live project's membership is kept underneath. */
+    activeProject=Object.assign({},liveState.project,{
+      title:(data.project&&data.project.title)||liveState.project.title,
+      sections:(data.project&&data.project.sections)||[]
+    });
+    blocks=(Array.isArray(data.blocks)?data.blocks:[]).map(normalizeBlock)
+      .sort(function(a,b){ return (a.order||0)-(b.order||0); });
+    readOnly=true; view='project'; activeSection='all'; activePage='all'; loadingProject=false;
+    render();
+    return true;
+  }
+  function exitPreview(){
+    if(!preview)return;
+    var back=liveState;
+    preview=null; liveState=null;
+    activeProject=back.project; blocks=back.blocks; readOnly=back.readOnly;
+    activeSection=back.section; activePage=back.page; view=back.view;
+    render();
+    /* Back on the live copy, so pick the conversation up again. */
+    watchActiveProject();
+    loadProjects(activeProject&&activeProject.id);
+  }
+  /* Restoring writes the version over the project in place, so the address and
+     everyone it is shared with stay as they are. Blocks the version never had
+     are removed; the ones it does have are written back under their own ids, so
+     a restore is a move backwards rather than a second copy. */
+  async function restoreSnapshot(data){
+    if(!activeProject||!data)return;
+    var projectId=activeProject.id;
+    var incoming=(Array.isArray(data.blocks)?data.blocks:[]).map(normalizeBlock);
+    var keep={};
+    incoming.forEach(function(block){ keep[block.id]=true; });
+    var current=await cloud().listBlocks(projectId);
+    for(var i=0;i<current.length;i++){
+      if(keep[current[i].id])continue;
+      await cloud().deleteBlock(projectId,current[i].id);
+    }
+    for(var j=0;j<incoming.length;j++){
+      var copy=Object.assign({},incoming[j]);
+      delete copy.pending;
+      await cloud().saveBlock(projectId,copy.id,copy);
+    }
+    await cloud().saveProject(projectId,{
+      title:(data.project&&data.project.title)||activeProject.title,
+      sections:(data.project&&data.project.sections)||[]
+    });
+    return projectId;
+  }
+  function freeImageSlot(block){
+    if(block.imageSlot)return block.imageSlot;
+    var used={};
+    blocks.filter(function(item){ return item.type==='image'&&item.imageSlot; })
+      .forEach(function(item){ used[item.imageSlot]=true; });
+    for(var number=1;number<=20;number++){
+      var candidate='image-'+String(number).padStart(2,'0');
+      if(!used[candidate])return candidate;
+    }
+    return '';
+  }
+  async function takeImage(block, file, control){
+    var slot=freeImageSlot(block);
+    if(!slot){ await notify('Project image limit reached','A project can store up to 20 images (30 MB total). Delete an uploaded image to free a slot.'); return; }
+    try{
+      if(control)control.disabled=true;
+      var media=await cloud().uploadProjectImage(activeProject.id,slot,file);
+      block.imageSlot=media.slot; block.imageUrl=media.url;
+      await cloud().patchBlock(activeProject.id,block.id,{imageSlot:block.imageSlot,imageUrl:block.imageUrl});
+      render();
+    }catch(error){
+      await notify('Image not uploaded',error.message||'Try a JPEG, PNG, or WebP under 1.5 MB.');
+      if(control)control.disabled=false;
+    }
+  }
+  /* The panel is already the thing you click, so it may as well be the thing
+     you drop onto. */
+  function bindImageDrop(zone, block){
+    ['dragenter','dragover'].forEach(function(name){
+      zone.addEventListener(name,function(event){ event.preventDefault(); zone.classList.add('is-over'); });
+    });
+    ['dragleave','dragend'].forEach(function(name){
+      zone.addEventListener(name,function(){ zone.classList.remove('is-over'); });
+    });
+    zone.addEventListener('drop',function(event){
+      event.preventDefault(); zone.classList.remove('is-over');
+      var file=event.dataTransfer&&event.dataTransfer.files&&event.dataTransfer.files[0];
+      if(file)takeImage(block,file,null);
+    });
+  }
   function projectHTML(){
     var sections=activeProject.sections||[];
     var shown=blocks.filter(function(b){return (activeSection==='all'||(b.sectionId||'')===activeSection)&&(activePage==='all'||(b.pageId||'')===activePage);});
@@ -693,13 +897,16 @@
     var pageBar=activeSection&&activeSection!=='all'?'<div class="page-bar"><button class="page-filter '+(activePage==='all'?'active':'')+'" data-page="all">All pages</button>'+pages.map(function(p){return '<button class="page-filter '+(activePage===p.id?'active':'')+'" data-page="'+p.id+'">'+esc(p.title)+'</button>';}).join('')+'</div>':'';
     var locked=activeSection&&activeSection!=='all'&&sectionLocked(activeSection);
     if(loadingProject){
-      return '<div class="project-top"><h1 class="project-title">'+esc(activeProject.title)+'</h1></div>'
+      return previewBarHTML()+'<div class="project-top"><h1 class="project-title">'+esc(activeProject.title)+'</h1></div>'
         +'<div class="block-grid is-loading">'+[0,1,2,3].map(function(){ return '<article class="studio-block block-skeleton"><span></span><span></span><span></span></article>'; }).join('')+'</div>';
     }
     var companions=projectCompanions(activeProject), shared=!ownsProject(activeProject);
     var access=shared?'Shared · '+(myRole()==='viewer'?'view only':'can edit'):(companions?companions+(companions===1?' collaborator':' collaborators')+' · shared':'Private project');
     var overview=blocks.length+' '+(blocks.length===1?'block':'blocks')+' · '+sections.length+' '+(sections.length===1?'section':'sections');
-    return '<div class="project-top"><div class="project-heading"><h1 class="project-title">'+esc(activeProject.title)+'</h1><div class="project-meta"><span class="'+(shared?'shared':'private')+'">'+esc(access)+'</span><span>'+esc(overview)+'</span></div><div class="project-presence" hidden><span>Viewing now</span><div class="collab-people" data-collab-people aria-label="People viewing this project"></div></div></div><div class="project-actions"><button class="btn ghost sm" data-toggle-view>'+ (readOnly?'Edit project':'View project') +'</button><button class="btn ghost sm" data-new-section>+ Section</button></div></div><div class="section-bar"><button class="section-filter '+(activeSection==='all'?'active':'')+'" data-section="all">All</button><button class="section-filter '+(activeSection===''?'active':'')+'" data-section="">Unsorted</button>'+sectionButtons+'</div>'+pageBar+(locked?'<p class="section-lock-note">This section is locked. Unlock it from its cog menu to edit.</p>':'')+'<div class="block-grid">'+shown.map(blockHTML).join('')+'</div><div class="add-row '+(locked?'is-locked':'')+'"><span>'+ (locked?'This section is locked':'Add a block') +'</span>'+['note','tasks','status','milestone','schedule','idea','lesson','table','image'].map(function(type){return '<button class="add-card" data-add="'+type+'"'+(locked?' disabled':'')+'>'+type+'</button>';}).join('')+'</div>';
+    var actions=previewing()
+      ? '<button class="btn sm" data-restore-preview>Restore this version</button>'
+      : '<button class="btn ghost sm" data-toggle-view>'+ (readOnly?'Edit project':'View project') +'</button><button class="btn ghost sm" data-new-section>+ Section</button>';
+    return previewBarHTML()+'<div class="project-top"><div class="project-heading"><h1 class="project-title">'+esc(activeProject.title)+'</h1><div class="project-meta"><span class="'+(shared?'shared':'private')+'">'+esc(access)+'</span><span>'+esc(overview)+'</span></div><div class="project-presence" hidden><span>Viewing now</span><div class="collab-people" data-collab-people aria-label="People viewing this project"></div></div></div><div class="project-actions">'+actions+'</div></div><div class="section-bar"><button class="section-filter '+(activeSection==='all'?'active':'')+'" data-section="all">All</button><button class="section-filter '+(activeSection===''?'active':'')+'" data-section="">Unsorted</button>'+sectionButtons+'</div>'+pageBar+(locked?'<p class="section-lock-note">This section is locked. Unlock it from its cog menu to edit.</p>':'')+'<div class="block-grid">'+shown.map(blockHTML).join('')+'</div><div class="add-row '+(locked?'is-locked':'')+'"><span>'+ (locked?'This section is locked':'Add a block') +'</span>'+['note','tasks','status','milestone','schedule','idea','lesson','table','image'].map(function(type){return '<button class="add-card" data-add="'+type+'"'+(locked?' disabled':'')+'>'+type+'</button>';}).join('')+'</div>';
   }
   function personName(uid){
     var people=(activeProject&&activeProject.people)||{};
@@ -963,7 +1170,16 @@
       }
     }
     if(block.type==='table') body='<div class="table-tools"><span>Drag across cells to select</span><button data-table-row'+disabled+'>+ Row</button><button data-table-col'+disabled+'>+ Column</button><button data-remove-row'+disabled+'>− Row</button><button data-remove-col'+disabled+'>− Column</button></div><div class="table-frame"><div class="block-body block-table" data-body contenteditable="'+editable+'" data-placeholder="Create a simple table…">'+(block.body?cleanHTML(block.body):TABLE_DEFAULT)+'</div><div class="table-resizers"></div></div>';
-    if(block.type==='image') body=(frozen?'':'<label class="image-upload"><span>Upload image</span><input data-image-upload type="file" accept="image/jpeg,image/png,image/webp"><small>JPEG, PNG, or WebP · 1.5 MB each · 20 images / 30 MB per project</small></label>')+'<input class="image-url" data-image-url value="'+esc(block.imageUrl||'')+'" placeholder="Or paste an image URL"'+disabled+'><div class="image-preview">'+(block.imageUrl?'<img src="'+esc(block.imageUrl)+'" alt="">':'Upload an image or paste a public image URL.')+'</div>';
+    if(block.type==='image'){
+      var picker='<input data-image-upload type="file" accept="image/jpeg,image/png,image/webp" hidden>';
+      body=(block.imageUrl
+        ? '<div class="image-preview"><img src="'+esc(block.imageUrl)+'" alt=""></div>'
+          +(frozen?'':'<div class="image-tools"><label class="image-swap">Replace'+picker+'</label><button type="button" class="image-swap" data-image-clear>Remove</button></div>')
+        : (frozen
+          ? '<div class="image-preview">No image yet.</div>'
+          : '<label class="image-drop" data-image-drop><span class="image-drop-mark" aria-hidden="true">+</span><b>Choose an image</b><small>or drop one here · JPEG, PNG, WebP up to 1.5 MB</small>'+picker+'</label>'))
+        +(frozen?'':'<input class="image-url" data-image-url value="'+esc(block.imageUrl||'')+'" placeholder="or paste an image address">');
+    }
     return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+'" data-block="'+block.id+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button><div class="block-kicker">'+labels[block.type]+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+labels[block.type].toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
   }
   function queuedSave(block, immediate, patch){
@@ -972,6 +1188,7 @@
        update the body while this person is changing the title without either
        write putting an older copy of the other field back into Firestore. */
     savePatches[block.id]=Object.assign(savePatches[block.id]||{},patch||block);
+    if(previewing())return;
     var commit=function(){
       var changes=savePatches[block.id]||block;
       delete saveTimers[block.id]; delete savePatches[block.id];
@@ -1418,14 +1635,29 @@
     scope.querySelectorAll('[data-remove-section]').forEach(function(button){button.onclick=async function(){var section=findSection(button.dataset.removeSection);if(!await askConfirm('Delete section?', 'Its blocks will stay in the project under Unsorted.', 'Delete section'))return;blocks.forEach(function(block){if(block.sectionId===section.id){block.sectionId='';block.pageId='';cloud().saveBlock(activeProject.id,block.id,block).catch(function(){});}});activeProject.sections=activeProject.sections.filter(function(item){return item.id!==section.id;});activeSection='all';activePage='all';openSectionMenu='';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};});
   }
   function bind(){
+    /* The list and its handle belong to the shell, not to the project view, so
+       they are wired before anything that leaves early: the settings page and
+       the loading frame both draw the handle too, and both used to draw it
+       dead. */
+    root.querySelectorAll('[data-side-toggle]').forEach(function(button){ button.onclick=function(){ setSide(!sideOpen); }; });
+    var sideScrim=root.querySelector('[data-side-close]');
+    if(sideScrim)sideScrim.onclick=function(){ setSide(false); };
     root.querySelectorAll('[data-new-project]').forEach(function(button){button.onclick=async function(){var title=await askName('New project','e.g. Learn Mandarin','Create project');if(title===null)return;button.disabled=true;try{var projectId=await cloud().createProject(title.trim()||'Untitled project');await loadProjects(projectId);}finally{button.disabled=false;}};});
-    root.querySelectorAll('[data-project]').forEach(function(button){button.onclick=function(){view='project';loadProject(button.dataset.project);};});
-    root.querySelectorAll('[data-project-settings]').forEach(function(button){button.onclick=function(){view='settings';render();};});
+    root.querySelectorAll('[data-project]').forEach(function(button){button.onclick=function(){view='project';if(narrow())sideOpen=false;loadProject(button.dataset.project);};});
+    root.querySelectorAll('[data-project-settings]').forEach(function(button){button.onclick=function(){
+      var wanted=button.dataset.projectSettings;
+      view='settings';
+      if(narrow())sideOpen=false;
+      /* Settings for a project you are not in still has to open that project,
+         because that is what the page is describing. */
+      if(wanted&&(!activeProject||activeProject.id!==wanted))loadProject(wanted);
+      else renderSwitch();
+    };});
     root.querySelectorAll('[data-import-project]').forEach(function(button){button.onclick=async function(){button.disabled=true;try{ await importProjectFile(); }finally{ button.disabled=false; }};});
     root.querySelectorAll('[data-example-project]').forEach(function(button){button.onclick=async function(){button.disabled=true;try{ rememberExample(); await addExampleProject(); }finally{ button.disabled=false; }};});
     if(!activeProject)return;
     if(view==='settings'){
-      root.querySelector('[data-settings-back]').onclick=function(){view='project';render();};
+      root.querySelector('[data-settings-back]').onclick=function(){view='project';renderSwitch();};
       root.querySelector('[data-save-project-name]').onclick=async function(){var input=root.querySelector('[data-project-name]'), title=input.value.trim();if(!title)return;activeProject.title=title;await cloud().saveProject(activeProject.id,{title:title,sections:activeProject.sections||[]});await loadProjects(activeProject.id);view='settings';render();};
       root.querySelectorAll('[data-delete-section]').forEach(function(button){button.onclick=async function(){var sectionId=button.dataset.deleteSection, section=(activeProject.sections||[]).filter(function(s){return s.id===sectionId;})[0];if(!await askConfirm('Delete section?', '“'+(section?section.title:'This section')+'” will be removed. Its blocks will stay in the project under Unsorted.', 'Delete section'))return;blocks.forEach(function(block){if(block.sectionId===sectionId){block.sectionId='';cloud().saveBlock(activeProject.id,block.id,block).catch(function(){});}});activeProject.sections=(activeProject.sections||[]).filter(function(s){return s.id!==sectionId;});if(activeSection===sectionId)activeSection='all';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};});
       var inviteButton=root.querySelector('[data-send-invite]');
@@ -1470,15 +1702,30 @@
       return;
     }
     if(loadingProject)return;
-    root.querySelector('[data-new-section]').onclick=async function(){var title=await askName('New section','e.g. Week one','Add section');if(!title||!title.trim())return;var section={id:id(),title:title.trim(),pages:[],locked:false};activeProject.sections=(activeProject.sections||[]).concat(section);activeSection=section.id;activePage='all';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};
-    root.querySelector('[data-toggle-view]').onclick=function(){readOnly=!readOnly;render();};
+    var newSection=root.querySelector('[data-new-section]');
+    if(newSection)newSection.onclick=async function(){var title=await askName('New section','e.g. Week one','Add section');if(!title||!title.trim())return;var section={id:id(),title:title.trim(),pages:[],locked:false};activeProject.sections=(activeProject.sections||[]).concat(section);activeSection=section.id;activePage='all';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};
+    var toggle=root.querySelector('[data-toggle-view]');
+    if(toggle)toggle.onclick=function(){readOnly=!readOnly;render();};
+    root.querySelectorAll('[data-exit-preview]').forEach(function(button){ button.onclick=exitPreview; });
+    var restore=root.querySelector('[data-restore-preview]');
+    if(restore)restore.onclick=function(){ if(window.CrowStudioHistory)window.CrowStudioHistory.confirmRestore(); };
     root.querySelectorAll('[data-section]').forEach(function(button){button.onclick=function(){activeSection=button.dataset.section;activePage='all';openSectionMenu='';render();};});
     root.querySelectorAll('[data-page]').forEach(function(button){button.onclick=function(){activePage=button.dataset.page;render();};});
     root.querySelectorAll('[data-section-menu]').forEach(function(button){button.onclick=function(event){event.stopPropagation();toggleSectionMenu(button.dataset.sectionMenu);};});
     bindSectionMenu(root);
     watchSectionMenu();
     root.querySelectorAll('[data-add]').forEach(function(button){button.onclick=function(){var type=button.dataset.add, block={id:id(),type:type,title:'',body:'',sectionId:activeSection==='all'?'':activeSection,pageId:activePage==='all'?'':activePage,order:Date.now(),done:false,due:'',pending:true,items:type==='tasks'?[{text:'',done:false}]:[],steps:type==='lesson'?[normalizeStep({kind:'explain',title:'What to know'}),normalizeStep({kind:'free'})]:[],lessonSection:type==='lesson'?sectionName(activeSection==='all'?'':activeSection):'',lessonBlurb:'',lessonIcon:type==='lesson'?'✦':'',lessonColor:type==='lesson'?LESSON_DEFAULT_COLOR:'',lessonHint:''};blocks.push(block);render();var card=root.querySelector('[data-block="'+block.id+'"]'), field=card&&card.querySelector('[data-title]');if(field)field.focus();cloud().saveBlock(activeProject.id,block.id,block).then(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current)current.classList.remove('is-pending');var dot=current&&current.querySelector('.save-dot');if(dot)dot.remove();}).catch(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current){current.classList.remove('is-pending');current.classList.add('save-failed');}});};});
-    root.querySelectorAll('[data-block]').forEach(function(card){var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0], body=card.querySelector('[data-body]');card.querySelector('[data-title]').oninput=function(e){block.title=e.target.value;queuedSave(block,false,{title:block.title});};if(body)body.oninput=function(e){block.body=cleanHTML(e.target.innerHTML);queuedSave(block,false,{body:block.body});};var practice=card.querySelector('[data-practice]');if(practice)practice.oninput=function(e){block.practice=e.target.value;queuedSave(block,false,{practice:block.practice});};var answer=card.querySelector('[data-answer]');if(answer)answer.oninput=function(e){block.answer=e.target.value;queuedSave(block,false,{answer:block.answer});};var image=card.querySelector('[data-image-url]');if(image)image.onchange=function(e){block.imageUrl=e.target.value.trim();queuedSave(block,true);render();};var imageUpload=card.querySelector('[data-image-upload]');if(imageUpload)imageUpload.onchange=async function(e){var file=e.target.files&&e.target.files[0];if(!file)return;var slot=block.imageSlot;if(!slot){var used={};blocks.filter(function(item){return item.type==='image'&&item.imageSlot;}).forEach(function(item){used[item.imageSlot]=true;});for(var slotNumber=1;slotNumber<=20;slotNumber++){var candidate='image-'+String(slotNumber).padStart(2,'0');if(!used[candidate]){slot=candidate;break;}}}if(!slot){await notify('Project image limit reached','A project can store up to 20 images (30 MB total). Delete an uploaded image to free a slot.');e.target.value='';return;}try{imageUpload.disabled=true;var media=await cloud().uploadProjectImage(activeProject.id,slot,file);block.imageSlot=media.slot;block.imageUrl=media.url;await cloud().patchBlock(activeProject.id,block.id,{imageSlot:block.imageSlot,imageUrl:block.imageUrl});render();}catch(error){await notify('Image not uploaded',error.message||'Try a JPEG, PNG, or WebP under 1.5 MB.');imageUpload.disabled=false;e.target.value='';}};var status=card.querySelector('[data-status]');if(status)status.onchange=function(e){block.status=e.target.value;queuedSave(block,true);};var ideaStage=card.querySelector('[data-idea-stage]');if(ideaStage)ideaStage.onchange=function(e){block.ideaStage=e.target.value;queuedSave(block,true);};card.querySelectorAll('[data-task-check]').forEach(function(input){input.onchange=function(e){block.items[+e.target.dataset.taskCheck].done=e.target.checked;queuedSave(block,true);};});card.querySelectorAll('[data-task-text]').forEach(function(input){input.oninput=function(e){block.items[+e.target.dataset.taskText].text=e.target.value;queuedSave(block);};});var addTask=card.querySelector('[data-add-task]');if(addTask)addTask.onclick=function(){block.items.push({text:'',done:false});render();queuedSave(block,true);};var date=card.querySelector('[data-date]');if(date)date.onchange=function(e){block.due=e.target.value;queuedSave(block,true);};var remove=card.querySelector('[data-delete]');if(remove)remove.onclick=async function(){if(!await askConfirm('Delete block?', 'This block will be removed from the project.', 'Delete block'))return;var imageSlot=block.imageSlot;blocks=blocks.filter(function(b){return b.id!==block.id;});render();await cloud().deleteBlock(activeProject.id,block.id);if(imageSlot)cloud().deleteProjectImage(activeProject.id,imageSlot);};card.querySelectorAll('[data-format]').forEach(function(button){button.onmousedown=function(e){e.preventDefault();body.focus();if(button.dataset.format==='formatBlock')applyBlockTag(body,(button.dataset.value||'P').toUpperCase());else document.execCommand(button.dataset.format,false,null);tidyHeadings(body);block.body=cleanHTML(body.innerHTML);queuedSave(block);};});});
+    root.querySelectorAll('[data-block]').forEach(function(card){var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0], body=card.querySelector('[data-body]');card.querySelector('[data-title]').oninput=function(e){block.title=e.target.value;queuedSave(block,false,{title:block.title});};if(body)body.oninput=function(e){block.body=cleanHTML(e.target.innerHTML);queuedSave(block,false,{body:block.body});};var practice=card.querySelector('[data-practice]');if(practice)practice.oninput=function(e){block.practice=e.target.value;queuedSave(block,false,{practice:block.practice});};var answer=card.querySelector('[data-answer]');if(answer)answer.oninput=function(e){block.answer=e.target.value;queuedSave(block,false,{answer:block.answer});};var image=card.querySelector('[data-image-url]');if(image)image.onchange=function(e){block.imageUrl=e.target.value.trim();queuedSave(block,true);render();};var imageUpload=card.querySelector('[data-image-upload]');if(imageUpload)imageUpload.onchange=function(e){var file=e.target.files&&e.target.files[0];if(file)takeImage(block,file,imageUpload);e.target.value='';};
+      var drop=card.querySelector('[data-image-drop]');
+      if(drop)bindImageDrop(drop,block);
+      var clear=card.querySelector('[data-image-clear]');
+      if(clear)clear.onclick=async function(){
+        var slot=block.imageSlot;
+        block.imageUrl=''; block.imageSlot='';
+        render();
+        await cloud().patchBlock(activeProject.id,block.id,{imageUrl:'',imageSlot:''});
+        if(slot)cloud().deleteProjectImage(activeProject.id,slot);
+      };var status=card.querySelector('[data-status]');if(status)status.onchange=function(e){block.status=e.target.value;queuedSave(block,true);};var ideaStage=card.querySelector('[data-idea-stage]');if(ideaStage)ideaStage.onchange=function(e){block.ideaStage=e.target.value;queuedSave(block,true);};card.querySelectorAll('[data-task-check]').forEach(function(input){input.onchange=function(e){block.items[+e.target.dataset.taskCheck].done=e.target.checked;queuedSave(block,true);};});card.querySelectorAll('[data-task-text]').forEach(function(input){input.oninput=function(e){block.items[+e.target.dataset.taskText].text=e.target.value;queuedSave(block);};});var addTask=card.querySelector('[data-add-task]');if(addTask)addTask.onclick=function(){block.items.push({text:'',done:false});render();queuedSave(block,true);};var date=card.querySelector('[data-date]');if(date)date.onchange=function(e){block.due=e.target.value;queuedSave(block,true);};var remove=card.querySelector('[data-delete]');if(remove)remove.onclick=async function(){if(!await askConfirm('Delete block?', 'This block will be removed from the project.', 'Delete block'))return;var imageSlot=block.imageSlot;blocks=blocks.filter(function(b){return b.id!==block.id;});render();await cloud().deleteBlock(activeProject.id,block.id);if(imageSlot)cloud().deleteProjectImage(activeProject.id,imageSlot);};card.querySelectorAll('[data-format]').forEach(function(button){button.onmousedown=function(e){e.preventDefault();body.focus();if(button.dataset.format==='formatBlock')applyBlockTag(body,(button.dataset.value||'P').toUpperCase());else document.execCommand(button.dataset.format,false,null);tidyHeadings(body);block.body=cleanHTML(body.innerHTML);queuedSave(block);};});});
     root.querySelectorAll('[data-block]').forEach(function(card){
       var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0];
       if(block&&block.type==='lesson')bindLessonCard(card,block);
@@ -1648,6 +1895,7 @@
       var was=blocks.filter(function(block){ return order.indexOf(block.id)>=0; })
         .sort(function(a,b){ return (a.order||0)-(b.order||0); })
         .map(function(block){ return block.id; });
+      if(previewing())return;
       if(was.join('\u0000')===order.join('\u0000'))return;
       var stamp=Date.now(), moved=[];
       order.forEach(function(id,index){
@@ -1713,7 +1961,7 @@
   }
 
   var projectTimer;
-  function queuedProjectSave(){clearTimeout(projectTimer);projectTimer=setTimeout(function(){cloud().saveProject(activeProject.id,{title:activeProject.title,sections:activeProject.sections||[]}).catch(function(){});},600);}
+  function queuedProjectSave(){if(previewing())return;clearTimeout(projectTimer);projectTimer=setTimeout(function(){cloud().saveProject(activeProject.id,{title:activeProject.title,sections:activeProject.sections||[]}).catch(function(){});},600);}
   function studioLoadError(error){
     var code=error&&error.code;
     if(code==='permission-denied')return 'Firebase turned this request down. The Firestore rules in your console need to match the ones in firestore.rules, and reading a project has to be decided by memberIds and invitedEmails, because that is what Studio looks projects up by.';
@@ -1781,7 +2029,7 @@
      waits until they move on. */
   function watchActiveProject(){
     dropWatchers();
-    if(!activeProject)return;
+    if(!activeProject||previewing())return;
     var projectId=activeProject.id;
     stopProject=cloud().watchProject(projectId,function(fresh){
       if(!fresh){
@@ -1870,5 +2118,26 @@
       if(cloud().initializing){ cloud().initializing=false; render(); }
     },1600);
   }
+  /* What the history panel needs from the running workspace, and nothing
+     else: which project is open, what it says right now, and the two ways of
+     standing somewhere other than the present. */
+  window.CrowStudio={
+    projectId:function(){ return activeProject?activeProject.id:''; },
+    canEdit:function(){ return !!activeProject&&canEdit(); },
+    /* Always the live project, even while an old version is on screen, so
+       history never records what somebody was merely looking at. */
+    snapshot:function(){
+      var from=preview?liveState:{ project:activeProject, blocks:blocks };
+      if(!from||!from.project)return null;
+      return { project:{ title:from.project.title, sections:from.project.sections||[] },
+        blocks:(from.blocks||[]).map(function(block){ var copy=Object.assign({},block); delete copy.pending; return copy; }) };
+    },
+    previewing:function(){ return previewing(); },
+    previewEntry:function(){ return preview; },
+    openPreview:enterPreview,
+    closePreview:exitPreview,
+    restore:restoreSnapshot,
+    reload:function(id){ return loadProjects(id||(activeProject&&activeProject.id)); }
+  };
   boot();
 }());
