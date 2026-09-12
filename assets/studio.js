@@ -203,7 +203,8 @@
   function projectPayload(){
     return { crowstudies:'project', version:FILE_FORMAT, exportedAt:new Date().toISOString(),
       project:{ title:activeProject.title, sections:activeProject.sections||[] },
-      blocks:blocks.map(function(block){ var copy=Object.assign({},block); delete copy.pending; return copy; }) };
+      blocks:blocks.map(function(block){ var copy=Object.assign({},block); delete copy.pending; return copy; }),
+      rows:(function(){ var out={}; blocks.filter(isDatabase).forEach(function(block){ out[block.id]=dbRowsOf(block.id).map(function(row){ return Object.assign({},row); }); }); return out; })() };
   }
   /* Everything comes back with fresh ids so an import never collides with a
      project that is already here, including one exported from this account. */
@@ -231,6 +232,12 @@
       block.order=stamp+i;
       delete block.pending;
       await cloud().saveBlock(projectId,block.id,block);
+      var carried=(payload.rows||{})[incoming[i].id];
+      if(Array.isArray(carried)){
+        for(var r=0;r<carried.length;r++){
+          await cloud().saveRow(projectId,block.id,id(),{ order:carried[r].order||(stamp+r), values:carried[r].values||{} });
+        }
+      }
     }
     return { projectId:projectId, title:title, count:incoming.length };
   }
@@ -498,7 +505,7 @@
   function sectionPages(sectionId){ var section=findSection(sectionId); return section&&Array.isArray(section.pages)?section.pages:[]; }
   function sectionLocked(sectionId){ var section=findSection(sectionId); return !!(section&&section.locked); }
   function normalizeBlock(block){
-    var copy=Object.assign({},block), supported=['note','tasks','status','milestone','schedule','idea','lesson','table','image','quote','callout','code','divider'];
+    var copy=Object.assign({},block), supported=['note','tasks','status','milestone','schedule','idea','lesson','table','image','quote','callout','code','database'];
     if(copy.type==='task')copy.type='tasks';
     if(supported.indexOf(copy.type)<0)copy.type='note';
     if(!Array.isArray(copy.items))copy.items=[];
@@ -506,6 +513,10 @@
     if(typeof copy.body!=='string')copy.body='';
     ['lessonSection','lessonBlurb','lessonIcon','lessonColor','lessonHint'].forEach(function(key){ if(typeof copy[key]!=='string')copy[key]=''; });
     if(typeof copy.icon!=='string')copy.icon='';
+    if(copy.type==='database'){
+      if(!Array.isArray(copy.props))copy.props=[];
+      if(!Array.isArray(copy.views))copy.views=[];
+    }
     if(copy.type==='lesson')copy.steps=lessonSteps(copy);
     return copy;
   }
@@ -735,6 +746,11 @@
     root.innerHTML='<div class="side-scrim" data-side-close'+(sideOpen?'':' hidden')+'></div><aside class="studio-side'+(sideOpen?' is-open':'')+'">'+sideToggleHTML('in-rail')+'<div class="studio-sidehead"><h2>Projects</h2><div class="side-actions"><button class="btn ghost sm" data-import-project title="Import a project from a .json file">Import</button><button class="btn sm" data-new-project>New</button></div></div><div class="project-list">'+projectListHTML(projects)+'</div></aside><main class="studio-main '+((readOnly||!canEdit())?'read-only':'')+(previewing()?' in-preview':'')+'">'+sideToggleHTML('on-top')+(activeProject ? (view==='settings'?settingsHTML():projectHTML()) : '<div class="studio-empty"><h1>Make a project</h1><p>Collect study notes, plans, schedules, ideas, and your own practice cards in one place.</p><button class="btn" data-new-project>New project</button><button class="btn ghost" data-example-project>Add the example project</button><button class="btn ghost" data-import-project>Import a project</button></div>')+'</main>';
     bind();
     mountCollaborativeEditors();
+    mountDatabases();
+    blocks.filter(isDatabase).forEach(function(block){
+      var card=root.querySelector('[data-block="'+block.id+'"]');
+      if(card)paintDatabase(card,block);
+    });
     /* Tasks, History and the comment rows are added by the upgrades script,
        which used to hear about a redraw from a MutationObserver and act on the
        next tick — after the browser had already painted the page without them,
@@ -870,6 +886,18 @@
       var copy=Object.assign({},incoming[j]);
       delete copy.pending;
       await cloud().saveBlock(projectId,copy.id,copy);
+      if(copy.type!=='database')continue;
+      /* Rows go back under their own ids, so one that was there before and
+         after is the same row rather than a second copy of itself. */
+      var want=(data.rows||{})[copy.id]||[];
+      var keepRows={}; want.forEach(function(row){ keepRows[row.id]=true; });
+      var here=await cloud().listRows(projectId,copy.id);
+      for(var k=0;k<here.length;k++){
+        if(!keepRows[here[k].id])await cloud().removeRow(projectId,copy.id,here[k].id);
+      }
+      for(var m=0;m<want.length;m++){
+        await cloud().saveRow(projectId,copy.id,want[m].id,{ order:want[m].order||m, values:want[m].values||{} });
+      }
     }
     await cloud().saveProject(projectId,{
       title:(data.project&&data.project.title)||activeProject.title,
@@ -1181,7 +1209,8 @@
   }
 
   var CALLOUT_ICON='\uD83D\uDCA1';
-  var BLOCK_LABELS={note:'Note',tasks:'Task list',status:'Status',milestone:'Milestone',schedule:'Schedule',idea:'Idea inbox',lesson:'Practice lesson',table:'Table',image:'Image',quote:'Quote',callout:'Callout',code:'Code',divider:'Divider'};
+  var CALLOUT_ICONS=['💡','⚠️','✅','📌','❗','🔥','⭐','📚'];
+  var BLOCK_LABELS={note:'Note',tasks:'Task list',status:'Status',milestone:'Milestone',schedule:'Schedule',idea:'Idea inbox',lesson:'Practice lesson',table:'Table',image:'Image',quote:'Quote',callout:'Highlight',code:'Code',database:'Database'};
   /* The kinds whose content is text at heart, so one can become another with
      nothing lost on the way. A lesson, a table and an image are left out: their
      shape is the block, and there is nowhere for it to go. */
@@ -1266,7 +1295,7 @@
     { name:'Text', types:['note','quote','callout','code'] },
     { name:'Planning', types:['tasks','status','milestone','schedule'] },
     { name:'Thinking', types:['idea'] },
-    { name:'Media', types:['image','table'] },
+    { name:'Media', types:['image','table','database'] },
     { name:'Learning', types:['lesson'] }
   ];
   var BLOCK_BLURBS={ note:'Words, headings and lists', quote:'Someone else\u2019s words, set apart',
@@ -1274,7 +1303,7 @@
     tasks:'A list you can tick off', status:'Where something stands right now',
     milestone:'A date to work towards', schedule:'A time and what happens at it',
     idea:'Somewhere to put a thought before it goes', image:'A picture, uploaded or linked',
-    table:'Rows and columns', lesson:'Practice steps you can run' };
+    table:'Rows and columns', database:'Rows with properties you choose', lesson:'Practice steps you can run' };
   function closeIconPicker(){
     var open=root.querySelector('.icon-picker');
     if(open&&open.parentNode)open.parentNode.removeChild(open);
@@ -1412,6 +1441,209 @@
     };
     search.focus();
     setTimeout(function(){ document.addEventListener('click',awayFromAddPalette); },0);
+  }
+  /* ---------------------------------------------------------------- database
+     A database is a block with a shape and a collection of rows. The shape —
+     which properties there are and what kind each one is — lives in the block,
+     because it is small and changes rarely. The rows live one document each in
+     a collection beneath it, because they are many and change constantly.
+
+     Every database in the project is watched, not only the ones on screen: a
+     version saved while another section was showing still has to carry their
+     rows, and a restore that could not see them would quietly throw them away. */
+  var DB_KINDS=[['text','Text'],['number','Number'],['check','Tick box'],['select','Select']];
+  var dbRows={}, dbWatch={};
+  function isDatabase(block){ return !!block&&block.type==='database'; }
+  function dbProps(block){
+    return (Array.isArray(block.props)&&block.props.length) ? block.props : [{ id:'name', name:'Name', type:'text' }];
+  }
+  function dbRowsOf(blockId){ return dbRows[blockId]||[]; }
+  function dbKindName(kind){
+    var found=DB_KINDS.filter(function(pair){ return pair[0]===kind; })[0];
+    return found?found[1]:'Text';
+  }
+  function mountDatabases(){
+    if(!activeProject||!cloud().user)return;
+    var wanted={};
+    blocks.filter(isDatabase).forEach(function(block){ wanted[block.id]=true; });
+    Object.keys(dbWatch).forEach(function(blockId){
+      if(wanted[blockId])return;
+      try{ dbWatch[blockId](); }catch(error){}
+      delete dbWatch[blockId]; delete dbRows[blockId];
+    });
+    Object.keys(wanted).forEach(function(blockId){
+      if(dbWatch[blockId])return;
+      dbWatch[blockId]=cloud().watchRows(activeProject.id,blockId,function(list){
+        dbRows[blockId]=list;
+        /* One database's rows arrived, so one card is drawn again. */
+        var card=root.querySelector('[data-block="'+blockId+'"]');
+        var block=liveBlock(blockId);
+        if(card&&block)paintDatabase(card,block);
+      },function(){});
+    });
+  }
+  function dropDatabases(){
+    Object.keys(dbWatch).forEach(function(blockId){ try{ dbWatch[blockId](); }catch(error){} });
+    dbWatch={}; dbRows={};
+  }
+  function dbValue(row, prop){
+    var held=(row.values||{})[prop.id];
+    return held===undefined||held===null?'':held;
+  }
+  function dbCellHTML(prop, row, frozen){
+    var value=dbValue(row,prop), off=frozen?' disabled':'';
+    if(prop.type==='check')
+      return '<input type="checkbox" data-db-cell="'+prop.id+'"'+(value?' checked':'')+off+'>';
+    if(prop.type==='select')
+      return '<select class="db-pick" data-db-cell="'+prop.id+'"'+off+'><option value=""></option>'
+        +(prop.options||[]).map(function(name){ return '<option'+(name===value?' selected':'')+'>'+esc(name)+'</option>'; }).join('')
+        +'</select>';
+    return '<input class="db-text" type="'+(prop.type==='number'?'number':'text')+'" data-db-cell="'+prop.id+'" value="'+esc(String(value))+'"'+off+'>';
+  }
+  function paintDatabase(card, block){
+    var holder=card.querySelector('[data-db-table]');
+    if(!holder)return;
+    var frozen=readOnly||!canEdit()||sectionLocked(block.sectionId)||previewing();
+    var props=dbProps(block), rows=dbRowsOf(block.id);
+    holder.innerHTML='<div class="db-scroll"><table class="db-grid"><thead><tr>'
+      +props.map(function(prop){
+        return '<th data-db-head="'+prop.id+'"><button type="button" class="db-prop" data-db-prop="'+prop.id+'"'+(frozen?' disabled':'')+'>'+esc(prop.name||'Property')+'<small>'+esc(dbKindName(prop.type))+'</small></button></th>';
+      }).join('')
+      +(frozen?'':'<th class="db-slim"><button type="button" class="db-plus" data-db-add-prop aria-label="Add a property" title="Add a property">+</button></th>')
+      +'</tr></thead><tbody>'
+      +(rows.length?rows.map(function(row){
+        return '<tr data-db-row="'+row.id+'">'
+          +props.map(function(prop){ return '<td>'+dbCellHTML(prop,row,frozen)+'</td>'; }).join('')
+          +(frozen?'':'<td class="db-slim"><button type="button" class="db-drop" data-db-row-remove aria-label="Delete this row">×</button></td>')
+          +'</tr>';
+      }).join(''):'<tr class="db-blank"><td colspan="'+(props.length+(frozen?0:1))+'">Nothing in here yet.</td></tr>')
+      +'</tbody></table></div><div class="db-foot">'
+      +(frozen?'':'<button type="button" class="db-new" data-db-add-row>+ New row</button>')
+      +'<span class="db-count">'+rows.length+(rows.length===1?' row':' rows')+'</span></div>';
+    if(!frozen)bindDatabase(card,block);
+  }
+  function dbSaveShape(block){
+    block.props=dbProps(block).slice();
+    queuedSave(block,true,{ props:block.props });
+  }
+  function dbWriteCell(block, rowId, prop, value){
+    var row=dbRowsOf(block.id).filter(function(item){ return item.id===rowId; })[0];
+    if(row){ row.values=row.values||{}; row.values[prop.id]=value; }
+    var patch={}; patch[prop.id]=value;
+    /* One cell, not the row: two people working in different columns of the
+       same row must not put each other's work back. A merged write of a nested
+       map leaves every other cell where it is. */
+    cloud().patchRow(activeProject.id,block.id,rowId,{ values:patch }).catch(function(){});
+  }
+  function bindDatabase(card, block){
+    var holder=card.querySelector('[data-db-table]');
+    if(!holder)return;
+    var props=dbProps(block);
+    holder.querySelectorAll('[data-db-row]').forEach(function(line){
+      var rowId=line.dataset.dbRow;
+      line.querySelectorAll('[data-db-cell]').forEach(function(field){
+        var prop=props.filter(function(item){ return item.id===field.dataset.dbCell; })[0];
+        if(!prop)return;
+        if(prop.type==='check'){ field.onchange=function(){ dbWriteCell(block,rowId,prop,field.checked); }; return; }
+        if(prop.type==='select'){ field.onchange=function(){ dbWriteCell(block,rowId,prop,field.value); }; return; }
+        field.onchange=function(){
+          dbWriteCell(block,rowId,prop,prop.type==='number'?(field.value===''?'':Number(field.value)):field.value);
+        };
+      });
+      var drop=line.querySelector('[data-db-row-remove]');
+      if(drop)drop.onclick=async function(){
+        if(!await askConfirm('Delete this row?','It goes for everyone this project is shared with.','Delete row'))return;
+        dbRows[block.id]=dbRowsOf(block.id).filter(function(item){ return item.id!==rowId; });
+        paintDatabase(card,block);
+        cloud().removeRow(activeProject.id,block.id,rowId).catch(function(){});
+      };
+    });
+    var add=holder.querySelector('[data-db-add-row]');
+    if(add)add.onclick=function(){
+      var rows=dbRowsOf(block.id);
+      var last=rows.length?(rows[rows.length-1].order||0):0;
+      var row={ id:id(), order:(last||Date.now())+1, values:{} };
+      dbRows[block.id]=rows.concat(row);
+      paintDatabase(card,block);
+      cloud().saveRow(activeProject.id,block.id,row.id,{ order:row.order, values:{} }).catch(function(){});
+      var field=card.querySelector('[data-db-row="'+row.id+'"] [data-db-cell]');
+      if(field)field.focus();
+    };
+    var addProp=holder.querySelector('[data-db-add-prop]');
+    if(addProp)addProp.onclick=async function(){
+      var name=await askName('New property','e.g. Status','Add property');
+      if(name===null)return;
+      block.props=dbProps(block).concat({ id:id(), name:name.trim()||'Property', type:'text' });
+      dbSaveShape(block);
+      paintDatabase(card,block);
+    };
+    holder.querySelectorAll('[data-db-prop]').forEach(function(button){
+      button.onclick=function(event){ event.stopPropagation(); openPropMenu(card,block,button); };
+    });
+  }
+  function closePropMenu(){
+    var open=root.querySelector('.db-menu');
+    if(open&&open.parentNode)open.parentNode.removeChild(open);
+    document.removeEventListener('click',awayFromPropMenu);
+  }
+  function awayFromPropMenu(event){
+    if(event.target.closest('.db-menu')||event.target.closest('[data-db-prop]'))return;
+    closePropMenu();
+  }
+  function openPropMenu(card, block, button){
+    var already=root.querySelector('.db-menu');
+    closePropMenu();
+    if(already)return;
+    var propId=button.dataset.dbProp;
+    var prop=dbProps(block).filter(function(item){ return item.id===propId; })[0];
+    if(!prop)return;
+    var menu=document.createElement('div'); menu.className='db-menu';
+    menu.innerHTML='<button type="button" data-prop-rename>Rename</button>'
+      +(prop.type==='select'?'<button type="button" data-prop-options>Edit the choices</button>':'')
+      +'<div class="db-menu-head">Kind</div>'
+      +DB_KINDS.map(function(pair){
+        return '<button type="button" data-prop-kind="'+pair[0]+'"'+(pair[0]===prop.type?' class="is-on"':'')+'>'+pair[1]+'</button>';
+      }).join('')
+      +'<div class="db-menu-head">Property</div><button type="button" class="danger" data-prop-drop>Delete</button>';
+    /* On the card, not in the table: the rows scroll sideways inside their own
+       box, and a menu opened inside it was cut off at its edge. */
+    var frame=card.getBoundingClientRect(), spot=button.getBoundingClientRect();
+    menu.style.left=Math.max(0,spot.left-frame.left)+'px';
+    menu.style.top=(spot.bottom-frame.top+4)+'px';
+    card.appendChild(menu);
+    menu.querySelector('[data-prop-rename]').onclick=async function(){
+      closePropMenu();
+      var name=await askName('Rename property',prop.name||'Property','Rename');
+      if(name===null)return;
+      prop.name=name.trim()||prop.name;
+      dbSaveShape(block); paintDatabase(card,block);
+    };
+    var options=menu.querySelector('[data-prop-options]');
+    if(options)options.onclick=async function(){
+      closePropMenu();
+      var written=await askName('The choices, separated by commas',(prop.options||[]).join(', '),'Save choices');
+      if(written===null)return;
+      prop.options=written.split(',').map(function(part){ return part.trim(); }).filter(function(part){ return part; });
+      dbSaveShape(block); paintDatabase(card,block);
+    };
+    menu.querySelectorAll('[data-prop-kind]').forEach(function(choice){
+      choice.onclick=function(){
+        closePropMenu();
+        prop.type=choice.dataset.propKind;
+        /* A select with nothing to select from is a dead end, so it starts with
+           something in it that can be changed. */
+        if(prop.type==='select'&&!(prop.options||[]).length)prop.options=['To do','Doing','Done'];
+        dbSaveShape(block); paintDatabase(card,block);
+      };
+    });
+    menu.querySelector('[data-prop-drop]').onclick=async function(){
+      closePropMenu();
+      if(dbProps(block).length<2){ await notify('This is the only property','A database keeps at least one.'); return; }
+      if(!await askConfirm('Delete this property?','What is written in its column goes with it, for everyone.','Delete property'))return;
+      block.props=dbProps(block).filter(function(item){ return item.id!==propId; });
+      dbSaveShape(block); paintDatabase(card,block);
+    };
+    setTimeout(function(){ document.addEventListener('click',awayFromPropMenu); },0);
   }
   function taskRowHTML(item, index, frozen){
     var disabled=frozen?' disabled':'';
@@ -1583,8 +1815,8 @@
     if(block.type==='callout') body='<div class="callout-row"><button type="button" class="callout-icon" data-callout-icon'+disabled+' title="Change the icon">'+esc(block.icon||CALLOUT_ICON)+'</button><div class="block-body" data-body contenteditable="'+editable+'" data-placeholder="Something to keep in view\u2026">'+cleanHTML(block.body)+'</div></div>';
     /* Code is text, not markup: it is kept and shown as what was typed, so a
        stray angle bracket stays a stray angle bracket. */
+    if(block.type==='database') body='<div class="db" data-db-table></div>';
     if(block.type==='code') body='<pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+esc(plainText(block.body))+'</pre>';
-    if(block.type==='divider') body='<div class="block-rule" aria-hidden="true"></div>';
     return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+'" data-block="'+block.id+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
   }
   function queuedSave(block, immediate, patch){
@@ -2105,7 +2337,7 @@
       if(leaveButton)leaveButton.onclick=async function(){
         if(!await askConfirm('Leave this project?','You will not see it again unless someone invites you back.','Leave'))return;
         var leaving=activeProject.id;
-        activeProject=null;blocks=[];view='project';dropWatchers();render();
+        activeProject=null;blocks=[];view='project';dropWatchers();dropDatabases();render();
         try{ await cloud().removeMember(leaving,cloud().user.uid); }catch(error){}
         await loadProjects();
       };
@@ -2136,7 +2368,7 @@
         render();
         await cloud().patchBlock(activeProject.id,block.id,{imageUrl:'',imageSlot:''});
         if(slot)cloud().deleteProjectImage(activeProject.id,slot);
-      };var status=card.querySelector('[data-status]');if(status)status.onchange=function(e){block.status=e.target.value;queuedSave(block,true);};var ideaStage=card.querySelector('[data-idea-stage]');if(ideaStage)ideaStage.onchange=function(e){block.ideaStage=e.target.value;queuedSave(block,true);};card.querySelectorAll('[data-task-check]').forEach(function(input){input.onchange=function(e){block.items[+e.target.dataset.taskCheck].done=e.target.checked;queuedSave(block,true);};});card.querySelectorAll('[data-task-text]').forEach(function(input){input.oninput=function(e){block.items[+e.target.dataset.taskText].text=e.target.value;queuedSave(block);};});var addTask=card.querySelector('[data-add-task]');if(addTask)addTask.onclick=function(){block.items.push({text:'',done:false});render();queuedSave(block,true);};var date=card.querySelector('[data-date]');if(date)date.onchange=function(e){block.due=e.target.value;queuedSave(block,true);};var remove=card.querySelector('[data-delete]');if(remove)remove.onclick=async function(){if(!await askConfirm('Delete block?', 'This block will be removed from the project.', 'Delete block'))return;var imageSlot=block.imageSlot;blocks=blocks.filter(function(b){return b.id!==block.id;});render();await cloud().deleteBlock(activeProject.id,block.id);if(imageSlot)cloud().deleteProjectImage(activeProject.id,imageSlot);};card.querySelectorAll('[data-format]').forEach(function(button){button.onmousedown=function(e){e.preventDefault();body.focus();if(button.dataset.format==='formatBlock')applyBlockTag(body,(button.dataset.value||'P').toUpperCase());else document.execCommand(button.dataset.format,false,null);tidyHeadings(body);block.body=cleanHTML(body.innerHTML);queuedSave(block);};});});
+      };var status=card.querySelector('[data-status]');if(status)status.onchange=function(e){block.status=e.target.value;queuedSave(block,true);};var ideaStage=card.querySelector('[data-idea-stage]');if(ideaStage)ideaStage.onchange=function(e){block.ideaStage=e.target.value;queuedSave(block,true);};card.querySelectorAll('[data-task-check]').forEach(function(input){input.onchange=function(e){block.items[+e.target.dataset.taskCheck].done=e.target.checked;queuedSave(block,true);};});card.querySelectorAll('[data-task-text]').forEach(function(input){input.oninput=function(e){block.items[+e.target.dataset.taskText].text=e.target.value;queuedSave(block);};});var addTask=card.querySelector('[data-add-task]');if(addTask)addTask.onclick=function(){block.items.push({text:'',done:false});render();queuedSave(block,true);};var date=card.querySelector('[data-date]');if(date)date.onchange=function(e){block.due=e.target.value;queuedSave(block,true);};var remove=card.querySelector('[data-delete]');if(remove)remove.onclick=async function(){if(!await askConfirm('Delete block?', 'This block will be removed from the project.', 'Delete block'))return;var imageSlot=block.imageSlot;blocks=blocks.filter(function(b){return b.id!==block.id;});render();if(block.type==='database')await cloud().removeAllRows(activeProject.id,block.id);await cloud().deleteBlock(activeProject.id,block.id);if(imageSlot)cloud().deleteProjectImage(activeProject.id,imageSlot);};card.querySelectorAll('[data-format]').forEach(function(button){button.onmousedown=function(e){e.preventDefault();body.focus();if(button.dataset.format==='formatBlock')applyBlockTag(body,(button.dataset.value||'P').toUpperCase());else document.execCommand(button.dataset.format,false,null);tidyHeadings(body);block.body=cleanHTML(body.innerHTML);queuedSave(block);};});});
     root.querySelectorAll('[data-block]').forEach(function(card){
       var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0];
       if(block&&block.type==='lesson')bindLessonCard(card,block);
@@ -2570,8 +2802,15 @@
     snapshot:function(){
       var from=preview?liveState:{ project:activeProject, blocks:blocks };
       if(!from||!from.project)return null;
+      var rows={};
+      /* A database's rows are not inside its block, so a version that saved
+         only blocks would restore an empty database and read as data loss. */
+      (from.blocks||[]).filter(isDatabase).forEach(function(block){
+        rows[block.id]=dbRowsOf(block.id).map(function(row){ return Object.assign({},row); });
+      });
       return { project:{ title:from.project.title, sections:from.project.sections||[] },
-        blocks:(from.blocks||[]).map(function(block){ var copy=Object.assign({},block); delete copy.pending; return copy; }) };
+        blocks:(from.blocks||[]).map(function(block){ var copy=Object.assign({},block); delete copy.pending; return copy; }),
+        rows:rows };
     },
     previewing:function(){ return previewing(); },
     previewEntry:function(){ return preview; },

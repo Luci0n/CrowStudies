@@ -548,11 +548,14 @@
 .add-palette.above{ top:auto; bottom:calc(100% + 8px); }
 
 /* ---------- a table you add to at its edges ---------- */
-.table-add{ position:absolute; z-index:3; display:grid; place-items:center; border:1px dashed var(--glass-edge); border-radius:7px; background:color-mix(in srgb,var(--card) 80%,transparent); color:var(--ink-3); font-family:inherit; font-weight:800; font-size:14px; line-height:1; opacity:0; transition:opacity .18s ease, color .18s ease, border-color .18s ease; }
+/* The button's own padding left less room than the + needs, and a grid item
+   wider than its track is pushed off the end rather than centred, so the mark
+   sat three pixels right of the strip it was meant to be in the middle of. */
+.table-add{ position:absolute; z-index:3; display:grid; place-items:center; padding:0; border:1px dashed var(--glass-edge); border-radius:7px; background:color-mix(in srgb,var(--card) 80%,transparent); color:var(--ink-3); font-family:inherit; font-weight:800; font-size:14px; line-height:1; opacity:0; transition:opacity .18s ease, color .18s ease, border-color .18s ease; }
 .table-frame:hover .table-add,.table-add:focus-visible{ opacity:1; }
 .table-add:hover{ color:var(--brand); border-color:var(--brand); border-style:solid; }
-.table-add-col{ top:0; right:-22px; width:18px; height:100%; }
-.table-add-row{ left:0; bottom:-22px; height:18px; width:100%; }
+.table-add-col{ top:0; right:-24px; width:20px; height:100%; }
+.table-add-row{ left:0; bottom:-24px; height:20px; width:100%; }
 .table-selection{ display:inline-flex; align-items:center; gap:6px; padding:2px 4px 2px 8px; border:1px solid var(--glass-edge); border-radius:999px; background:var(--glass-lift); }
 .table-selection[hidden]{ display:none; }
 .table-selection b{ color:var(--ink-3); font-size:10px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
@@ -561,3 +564,36 @@
 .table-frame{ margin-right:26px; margin-bottom:26px; }
 .task-grip{ touch-action:none; }
 @media(max-width:780px){ .table-add{ opacity:.55; } }
+
+/* ---------- a database: a shape, and rows of its own ---------- */
+.db{ margin-top:10px; }
+.db-scroll{ overflow-x:auto; border:1px solid var(--glass-edge); border-radius:9px; }
+.db-grid{ width:100%; border-collapse:collapse; color:var(--ink-2); }
+.db-grid th,.db-grid td{ border-right:1px solid var(--glass-edge); border-bottom:1px solid var(--glass-edge); padding:0; vertical-align:middle; }
+.db-grid tr td:last-child,.db-grid tr th:last-child{ border-right:0; }
+.db-grid tbody tr:last-child td{ border-bottom:0; }
+.db-grid thead th{ background:var(--well); }
+.db-prop{ display:grid; gap:1px; width:100%; padding:7px 9px; border:0; background:transparent; color:var(--ink); text-align:left; font-family:inherit; font-weight:750; font-size:12.5px; }
+.db-prop small{ color:var(--ink-3); font-size:10px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; }
+.db-prop:hover:not(:disabled){ background:var(--glass-lift); color:var(--brand); }
+.db-slim{ width:34px; text-align:center; }
+.db-plus,.db-drop{ width:26px; height:26px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--ink-3); font-family:inherit; font-size:14px; line-height:1; }
+.db-plus:hover{ background:var(--glass-lift); color:var(--brand); }
+.db-drop{ opacity:0; font-size:15px; }
+.db-grid tr:hover .db-drop,.db-drop:focus-visible{ opacity:1; }
+.db-drop:hover{ background:var(--glass-lift); color:var(--bad); }
+.db-text,.db-pick{ width:100%; box-sizing:border-box; padding:8px 9px; border:0; background:transparent; color:var(--ink-2); font-family:inherit; font-weight:600; font-size:13px; }
+.db-text:focus,.db-pick:focus{ outline:2px solid var(--brand); outline-offset:-2px; border-radius:4px; }
+.db-grid td:has(input[type=checkbox]){ text-align:center; }
+.db-grid td input[type=checkbox]{ margin:8px auto; }
+.db-blank td{ padding:14px 10px; color:var(--ink-3); font-size:12.5px; }
+.db-foot{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:8px; }
+.db-new{ border:0; background:transparent; color:var(--brand); padding:5px 2px; font-family:inherit; font-weight:800; font-size:13px; }
+.db-count{ color:var(--ink-3); font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
+.db-menu{ position:absolute; z-index:8; display:grid; min-width:178px; padding:5px; border:1px solid var(--line); border-radius:10px; background:var(--card); box-shadow:0 16px 34px #0006; }
+.db-menu button{ border:0; border-radius:6px; background:transparent; color:var(--ink-2); text-align:left; padding:7px 8px; font-family:inherit; font-weight:700; font-size:12px; }
+.db-menu button:hover{ background:var(--glass-lift); color:var(--ink); }
+.db-menu button.is-on{ color:var(--brand); }
+.db-menu button.danger{ color:var(--bad); }
+.db-menu-head{ padding:7px 8px 3px; color:var(--ink-3); font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
+@media (hover:none){ .db-drop{ opacity:.6; } }
