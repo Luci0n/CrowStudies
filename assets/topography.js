@@ -89,10 +89,13 @@
     }
     lastFrame = now;
     const time = reduce ? 0 : now * .00012;
+    const theme = getComputedStyle(document.documentElement);
+    const terrain = (name, fallback) => theme.getPropertyValue(name).trim() || fallback;
+    const rgba = (name, alpha, fallback) => 'rgba(' + terrain(name, fallback) + ',' + alpha + ')';
     context.clearRect(0, 0, width, height);
     const glow = context.createRadialGradient(width * .13, height * .03, 0, width * .13, height * .03, Math.max(width, height) * .82);
-    glow.addColorStop(0, 'rgba(76,68,168,.22)');
-    glow.addColorStop(.54, 'rgba(29,40,95,.09)');
+    glow.addColorStop(0, rgba('--terrain-glow-a', '.22', '76,68,168'));
+    glow.addColorStop(.54, rgba('--terrain-glow-b', '.09', '29,40,95'));
     glow.addColorStop(1, 'rgba(9,11,18,0)');
     context.fillStyle = glow;
     context.fillRect(0, 0, width, height);
@@ -143,15 +146,15 @@
       const major = band % 5 === 0;
       const colour = context.createLinearGradient(0, 0, width, height);
       if (major) {
-        colour.addColorStop(0, 'rgba(99,142,255,.38)');
-        colour.addColorStop(.52, 'rgba(147,112,255,.50)');
-        colour.addColorStop(1, 'rgba(86,188,238,.34)');
+        colour.addColorStop(0, rgba('--terrain-major-a', '.38', '99,142,255'));
+        colour.addColorStop(.52, rgba('--terrain-major-b', '.50', '147,112,255'));
+        colour.addColorStop(1, rgba('--terrain-major-c', '.34', '86,188,238'));
         context.shadowBlur = 0;
         context.lineWidth = 1.22;
       } else {
-        colour.addColorStop(0, 'rgba(104,143,224,.14)');
-        colour.addColorStop(.55, 'rgba(129,111,218,.21)');
-        colour.addColorStop(1, 'rgba(81,158,212,.13)');
+        colour.addColorStop(0, rgba('--terrain-minor-a', '.14', '104,143,224'));
+        colour.addColorStop(.55, rgba('--terrain-minor-b', '.21', '129,111,218'));
+        colour.addColorStop(1, rgba('--terrain-minor-c', '.13', '81,158,212'));
         context.shadowBlur = 0;
         context.lineWidth = .72;
       }
