@@ -160,7 +160,7 @@
       context.shadowBlur = 0;
     }
     if (texturePattern) {
-      context.globalAlpha = .24;
+      context.globalAlpha = .10;
       context.fillStyle = texturePattern;
       context.fillRect(0, 0, width, height);
       context.globalAlpha = 1;
