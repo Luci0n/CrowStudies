@@ -657,3 +657,31 @@ body{
   background:var(--ground);
 }
 body > :not(.crow-topography):not(.crow-topography-grain){ position:relative; z-index:1; }
+
+:root[data-theme="dusk"]{
+  --ground:#15101d; --card:#241a31; --card-2:#30213f; --well:#1b1425;
+  --line:#4b385d; --line-strong:#665076;
+  --ink:#f5edf7; --ink-2:#d4c0d8; --ink-3:#a893ac;
+  --brand:#d67cbe; --brand-shelf:#9e477f; --brand-soft:#3b1e40;
+  --good:#59d1a4; --good-shelf:#2f9976; --good-soft:#15362f;
+  --bad:#ff8695; --bad-shelf:#c25468; --bad-soft:#421d29;
+  --gold:#e8bd68; --gold-shelf:#ad7b2e;
+  --key-white:#f0e7f2; --key-white-2:#cbbbd1; --key-black:#2a1c31; --key-black-2:#100b14;
+  color-scheme:dark;
+}
+
+/* Floating account UI must sit above the glass page layers. */
+body > .account-popover{ position:fixed; z-index:60; }
+body > .app-overlay{ position:fixed; z-index:70; }
+.theme-dialog{ width:min(100%,520px); }
+.theme-choices{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:4px 0 18px; }
+.theme-choice{ display:flex; align-items:center; gap:10px; min-height:74px; padding:10px; border:1px solid var(--line); border-radius:10px; background:color-mix(in srgb,var(--well) 76%,transparent); color:var(--ink); text-align:left; }
+.theme-choice:hover,.theme-choice.active{ border-color:var(--brand); background:color-mix(in srgb,var(--brand-soft) 56%,transparent); }
+.theme-choice b,.theme-choice small{ display:block; }
+.theme-choice b{ font-size:14px; }
+.theme-choice small{ margin-top:3px; color:var(--ink-3); font-size:11px; font-weight:700; }
+.theme-swatch{ width:30px; height:30px; flex:none; border:1px solid rgba(255,255,255,.20); border-radius:8px; background:linear-gradient(135deg,#f1f4fb 0 33%,#bac4da 33% 56%,#8090bd 56%); }
+.theme-dark .theme-swatch{ background:linear-gradient(135deg,#0e111c 0 33%,#252048 33% 56%,#7c66ff 56%); }
+.theme-light .theme-swatch{ background:linear-gradient(135deg,#fafbff 0 33%,#dbe2f0 33% 56%,#a78bfa 56%); }
+.theme-dusk .theme-swatch{ background:linear-gradient(135deg,#15101d 0 33%,#3b1e40 33% 56%,#d67cbe 56%); }
+@media(max-width:480px){ .theme-choices{ grid-template-columns:1fr; } }
