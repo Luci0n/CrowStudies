@@ -5,21 +5,33 @@
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const primary = document.createElement('canvas');
   const outgoing = document.createElement('canvas');
-  const grain = document.createElement('div');
   primary.className = 'crow-topography';
   outgoing.className = 'crow-topography crow-topography-outgoing';
-  grain.className = 'crow-topography-grain';
   primary.setAttribute('aria-hidden', 'true');
   outgoing.setAttribute('aria-hidden', 'true');
-  grain.setAttribute('aria-hidden', 'true');
   document.body.prepend(outgoing);
   document.body.prepend(primary);
-  document.body.append(grain);
 
   const display = primary.getContext('2d');
   const outgoingDisplay = outgoing.getContext('2d');
   const buffer = document.createElement('canvas');
   const context = buffer.getContext('2d');
+  const textureTile = document.createElement('canvas');
+  textureTile.width = textureTile.height = 128;
+  const textureContext = textureTile.getContext('2d');
+  const texturePixels = textureContext.createImageData(128, 128);
+  let textureState = 0x61c88647;
+  for (let index = 0; index < texturePixels.data.length; index += 4) {
+    textureState = Math.imul(textureState ^ textureState >>> 15, 1 | textureState);
+    const noise = (textureState >>> 24) - 128;
+    const shade = noise > 0 ? 212 : 22;
+    texturePixels.data[index] = shade;
+    texturePixels.data[index + 1] = shade;
+    texturePixels.data[index + 2] = shade + (noise > 0 ? 8 : 0);
+    texturePixels.data[index + 3] = 18 + Math.abs(noise >> 1);
+  }
+  textureContext.putImageData(texturePixels, 0, 0);
+  const texturePattern = context.createPattern(textureTile, 'repeat');
   let width = 0, height = 0, dpr = 1, lastFrame = -Infinity;
   let hasPainted = false, revealOutgoing = false;
 
@@ -78,6 +90,18 @@
     lastFrame = now;
     const time = reduce ? 0 : now * .00012;
     context.clearRect(0, 0, width, height);
+    const glow = context.createRadialGradient(width * .13, height * .03, 0, width * .13, height * .03, Math.max(width, height) * .82);
+    glow.addColorStop(0, 'rgba(76,68,168,.22)');
+    glow.addColorStop(.54, 'rgba(29,40,95,.09)');
+    glow.addColorStop(1, 'rgba(9,11,18,0)');
+    context.fillStyle = glow;
+    context.fillRect(0, 0, width, height);
+    if (texturePattern) {
+      context.globalAlpha = .62;
+      context.fillStyle = texturePattern;
+      context.fillRect(0, 0, width, height);
+      context.globalAlpha = 1;
+    }
     const cell = Math.max(11, Math.min(13, Math.round(width / 108)));
     const columns = Math.ceil(width / cell) + 1;
     const rows = Math.ceil(height / cell) + 1;
