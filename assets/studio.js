@@ -907,7 +907,7 @@
     var actions=previewing()
       ? '<button class="btn sm" data-restore-preview>Restore this version</button>'
       : '<button class="btn ghost sm" data-toggle-view>'+ (readOnly?'Edit project':'View project') +'</button><button class="btn ghost sm" data-new-section>+ Section</button>';
-    return previewBarHTML()+'<div class="project-top"><div class="project-heading"><h1 class="project-title">'+esc(activeProject.title)+'</h1><div class="project-meta"><span class="'+(shared?'shared':'private')+'">'+esc(access)+'</span><span>'+esc(overview)+'</span></div><div class="project-presence" hidden><span>Viewing now</span><div class="collab-people" data-collab-people aria-label="People viewing this project"></div></div></div><div class="project-actions">'+actions+'</div></div><div class="section-bar"><button class="section-filter '+(activeSection==='all'?'active':'')+'" data-section="all">All</button><button class="section-filter '+(activeSection===''?'active':'')+'" data-section="">Unsorted</button>'+sectionButtons+'</div>'+pageBar+(locked?'<p class="section-lock-note">This section is locked. Unlock it from its cog menu to edit.</p>':'')+'<div class="block-grid">'+shown.map(blockHTML).join('')+'</div><div class="add-row '+(locked?'is-locked':'')+'"><span>'+ (locked?'This section is locked':'Add a block') +'</span>'+['note','tasks','status','milestone','schedule','idea','quote','callout','code','divider','lesson','table','image'].map(function(type){return '<button class="add-card" data-add="'+type+'"'+(locked?' disabled':'')+'>'+type+'</button>';}).join('')+'</div>';
+    return previewBarHTML()+'<div class="project-top"><div class="project-heading"><h1 class="project-title">'+esc(activeProject.title)+'</h1><div class="project-meta"><span class="'+(shared?'shared':'private')+'">'+esc(access)+'</span><span>'+esc(overview)+'</span></div><div class="project-presence" hidden><span>Viewing now</span><div class="collab-people" data-collab-people aria-label="People viewing this project"></div></div></div><div class="project-actions">'+actions+'</div></div><div class="section-bar"><button class="section-filter '+(activeSection==='all'?'active':'')+'" data-section="all">All</button><button class="section-filter '+(activeSection===''?'active':'')+'" data-section="">Unsorted</button>'+sectionButtons+'</div>'+pageBar+(locked?'<p class="section-lock-note">This section is locked. Unlock it from its cog menu to edit.</p>':'')+'<div class="block-grid">'+shown.map(blockHTML).join('')+'</div><div class="add-row '+(locked?'is-locked':'')+'">'+(locked?'<span>This section is locked</span>':'<button type="button" class="add-open" data-add-open>+ Add block</button>')+'</div>';
   }
   function personName(uid){
     var people=(activeProject&&activeProject.people)||{};
@@ -1226,6 +1226,163 @@
     menu.querySelector('[data-duplicate]').onclick=function(){ closeBlockMenu(); duplicateBlock(block); };
     setTimeout(function(){ document.addEventListener('click',awayFromBlockMenu); },0);
   }
+  /* Reached from the palette now rather than from a button per kind, so the
+     making of a block lives in one place instead of inside a handler. */
+  function addBlockOfType(type){
+    if(!type||!activeProject)return;
+    var block={id:id(),type:type,title:'',body:'',sectionId:activeSection==='all'?'':activeSection,pageId:activePage==='all'?'':activePage,order:Date.now(),done:false,due:'',pending:true,items:type==='tasks'?[{text:'',done:false}]:[],steps:type==='lesson'?[normalizeStep({kind:'explain',title:'What to know'}),normalizeStep({kind:'free'})]:[],lessonSection:type==='lesson'?sectionName(activeSection==='all'?'':activeSection):'',lessonBlurb:'',lessonIcon:type==='lesson'?'✦':'',lessonColor:type==='lesson'?LESSON_DEFAULT_COLOR:'',lessonHint:''};blocks.push(block);render();var card=root.querySelector('[data-block="'+block.id+'"]'), field=card&&card.querySelector('[data-title]');if(field)field.focus();cloud().saveBlock(activeProject.id,block.id,block).then(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current)current.classList.remove('is-pending');var dot=current&&current.querySelector('.save-dot');if(dot)dot.remove();}).catch(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current){current.classList.remove('is-pending');current.classList.add('save-failed');}});
+  }
+  var ADD_GROUPS=[
+    { name:'Text', types:['note','quote','callout','code'] },
+    { name:'Planning', types:['tasks','status','milestone','schedule'] },
+    { name:'Thinking', types:['idea'] },
+    { name:'Media', types:['image','table'] },
+    { name:'Learning', types:['lesson'] }
+  ];
+  var BLOCK_BLURBS={ note:'Words, headings and lists', quote:'Someone else\u2019s words, set apart',
+    callout:'A short thing worth noticing', code:'Monospaced, kept exactly as typed',
+    tasks:'A list you can tick off', status:'Where something stands right now',
+    milestone:'A date to work towards', schedule:'A time and what happens at it',
+    idea:'Somewhere to put a thought before it goes', image:'A picture, uploaded or linked',
+    table:'Rows and columns', lesson:'Practice steps you can run' };
+  function closeIconPicker(){
+    var open=root.querySelector('.icon-picker');
+    if(open&&open.parentNode)open.parentNode.removeChild(open);
+    document.removeEventListener('click',awayFromIconPicker);
+  }
+  function awayFromIconPicker(event){
+    if(event.target.closest('.icon-picker')||event.target.closest('[data-callout-icon]'))return;
+    closeIconPicker();
+  }
+  function closeTableDesign(){
+    var open=root.querySelector('.table-design');
+    if(open&&open.parentNode)open.parentNode.removeChild(open);
+    document.removeEventListener('click',awayFromTableDesign);
+  }
+  function awayFromTableDesign(event){
+    if(event.target.closest('.table-design')||event.target.closest('[data-table-design]'))return;
+    closeTableDesign();
+  }
+  function saveTableLook(card, block){
+    var holder=card.querySelector('.block-table');
+    if(holder)block.body=holder.innerHTML;
+    queuedSave(block,true,{ body:block.body, tableHeader:!!block.tableHeader, tableZebra:!!block.tableZebra, tableDense:!!block.tableDense });
+  }
+  /* A header row is a row of th, not a flag: the table carries its own shape in
+     its markup, so the switch rewrites the first row's cells and leaves the
+     text inside them where it is. */
+  function setTableHeader(card, block, on){
+    var table=card.querySelector('.block-table table');
+    var first=table&&table.rows[0];
+    if(!first)return;
+    Array.prototype.slice.call(first.cells).forEach(function(cell){
+      var wanted=on?'TH':'TD';
+      if(cell.tagName===wanted)return;
+      var swapped=document.createElement(wanted);
+      swapped.innerHTML=cell.innerHTML;
+      if(cell.getAttribute('style'))swapped.setAttribute('style',cell.getAttribute('style'));
+      cell.parentNode.replaceChild(swapped,cell);
+    });
+    block.tableHeader=!!on;
+    saveTableLook(card,block);
+  }
+  /* Alignment is a property of cells, and the sanitiser keeps text-align on
+     them for exactly this. With nothing selected it applies to the lot. */
+  function alignTableCells(card, block, how){
+    var holder=card.querySelector('.block-table');
+    if(!holder)return;
+    var chosen=holder.querySelectorAll('.selected-cell');
+    if(!chosen.length)chosen=holder.querySelectorAll('th,td');
+    Array.prototype.forEach.call(chosen,function(cell){ cell.style.textAlign=how; });
+    saveTableLook(card,block);
+  }
+  function openTableDesign(card, block, anchor){
+    var already=card.querySelector('.table-design');
+    closeTableDesign();
+    if(already)return;
+    var holder=card.querySelector('.block-table');
+    var panel=document.createElement('div'); panel.className='table-design';
+    panel.innerHTML='<label><input type="checkbox" data-t-header'+(card.querySelector('.block-table th')?' checked':'')+'>Header row</label>'
+      +'<label><input type="checkbox" data-t-zebra'+(block.tableZebra?' checked':'')+'>Striped rows</label>'
+      +'<label><input type="checkbox" data-t-dense'+(block.tableDense?' checked':'')+'>Compact</label>'
+      +'<div class="table-design-head">Align cells</div>'
+      +'<div class="table-align"><button type="button" data-t-align="left">Left</button><button type="button" data-t-align="center">Centre</button><button type="button" data-t-align="right">Right</button></div>';
+    anchor.parentNode.insertBefore(panel,anchor.nextSibling);
+    panel.querySelector('[data-t-header]').onchange=function(event){ setTableHeader(card,block,event.target.checked); };
+    panel.querySelector('[data-t-zebra]').onchange=function(event){
+      block.tableZebra=event.target.checked;
+      if(holder)holder.classList.toggle('zebra',block.tableZebra);
+      saveTableLook(card,block);
+    };
+    panel.querySelector('[data-t-dense]').onchange=function(event){
+      block.tableDense=event.target.checked;
+      if(holder)holder.classList.toggle('dense',block.tableDense);
+      saveTableLook(card,block);
+    };
+    panel.querySelectorAll('[data-t-align]').forEach(function(button){
+      button.onclick=function(){ alignTableCells(card,block,button.dataset.tAlign); };
+    });
+    setTimeout(function(){ document.addEventListener('click',awayFromTableDesign); },0);
+  }
+  function taskCount(card, block){
+    var holder=card.querySelector('.task-count');
+    if(!holder)return;
+    var written=(block.items||[]).filter(function(item){ return (item.text||'').trim(); });
+    var left=written.filter(function(item){ return !item.done; }).length;
+    holder.textContent=written.length?(left?left+' left of '+written.length:'all '+written.length+' done'):'';
+  }
+  function closeAddPalette(){
+    var open=root.querySelector('.add-palette');
+    if(open&&open.parentNode)open.parentNode.removeChild(open);
+    document.removeEventListener('click',awayFromAddPalette);
+  }
+  function awayFromAddPalette(event){
+    if(event.target.closest('.add-palette')||event.target.closest('[data-add-open]'))return;
+    closeAddPalette();
+  }
+  function addPaletteResults(holder, search){
+    var wanted=String(search||'').trim().toLowerCase();
+    var rows=[];
+    ADD_GROUPS.forEach(function(group){
+      var hits=group.types.filter(function(type){
+        if(!wanted)return true;
+        return (BLOCK_LABELS[type]+' '+(BLOCK_BLURBS[type]||'')+' '+type).toLowerCase().indexOf(wanted)>=0;
+      });
+      if(!hits.length)return;
+      rows.push('<div class="add-group">'+group.name+'</div>');
+      hits.forEach(function(type){
+        rows.push('<button type="button" data-add="'+type+'"><b>'+BLOCK_LABELS[type]+'</b><small>'+esc(BLOCK_BLURBS[type]||'')+'</small></button>');
+      });
+    });
+    holder.innerHTML=rows.length?rows.join(''):'<p class="add-empty">Nothing by that name.</p>';
+    holder.querySelectorAll('[data-add]').forEach(function(button){
+      button.onclick=function(){ closeAddPalette(); addBlockOfType(button.dataset.add); };
+    });
+  }
+  /* One way in that answers to typing, rather than a row of buttons that grew
+     by one every time a kind was added. */
+  function openAddPalette(anchor){
+    var already=root.querySelector('.add-palette');
+    closeAddPalette();
+    if(already)return;
+    var palette=document.createElement('div'); palette.className='add-palette';
+    palette.innerHTML='<input class="add-search" data-add-search type="search" placeholder="Search blocks\u2026" aria-label="Search blocks"><div class="add-results"></div>';
+    anchor.parentNode.insertBefore(palette,anchor.nextSibling);
+    var search=palette.querySelector('[data-add-search]'), results=palette.querySelector('.add-results');
+    addPaletteResults(results,'');
+    /* The row it hangs from is the last thing on the page, so a menu that only
+       ever opened downwards would open off the bottom of it. */
+    if(palette.getBoundingClientRect().bottom>window.innerHeight-8)palette.classList.add('above');
+    search.oninput=function(){ addPaletteResults(results,search.value); };
+    search.onkeydown=function(event){
+      if(event.key==='Escape'){ closeAddPalette(); return; }
+      if(event.key!=='Enter')return;
+      var first=results.querySelector('[data-add]');
+      if(first){ event.preventDefault(); first.click(); }
+    };
+    search.focus();
+    setTimeout(function(){ document.addEventListener('click',awayFromAddPalette); },0);
+  }
   function blockHTML(block){
     var labels=BLOCK_LABELS;
     var prompt=block.type==='idea'?'Capture a possibility, question, or connection…':block.type==='lesson'?'Teach the idea in a few clear lines…':'Write something…';
@@ -1234,7 +1391,23 @@
     var body='<div class="block-body" data-body contenteditable="'+editable+'" data-placeholder="'+prompt+'">'+cleanHTML(block.body)+'</div>';
     var extra=((block.type==='schedule'||block.type==='milestone')?'<input class="block-date" data-date type="date" value="'+esc(block.due||'')+'">':'');
     if(block.type==='note') body='<div class="rich-tools"><button data-format="bold"><b>B</b></button><button data-format="italic"><i>I</i></button><button data-format="insertUnorderedList">• list</button><button data-format="formatBlock" data-value="H1">H1</button><button data-format="formatBlock" data-value="H2">H2</button><button data-format="formatBlock" data-value="H3">H3</button><button data-format="formatBlock" data-value="P">P</button></div>'+body;
-    if(block.type==='tasks') body='<div class="task-list">'+(block.items||[{text:'',done:false}]).map(function(item,i){return '<label><input type="checkbox" data-task-check="'+i+'" '+(item.done?'checked':'')+disabled+'><input data-task-text="'+i+'" value="'+esc(item.text)+'" placeholder="Task"'+disabled+'></label>';}).join('')+(frozen?'':'<button class="add-task" data-add-task>+ Add task</button>')+'</div>';
+    if(block.type==='tasks'){
+      /* The handlers reach into items by index, so the list a card is drawn
+         from has to be the list the block actually holds. */
+      if(!Array.isArray(block.items)||!block.items.length)block.items=[{text:'',done:false}];
+      var written=block.items.filter(function(item){ return (item.text||'').trim(); });
+      var left=written.filter(function(item){ return !item.done; }).length;
+      body='<div class="task-list" data-task-list>'+block.items.map(function(item,i){
+        return '<div class="task-row'+(item.done?' done':'')+'" data-task-row="'+i+'"'+(frozen?'':' draggable="true"')+'>'
+          +(frozen?'':'<span class="task-grip" aria-hidden="true">\u283F</span>')
+          +'<input type="checkbox" data-task-check="'+i+'" '+(item.done?'checked':'')+disabled+'>'
+          +'<input class="task-text" data-task-text="'+i+'" value="'+esc(item.text)+'" placeholder="Task"'+disabled+'>'
+          +(frozen?'':'<button type="button" class="task-drop" data-task-remove="'+i+'" aria-label="Remove this task">\u00d7</button>')
+          +'</div>';
+      }).join('')+'</div><div class="task-foot"><span class="task-count">'
+        +(written.length?(left?left+' left of '+written.length:'all '+written.length+' done'):'')
+        +'</span>'+(frozen?'':'<button class="add-task" data-add-task>+ Add task</button>')+'</div>';
+    }
     if(block.type==='status') body='<select class="status-select" data-status'+disabled+'><option '+((block.status||'Not started')==='Not started'?'selected':'')+'>Not started</option><option '+((block.status||'Not started')==='In progress'?'selected':'')+'>In progress</option><option '+((block.status||'Not started')==='Blocked'?'selected':'')+'>Blocked</option><option '+((block.status||'Not started')==='Done'?'selected':'')+'>Done</option></select>';
     if(block.type==='idea') extra+='<select class="status-select idea-stage" data-idea-stage'+disabled+'><option '+((block.ideaStage||'Inbox')==='Inbox'?'selected':'')+'>Inbox</option><option '+((block.ideaStage||'Inbox')==='Exploring'?'selected':'')+'>Exploring</option><option '+((block.ideaStage||'Inbox')==='Kept'?'selected':'')+'>Kept</option><option '+((block.ideaStage||'Inbox')==='Dropped'?'selected':'')+'>Dropped</option></select>';
     if(block.type==='lesson'){
@@ -1246,7 +1419,7 @@
         extra='<div class="lesson-actions"><button class="btn ghost sm" data-practice-lesson>Preview and practice</button><button class="btn ghost sm" data-export-lesson>Export</button><button class="btn ghost sm" data-import-lesson'+disabled+'>Import</button></div>';
       }
     }
-    if(block.type==='table') body='<div class="table-tools"><span>Drag across cells to select</span><button data-table-row'+disabled+'>+ Row</button><button data-table-col'+disabled+'>+ Column</button><button data-remove-row'+disabled+'>− Row</button><button data-remove-col'+disabled+'>− Column</button></div><div class="table-frame"><div class="block-body block-table" data-body contenteditable="'+editable+'" data-placeholder="Create a simple table…">'+(block.body?cleanHTML(block.body):TABLE_DEFAULT)+'</div><div class="table-resizers"></div></div>';
+    if(block.type==='table') body='<div class="table-tools"><span>Drag across cells to select</span><button data-table-row'+disabled+'>+ Row</button><button data-table-col'+disabled+'>+ Column</button><button data-remove-row'+disabled+'>− Row</button><button data-remove-col'+disabled+'>− Column</button>'+(frozen?'':'<button data-table-design>Design</button>')+'</div><div class="table-frame"><div class="block-body block-table'+(block.tableZebra?' zebra':'')+(block.tableDense?' dense':'')+'" data-body contenteditable="'+editable+'" data-placeholder="Create a simple table…">'+(block.body?cleanHTML(block.body):TABLE_DEFAULT)+'</div><div class="table-resizers"></div></div>';
     if(block.type==='image'){
       var picker='<input data-image-upload type="file" accept="image/jpeg,image/png,image/webp" hidden>';
       body=(block.imageUrl
@@ -1797,7 +1970,8 @@
     root.querySelectorAll('[data-section-menu]').forEach(function(button){button.onclick=function(event){event.stopPropagation();toggleSectionMenu(button.dataset.sectionMenu);};});
     bindSectionMenu(root);
     watchSectionMenu();
-    root.querySelectorAll('[data-add]').forEach(function(button){button.onclick=function(){var type=button.dataset.add, block={id:id(),type:type,title:'',body:'',sectionId:activeSection==='all'?'':activeSection,pageId:activePage==='all'?'':activePage,order:Date.now(),done:false,due:'',pending:true,items:type==='tasks'?[{text:'',done:false}]:[],steps:type==='lesson'?[normalizeStep({kind:'explain',title:'What to know'}),normalizeStep({kind:'free'})]:[],lessonSection:type==='lesson'?sectionName(activeSection==='all'?'':activeSection):'',lessonBlurb:'',lessonIcon:type==='lesson'?'✦':'',lessonColor:type==='lesson'?LESSON_DEFAULT_COLOR:'',lessonHint:''};blocks.push(block);render();var card=root.querySelector('[data-block="'+block.id+'"]'), field=card&&card.querySelector('[data-title]');if(field)field.focus();cloud().saveBlock(activeProject.id,block.id,block).then(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current)current.classList.remove('is-pending');var dot=current&&current.querySelector('.save-dot');if(dot)dot.remove();}).catch(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current){current.classList.remove('is-pending');current.classList.add('save-failed');}});};});
+    var addOpen=root.querySelector('[data-add-open]');
+    if(addOpen)addOpen.onclick=function(event){ event.stopPropagation(); openAddPalette(addOpen); };
     root.querySelectorAll('[data-block]').forEach(function(card){var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0], body=card.querySelector('[data-body]');card.querySelector('[data-title]').oninput=function(e){block.title=e.target.value;queuedSave(block,false,{title:block.title});};if(body)body.oninput=function(e){block.body=cleanHTML(e.target.innerHTML);queuedSave(block,false,{body:block.body});};var practice=card.querySelector('[data-practice]');if(practice)practice.oninput=function(e){block.practice=e.target.value;queuedSave(block,false,{practice:block.practice});};var answer=card.querySelector('[data-answer]');if(answer)answer.oninput=function(e){block.answer=e.target.value;queuedSave(block,false,{answer:block.answer});};var image=card.querySelector('[data-image-url]');if(image)image.onchange=function(e){block.imageUrl=e.target.value.trim();queuedSave(block,true);render();};var imageUpload=card.querySelector('[data-image-upload]');if(imageUpload)imageUpload.onchange=function(e){var file=e.target.files&&e.target.files[0];if(file)takeImage(block,file,imageUpload);e.target.value='';};
       var drop=card.querySelector('[data-image-drop]');
       if(drop)bindImageDrop(drop,block);
@@ -1823,15 +1997,86 @@
       var more=card.querySelector('[data-block-menu]');
       if(more)more.onclick=function(event){ event.stopPropagation(); openBlockMenu(card,block); };
       var icon=card.querySelector('[data-callout-icon]');
-      if(icon)icon.onclick=async function(){
-        var chosen=await askName('Callout icon',CALLOUT_ICON,'Use this icon');
-        if(chosen===null)return;
-        block.icon=(chosen.trim()||CALLOUT_ICON).slice(0,2);
-        icon.textContent=block.icon;
-        queuedSave(block,true,{icon:block.icon});
+      if(icon)icon.onclick=function(event){
+        event.stopPropagation();
+        var showing=card.querySelector('.icon-picker');
+        closeIconPicker();
+        if(showing)return;
+        var picker=document.createElement('div'); picker.className='icon-picker';
+        picker.innerHTML=CALLOUT_ICONS.map(function(mark){ return '<button type="button" data-icon="'+mark+'">'+mark+'</button>'; }).join('');
+        icon.parentNode.insertBefore(picker,icon.nextSibling);
+        picker.querySelectorAll('[data-icon]').forEach(function(button){
+          button.onclick=function(){
+            block.icon=button.dataset.icon;
+            icon.textContent=block.icon;
+            closeIconPicker();
+            queuedSave(block,true,{icon:block.icon});
+          };
+        });
+        setTimeout(function(){ document.addEventListener('click',awayFromIconPicker); },0);
       };
       var code=card.querySelector('[data-code]');
       if(code)code.oninput=function(){ block.body=code.textContent; queuedSave(block,false,{body:block.body}); };
+      var design=card.querySelector('[data-table-design]');
+      if(design)design.onclick=function(event){ event.stopPropagation(); openTableDesign(card,block,design.parentNode); };
+      /* A list you can work down without reaching for the mouse: return starts
+         the next task, and backspace on an empty one takes it away again. */
+      card.querySelectorAll('[data-task-text]').forEach(function(input){
+        input.onkeydown=function(event){
+          var at=+input.dataset.taskText;
+          if(event.key==='Enter'){
+            event.preventDefault();
+            block.items.splice(at+1,0,{ text:'', done:false });
+            render(); queuedSave(block,true,{items:block.items});
+            var next=root.querySelector('[data-block="'+block.id+'"] [data-task-text="'+(at+1)+'"]');
+            if(next)next.focus();
+            return;
+          }
+          if(event.key==='Backspace'&&!input.value&&block.items.length>1){
+            event.preventDefault();
+            block.items.splice(at,1);
+            render(); queuedSave(block,true,{items:block.items});
+            var back=root.querySelector('[data-block="'+block.id+'"] [data-task-text="'+Math.max(0,at-1)+'"]');
+            if(back){ back.focus(); try{ back.setSelectionRange(back.value.length,back.value.length); }catch(error){} }
+          }
+        };
+        input.addEventListener('input',function(){ taskCount(card,block); });
+      });
+      card.querySelectorAll('[data-task-remove]').forEach(function(button){
+        button.onclick=function(){
+          block.items.splice(+button.dataset.taskRemove,1);
+          if(!block.items.length)block.items=[{ text:'', done:false }];
+          render(); queuedSave(block,true,{items:block.items});
+        };
+      });
+      card.querySelectorAll('[data-task-check]').forEach(function(input){
+        /* Added alongside the handler that saves, rather than over it: this one
+           only has to show what the tick means. */
+        input.addEventListener('change',function(){
+          var row=input.closest('.task-row');
+          if(row)row.classList.toggle('done',input.checked);
+          taskCount(card,block);
+        });
+      });
+      var carrying=null;
+      card.querySelectorAll('.task-row[draggable]').forEach(function(row){
+        row.addEventListener('dragstart',function(event){
+          carrying=+row.dataset.taskRow; row.classList.add('is-dragging');
+          try{ event.dataTransfer.effectAllowed='move'; event.dataTransfer.setData('text/plain',String(carrying)); }catch(error){}
+        });
+        row.addEventListener('dragend',function(){ row.classList.remove('is-dragging'); });
+        row.addEventListener('dragover',function(event){ event.preventDefault(); row.classList.add('is-over'); });
+        row.addEventListener('dragleave',function(){ row.classList.remove('is-over'); });
+        row.addEventListener('drop',function(event){
+          event.preventDefault(); row.classList.remove('is-over');
+          var to=+row.dataset.taskRow;
+          if(carrying===null||carrying===to)return;
+          var moved=block.items.splice(carrying,1)[0];
+          block.items.splice(to,0,moved);
+          carrying=null;
+          render(); queuedSave(block,true,{items:block.items});
+        });
+      });
     });
     bindDrag();
   }

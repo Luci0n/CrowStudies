@@ -493,7 +493,56 @@
 .callout-icon{ flex:0 0 auto; padding:2px 4px; border:0; border-radius:7px; background:transparent; font-size:19px; line-height:1; }
 .callout-icon:hover{ background:var(--glass-deep); }
 .block-code{ margin:8px 0 0; padding:11px 12px; border:1px solid var(--glass-edge); border-radius:9px; background:color-mix(in srgb,#05070e 55%,transparent); color:var(--ink-2); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.5; white-space:pre-wrap; }
-.block-rule{ height:1px; margin:16px 0 6px; background:var(--glass-edge); }
 .studio-block.quote .block-kicker{ color:var(--ink-3); }
 .studio-block.callout .block-kicker{ color:var(--gold); }
 .studio-block.code .block-kicker{ color:var(--ink-3); }
+
+/* ---------- one way in, instead of a button for every kind ---------- */
+.add-row{ position:relative; }
+.add-open{ padding:9px 14px; border:1px dashed var(--glass-edge); border-radius:9px; background:transparent; color:var(--brand); font-family:inherit; font-weight:800; font-size:13px; transition:background .2s ease, border-color .2s ease; }
+.add-open:hover{ background:var(--glass-lift); border-color:var(--brand); }
+.add-palette{ position:absolute; z-index:8; left:0; top:calc(100% + 8px); width:min(340px,92vw); padding:8px; border:1px solid var(--line); border-radius:11px; background:var(--card); box-shadow:0 20px 44px #0007; }
+.add-search{ width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid var(--glass-edge); border-radius:8px; background:var(--well); color:var(--ink); font-family:inherit; font-weight:700; font-size:13px; }
+.add-search:focus{ outline:none; border-color:var(--brand); }
+.add-results{ display:grid; max-height:320px; overflow:auto; margin-top:6px; }
+.add-group{ padding:8px 8px 4px; color:var(--ink-3); font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
+.add-results button{ display:grid; gap:1px; padding:7px 8px; border:0; border-radius:8px; background:transparent; text-align:left; }
+.add-results button b{ color:var(--ink); font-size:13px; font-weight:750; }
+.add-results button small{ color:var(--ink-3); font-size:11.5px; }
+.add-results button:hover{ background:var(--glass-lift); }
+.add-empty{ margin:0; padding:10px 8px; color:var(--ink-3); font-size:12px; }
+
+/* ---------- a task list you can work down without the mouse ---------- */
+.task-list{ display:grid; gap:2px; margin-top:8px; }
+.task-row{ display:flex; align-items:center; gap:8px; padding:3px 4px; border:1px solid transparent; border-radius:7px; }
+.task-row:hover{ background:var(--glass-lift); }
+.task-row.is-dragging{ opacity:.45; }
+.task-row.is-over{ border-color:var(--brand); }
+.task-grip{ cursor:grab; color:var(--ink-3); font-size:13px; opacity:0; transition:opacity .18s ease; }
+.task-row:hover .task-grip{ opacity:.8; }
+.task-text{ flex:1 1 auto; min-width:0; padding:4px 2px; border:0; background:transparent; color:var(--ink-2); font-family:inherit; font-size:13.5px; }
+.task-text:focus{ outline:none; }
+.task-row.done .task-text{ color:var(--ink-3); text-decoration:line-through; }
+.task-drop{ padding:2px 4px; border:0; background:transparent; color:var(--ink-3); font-size:15px; line-height:1; opacity:0; }
+.task-row:hover .task-drop,.task-drop:focus-visible{ opacity:1; }
+.task-drop:hover{ color:var(--bad); }
+.task-foot{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:6px; }
+.task-count{ color:var(--ink-3); font-size:11px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
+@media (hover:none){ .task-grip,.task-drop{ opacity:.6; } }
+
+/* ---------- picking an icon, and giving a table a look ---------- */
+.callout-row{ position:relative; }
+.icon-picker{ position:absolute; z-index:7; top:100%; left:0; display:flex; flex-wrap:wrap; gap:2px; width:max-content; max-width:230px; margin-top:4px; padding:5px; border:1px solid var(--line); border-radius:9px; background:var(--card); box-shadow:0 14px 30px #0006; }
+.icon-picker button{ padding:4px 5px; border:0; border-radius:6px; background:transparent; font-size:17px; line-height:1; }
+.icon-picker button:hover{ background:var(--glass-lift); }
+.table-tools{ position:relative; }
+.table-design{ position:absolute; z-index:7; left:0; top:calc(100% + 6px); display:grid; gap:2px; min-width:200px; padding:7px; border:1px solid var(--line); border-radius:10px; background:var(--card); box-shadow:0 16px 34px #0006; }
+.table-design label{ display:flex; align-items:center; gap:8px; padding:6px 7px; border-radius:7px; color:var(--ink-2); font-size:12px; font-weight:700; }
+.table-design label:hover{ background:var(--glass-lift); }
+.table-design-head{ padding:7px 7px 3px; color:var(--ink-3); font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
+.table-align{ display:flex; gap:4px; padding:0 3px 3px; }
+.table-align button{ flex:1 1 auto; padding:6px 4px; border:1px solid var(--glass-edge); border-radius:7px; background:transparent; color:var(--ink-2); font-family:inherit; font-weight:750; font-size:11.5px; }
+.table-align button:hover{ border-color:var(--brand); color:var(--brand); }
+.block-table.zebra tr:nth-child(even) td{ background:color-mix(in srgb,var(--card-2) 30%,transparent); }
+.block-table.dense th,.block-table.dense td{ height:30px; padding:4px 7px; font-size:12.5px; }
+.add-palette.above{ top:auto; bottom:calc(100% + 8px); }
