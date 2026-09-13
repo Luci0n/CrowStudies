@@ -993,3 +993,11 @@ body.is-sizing .studio-block{ transition:none; }
 /* Older blocks already render their title input, so view mode hides the
    default value at the surface as well as during rendering. */
 .read-only .block-title[value^="Untitled"]{ display:none!important; }
+
+/* Marking view mode on the actual toggle makes this independent of how a
+   project reached its read-only state. */
+.studio-main:has([data-toggle-view][data-viewing="true"]) .block-title.is-default-title{ display:none!important; }
+/* While editing, the source is the only visible text layer, so every source
+   line and its gutter share the exact same metrics. Colours return on blur. */
+.studio-block:focus-within .code-highlight{ display:none; }
+.studio-block:focus-within .block-code{ color:var(--ink)!important; }
