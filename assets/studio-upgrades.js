@@ -326,6 +326,16 @@ function bindComment(card){
 }
 function decorate(){
   if(!root||!cloud()||!cloud().user)return;
+  /* The core renderer and live snapshots both rebuild cards. The action label
+     is the final source of truth for View project, so remove default titles
+     after every rebuild rather than depending on an earlier render branch. */
+  const viewToggle=root.querySelector('[data-toggle-view]');
+  if(viewToggle&&viewToggle.textContent.trim()==='Edit project'){
+    root.querySelectorAll('[data-title]').forEach(field=>{
+      if(/^untitled(?:\s|$)/i.test(String(field.value||'')))field.remove();
+    });
+    root.querySelectorAll('.code-language,.code-wrap-toggle,.code-height,.code-size').forEach(control=>control.remove());
+  }
   syncCommentBadges();
   const actions=root.querySelector('.project-actions');
   if(actions&&!actions.querySelector('[data-upgrade-tasks]')){
