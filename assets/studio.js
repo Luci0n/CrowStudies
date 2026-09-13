@@ -3452,9 +3452,14 @@
         if(selection&&selection.rangeCount&&code.contains(selection.anchorNode)){
           range=selection.getRangeAt(0).cloneRange(); range.collapse(true);
           var point=range.getBoundingClientRect(), frame=viewport.getBoundingClientRect(), pad=18;
-          if(point.bottom>frame.bottom-pad)viewport.scrollTop+=point.bottom-(frame.bottom-pad);
-          else if(point.top<frame.top+pad)viewport.scrollTop-=frame.top+pad-point.top;
-          return;
+          /* A caret beside a freshly-created BR may have a 0×0 rectangle in
+             Chrome. Only trust a rectangle that actually sits on screen; the
+             reliable fallback below then follows the newly-added final line. */
+          if(point&&(point.width||point.height||point.top||point.bottom)){
+            if(point.bottom>frame.bottom-pad)viewport.scrollTop+=point.bottom-(frame.bottom-pad);
+            else if(point.top<frame.top+pad)viewport.scrollTop-=frame.top+pad-point.top;
+            return;
+          }
         }
         viewport.scrollTop=viewport.scrollHeight;
       }
