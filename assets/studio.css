@@ -492,7 +492,7 @@
 .studio-block:hover .callout-row .block-body,.studio-block:focus-within .callout-row .block-body{ background:transparent; }
 .callout-icon{ flex:0 0 auto; padding:2px 4px; border:0; border-radius:7px; background:transparent; font-size:19px; line-height:1; }
 .callout-icon:hover{ background:var(--glass-deep); }
-.block-code{ margin:8px 0 0; padding:11px 12px; border:1px solid var(--glass-edge); border-radius:9px; background:color-mix(in srgb,#05070e 55%,transparent); color:var(--ink-2); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.5; white-space:pre-wrap; }
+.block-code{ margin:8px 0 0; padding:11px 12px; border:1px solid var(--glass-edge); border-radius:9px; background:color-mix(in srgb,#05070e 55%,transparent); color:var(--ink-2); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.5; }
 .studio-block.quote .block-kicker{ color:var(--ink-3); }
 .studio-block.callout .block-kicker{ color:var(--gold); }
 .studio-block.code .block-kicker{ color:var(--ink-3); }
@@ -714,8 +714,8 @@
 .code-lines{ flex:0 0 auto; display:flex; flex-direction:column; padding:11px 8px 11px 10px; border-right:1px solid var(--glass-edge); background:color-mix(in srgb,#05070e 35%,transparent); color:var(--ink-3); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.5; text-align:right; user-select:none; }
 .code-lines span{ display:block; }
 .block-code{ flex:1 1 auto; margin:0; padding:11px 12px; border:0; border-radius:0; background:transparent; }
-.code-copy{ position:absolute; z-index:2; top:6px; right:8px; display:inline-flex; align-items:center; gap:5px; padding:5px 8px; border:1px solid var(--glass-edge); border-radius:7px; background:color-mix(in srgb,var(--card) 88%,transparent); color:var(--ink-3); font-family:inherit; font-weight:750; font-size:11px; opacity:0; transition:opacity .18s ease, color .18s ease, border-color .18s ease; }
-.studio-block:hover .code-copy,.code-copy:focus-visible{ opacity:1; }
+.code-copy{ display:inline-flex; align-items:center; gap:5px; padding:5px 8px; border:1px solid var(--glass-edge); border-radius:7px; background:color-mix(in srgb,var(--card) 88%,transparent); color:var(--ink-3); font-family:inherit; font-weight:750; font-size:11px; opacity:0; transition:opacity .18s ease, color .18s ease, border-color .18s ease; }
+.studio-block:hover .code-copy,.studio-block:focus-within .code-copy,.code-copy:focus-visible{ opacity:1; }
 .code-copy:hover{ color:var(--brand); border-color:var(--brand); }
 .code-copy.is-done{ opacity:1; color:var(--good,#6ee7b7); border-color:currentColor; }
 .code-copy svg{ width:13px; height:13px; fill:none; stroke:currentColor; stroke-width:1.4; }
@@ -728,3 +728,17 @@
 .studio-main.is-banding *{ cursor:default; }
 body.is-carrying{ cursor:grabbing; user-select:none; -webkit-user-select:none; }
 body.is-carrying *{ cursor:grabbing !important; }
+
+/* Code runs as far as it was written: a line that is too long to fit scrolls
+   rather than folding, because a fold is not where the line ends. */
+.code-tools{ display:flex; justify-content:flex-end; margin-bottom:5px; }
+.block-code{ flex:1 1 auto; min-width:0; margin:0; border:0; border-radius:0; white-space:pre; overflow-x:auto; }
+.code-body{ align-items:flex-start; }
+.code-lines{ position:sticky; left:0; z-index:1; }
+.table-clear{ width:22px; padding:0 !important; color:var(--ink-3) !important; font-size:14px; }
+.table-clear:hover{ color:var(--ink) !important; background:var(--glass-lift); }
+.db-lane-add{ width:22px; height:22px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--ink-3); font-family:inherit; font-size:14px; line-height:1; opacity:0; transition:opacity .18s ease, color .18s ease; }
+.db-lane:hover .db-lane-add,.db-lane-add:focus-visible{ opacity:1; }
+.db-lane-add:hover{ background:var(--glass-lift); color:var(--brand); }
+.db-lane header b{ margin-left:auto; }
+@media (hover:none){ .db-lane-add{ opacity:.6; } }

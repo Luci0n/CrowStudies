@@ -1539,9 +1539,15 @@
     return (Array.isArray(block.views)&&block.views.length)?block.views
       :[{ id:'first', name:'Table', kind:'table', filters:[], sort:null, groupBy:'' }];
   }
+  var dbPick={};
+  /* Which view you are looking at is yours, not the project's. It was being
+     written to the block and read back from it, so an echo that had not caught
+     up put everyone back on the first view — and the panel, which asks what the
+     current view is, then deleted that one instead of the one on screen. */
   function dbView(block){
     var views=dbViews(block);
-    return views.filter(function(view){ return view.id===block.view; })[0]||views[0];
+    var wanted=dbPick[block.id]||block.view;
+    return views.filter(function(view){ return view.id===wanted; })[0]||views[0];
   }
   function dbSaveViews(block){
     block.views=dbViews(block).slice();
@@ -1642,7 +1648,9 @@
       return '<section class="db-lane" data-db-lane="'+esc(lane.name)+'"><header>'
         +(lane.name?((prop.type==='select'||prop.type==='multi')?chipHTML(lane.label):'<span class="db-laneName">'+esc(lane.label)+'</span>')
           :'<span class="db-blankmark">'+esc(lane.label)+'</span>')
-        +'<b>'+held.length+'</b></header><div class="db-lane-rows">'
+        +'<b>'+held.length+'</b>'
+        +(frozen?'':'<button type="button" class="db-lane-add" data-db-lane-add="'+esc(lane.name)+'" aria-label="Add a row here" title="Add a row here">+</button>')
+        +'</header><div class="db-lane-rows">'
         +held.map(function(row){
           var title=first?dbAsText(first,row):'';
           return '<article class="db-card" data-db-card="'+row.id+'">'
@@ -1664,6 +1672,7 @@
       holder.innerHTML=dbViewBarHTML(block,view,frozen)+dbBoardHTML(block,view,rows,frozen)
         +'<div class="db-foot">'+(frozen?'':'<button type="button" class="db-new" data-db-add-row>+ New row</button>')
         +'<span class="db-count">'+dbCountText(rows.length,all)+'</span></div>';
+      bindViewBar(card,block);
       if(!frozen)bindDatabase(card,block);
       return;
     }
@@ -1682,6 +1691,7 @@
       +'</tbody></table></div><div class="db-foot">'
       +(frozen?'':'<button type="button" class="db-new" data-db-add-row>+ New row</button>')
       +'<span class="db-count">'+dbCountText(rows.length,all)+'</span></div>';
+    bindViewBar(card,block);
     if(!frozen)bindDatabase(card,block);
   }
   function recastColumn(block, prop, change){
@@ -1712,6 +1722,15 @@
        same row must not put each other's work back. A merged write of a nested
        map leaves every other cell where it is. */
     cloud().patchRow(activeProject.id,block.id,rowId,{ values:patch }).catch(function(){});
+  }
+  /* Looking is not editing: the tabs answer even when the rows are locked or
+     an old version is on screen. */
+  function bindViewBar(card, block){
+    var holder=card.querySelector('[data-db-table]');
+    if(!holder)return;
+    holder.querySelectorAll('[data-db-view]').forEach(function(tab){
+      tab.onclick=function(){ dbPick[block.id]=tab.dataset.dbView; paintDatabase(card,block); };
+    });
   }
   function bindDatabase(card, block){
     var holder=card.querySelector('[data-db-table]');
@@ -1750,6 +1769,20 @@
       var field=card.querySelector('[data-db-row="'+row.id+'"] [data-db-cell]');
       if(field)field.focus();
     };
+    holder.querySelectorAll('[data-db-lane-add]').forEach(function(button){
+      button.onclick=function(){
+        var view=dbView(block), prop=dbGroupProp(block,view);
+        var rows=dbRowsOf(block.id);
+        var last=rows.length?(rows[rows.length-1].order||0):0;
+        var row={ id:id(), order:(last||Date.now())+1, values:{} };
+        /* A row added to a lane belongs in that lane, so it arrives holding
+           whatever the lane is made of. */
+        if(prop)row.values[prop.id]=dbLaneValue(prop,button.dataset.dbLaneAdd||'');
+        dbRows[block.id]=rows.concat(row);
+        paintDatabase(card,block);
+        cloud().saveRow(activeProject.id,block.id,row.id,{ order:row.order, values:row.values }).catch(function(){});
+      };
+    });
     var addProp=holder.querySelector('[data-db-add-prop]');
     if(addProp)addProp.onclick=async function(){
       var name=await askName('New property','e.g. Status','Add property');
@@ -1761,16 +1794,13 @@
     holder.querySelectorAll('[data-db-prop]').forEach(function(button){
       button.onclick=function(event){ event.stopPropagation(); openPropMenu(card,block,button); };
     });
-    holder.querySelectorAll('[data-db-view]').forEach(function(tab){
-      tab.onclick=function(){ block.view=tab.dataset.dbView; dbSaveViews(block); paintDatabase(card,block); };
-    });
     var addView=holder.querySelector('[data-db-add-view]');
     if(addView)addView.onclick=async function(){
       var name=await askName('New view','e.g. Board','Add view');
       if(name===null)return;
       var made={ id:id(), name:name.trim()||'View', kind:'table', filters:[], sort:null, groupBy:'' };
       block.views=dbViews(block).concat(made);
-      block.view=made.id;
+      dbPick[block.id]=made.id;
       dbSaveViews(block); paintDatabase(card,block);
     };
     var setup=holder.querySelector('[data-db-view-setup]');
@@ -1926,8 +1956,10 @@
         closeViewSetup();
         if(dbViews(block).length<2){ await notify('This is the only view','A database keeps at least one way of looking at it.'); return; }
         if(!await askConfirm('Delete this view?','The rows stay where they are. Only this way of looking at them goes.','Delete view'))return;
-        block.views=dbViews(block).filter(function(item){ return item.id!==view.id; });
-        block.view=block.views[0].id;
+        var going=dbView(block).id;
+        block.views=dbViews(block).filter(function(item){ return item.id!==going; });
+        dbPick[block.id]=block.views[0].id;
+        view=block.views[0];
         keep();
       };
     }
@@ -2403,7 +2435,7 @@
         extra='<div class="lesson-actions"><button class="btn ghost sm" data-practice-lesson>Preview and practice</button><button class="btn ghost sm" data-export-lesson>Export</button><button class="btn ghost sm" data-import-lesson'+disabled+'>Import</button></div>';
       }
     }
-    if(block.type==='table') body='<div class="table-tools"><span>Drag across cells to select a row or a column</span>'+(frozen?'':'<button data-table-design>Design</button><span class="table-selection" data-table-selection hidden><b>Selected</b><button type="button" data-remove-row>Delete row</button><button type="button" data-remove-col>Delete column</button></span>')+'</div><div class="table-frame"><div class="block-body block-table'+(block.tableZebra?' zebra':'')+(block.tableDense?' dense':'')+'" data-body contenteditable="'+editable+'" data-placeholder="Create a simple table…">'+(block.body?cleanHTML(block.body):TABLE_DEFAULT)+'</div><div class="table-resizers"></div>'+(frozen?'':'<button type="button" class="table-add table-add-col" data-table-col title="Add a column" aria-label="Add a column">+</button><button type="button" class="table-add table-add-row" data-table-row title="Add a row" aria-label="Add a row">+</button>')+'</div>';
+    if(block.type==='table') body='<div class="table-tools"><span>Drag across cells to select a row or a column</span>'+(frozen?'':'<button data-table-design>Design</button><span class="table-selection" data-table-selection hidden><b>Selected</b><button type="button" data-remove-row>Delete row</button><button type="button" data-remove-col>Delete column</button><button type="button" class="table-clear" data-table-clear aria-label="Clear the selection">×</button></span>')+'</div><div class="table-frame"><div class="block-body block-table'+(block.tableZebra?' zebra':'')+(block.tableDense?' dense':'')+'" data-body contenteditable="'+editable+'" data-placeholder="Create a simple table…">'+(block.body?cleanHTML(block.body):TABLE_DEFAULT)+'</div><div class="table-resizers"></div>'+(frozen?'':'<button type="button" class="table-add table-add-col" data-table-col title="Add a column" aria-label="Add a column">+</button><button type="button" class="table-add table-add-row" data-table-row title="Add a row" aria-label="Add a row">+</button>')+'</div>';
     if(block.type==='image'){
       var picker='<input data-image-upload type="file" accept="image/jpeg,image/png,image/webp" hidden>';
       body=(block.imageUrl
@@ -2421,9 +2453,9 @@
     if(block.type==='database') body='<div class="db" data-db-table></div>';
     if(block.type==='code'){
       var written=plainText(block.body);
-      body='<div class="code-wrap"><button type="button" class="code-copy" data-code-copy title="Copy this code">'
+      body='<div class="code-wrap"><div class="code-tools"><button type="button" class="code-copy" data-code-copy title="Copy this code">'
         +'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="9" height="9" rx="1.6"></rect><path d="M10.5 3.5v-1a1 1 0 0 0-1-1h-7a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h1"></path></svg>'
-        +'<span data-copy-word>Copy</span></button>'
+        +'<span data-copy-word>Copy</span></button></div>'
         +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div>'
         +'<pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+esc(written)+'</pre></div></div>';
     }
@@ -2842,6 +2874,18 @@
       picked=null;
       commit();
     }
+    /* A selection you cannot put down is a selection that follows you around:
+       escape, a click outside the table, and a button beside the count all let
+       go of it. */
+    function letGo(){ if(!picked)return; picked=null; paint(); }
+    var clear=card.querySelector('[data-table-clear]');
+    if(clear)clear.onclick=function(event){ event.stopPropagation(); letGo(); };
+    document.addEventListener('pointerdown',function(event){
+      if(!picked)return;
+      if(event.target.closest('.table-frame')||event.target.closest('.table-tools'))return;
+      letGo();
+    });
+    document.addEventListener('keydown',function(event){ if(event.key==='Escape')letGo(); });
     var tools=[['[data-table-row]',addRow],['[data-table-col]',addColumn],['[data-remove-row]',removeRows],['[data-remove-col]',removeColumns]];
     tools.forEach(function(pair){
       var button=card.querySelector(pair[0]);
@@ -3047,7 +3091,7 @@
       if(copy)copy.onclick=async function(){
         var word=copy.querySelector('[data-copy-word]');
         try{
-          await navigator.clipboard.writeText(code?code.textContent:plainText(block.body));
+          await navigator.clipboard.writeText(code?readCode():plainText(block.body));
           if(word)word.textContent='Copied';
         }catch(error){
           /* Refused, or no clipboard to write to. Saying so beats a button that
