@@ -2829,7 +2829,7 @@
     var prompt=block.type==='idea'?'Capture a possibility, question, or connection…':block.type==='lesson'?'Teach the idea in a few clear lines…':'Write something…';
     var frozen=readOnly||!canEdit()||sectionLocked(block.sectionId);
     var editable=frozen?'false':'true', disabled=frozen?' disabled':'';
-    var hideDefaultTitle=readOnly&&/^untitled(?:\s|$)/i.test(String(block.title||''));
+    var hideDefaultTitle=frozen&&/^untitled(?:\s|$)/i.test(String(block.title||''));
     var body='<div class="block-body" data-body contenteditable="'+editable+'" data-placeholder="'+prompt+'">'+cleanHTML(block.body)+'</div>';
     var extra=((block.type==='schedule'||block.type==='milestone')?'<input class="block-date" data-date type="date" value="'+esc(block.due||'')+'">':'');
     if(block.type==='note') body='<div class="rich-tools"><button data-format="bold"><b>B</b></button><button data-format="italic"><i>I</i></button><button data-format="insertUnorderedList">• list</button><button data-format="formatBlock" data-value="H1">H1</button><button data-format="formatBlock" data-value="H2">H2</button><button data-format="formatBlock" data-value="H3">H3</button><button data-format="formatBlock" data-value="P">P</button></div>'+body;
