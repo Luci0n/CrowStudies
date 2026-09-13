@@ -855,3 +855,14 @@ body.is-sizing .studio-block{ transition:none; }
   .project-item{ padding:8px; font-size:13px; }
   .project-cog{ width:30px; height:30px; }
 }
+
+/* A phone landscape is one editing surface. The project rail closes before
+   Android opens its keyboard, and blocks never keep a desktop two-up layout
+   in the narrow remaining height. */
+@media (orientation:landscape) and (max-height:560px) and (pointer:coarse){
+  .studio-side,
+  .studio-shell.side-closed > .studio-side{ width:min(208px,48vw); }
+  .block-row{ grid-auto-flow:row; grid-template-columns:minmax(0,1fr)!important; }
+  .studio-shell:has(.studio-main :focus) .studio-side{ transform:translateX(-104%)!important; }
+  .studio-shell:has(.studio-main :focus) .side-scrim{ display:none!important; }
+}
