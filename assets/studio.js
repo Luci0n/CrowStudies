@@ -516,6 +516,8 @@
     if(copy.span!==1&&copy.span!==2)delete copy.span;
     var cols=Math.round(Number(copy.cols));
     if(cols>=1&&cols<=12)copy.cols=cols; else delete copy.cols;
+    var width=Math.round(Number(copy.width));
+    if(width>=1&&width<=48)copy.width=width; else delete copy.width;
     if(copy.type==='database'){
       if(!Array.isArray(copy.props))copy.props=[];
       if(!Array.isArray(copy.views))copy.views=[];
@@ -1284,7 +1286,7 @@
     }
     var span=blockSpan(block);
     rows.push('<div class="block-menu-head">Width</div>'
-      +WIDTH_CHOICES.map(function(choice){
+      +WIDTH_CHOICES.filter(function(choice){ return choice[0]>=minCols(block); }).map(function(choice){
         return '<button type="button" data-span="'+choice[0]+'"'+(span===choice[0]?' class="is-on"':'')+'>'+choice[1]+'</button>';
       }).join(''));
     rows.push('<div class="block-menu-head">This block</div><button type="button" data-duplicate>Duplicate</button>');
@@ -2132,6 +2134,7 @@
       document.body.appendChild(bar);
     }
     bar.innerHTML='<b data-chosen-count></b>'
+      +'<button type="button" data-chosen-fit>Fit to content</button>'
       +'<button type="button" data-chosen-move>Move to…</button>'
       +'<button type="button" data-chosen-copy>Duplicate</button>'
       +'<button type="button" class="danger" data-chosen-delete>Delete</button>'
@@ -2140,7 +2143,58 @@
     bar.querySelector('[data-chosen-clear]').onclick=function(){ clearChosen(); };
     bar.querySelector('[data-chosen-delete]').onclick=deleteChosen;
     bar.querySelector('[data-chosen-copy]').onclick=duplicateChosen;
+    bar.querySelector('[data-chosen-fit]').onclick=fitChosen;
     bar.querySelector('[data-chosen-move]').onclick=function(event){ event.stopPropagation(); openMoveMenu(bar.querySelector('[data-chosen-move]')); };
+  }
+  /* ------------------------------------------------------- fit to content
+     What a block is holding says roughly how much room it wants: a table or a
+     database wants the row, a line of text wants a corner. Widths are worked
+     out that way and then packed, so a row is filled rather than left with a
+     ragged end. */
+  function wantsWidth(block){
+    var floor=minCols(block);
+    if(block.type==='database'||block.type==='table'||block.type==='lesson')return FULL;
+    var text=String(block.body||'');
+    var lines=text?text.split('\n'):[];
+    var longest=0;
+    lines.forEach(function(line){ if(line.length>longest)longest=line.length; });
+    var bulk=Math.max(text.length,(block.items||[]).length*46);
+    var want=bulk>760||lines.length>14?FULL:(bulk>280||lines.length>7?HALF:(bulk>96?THIRD:QUARTER));
+    /* A line of code that has to wrap is a line of code you cannot read. */
+    if(block.type==='code'){
+      if(longest>58)want=Math.max(want,HALF);
+      if(longest>104)want=FULL;
+    }
+    if(block.type==='image')want=Math.max(want,HALF);
+    return Math.max(want,floor);
+  }
+  function fitChosen(){
+    var picked=chosenBlocks();
+    if(!picked.length)return;
+    var sorted=blocks.filter(function(block){ return picked.indexOf(block)>=0; });
+    var row=[], left=FULL;
+    function closeRow(){
+      if(!row.length)return;
+      /* Whatever is left over goes to the last block on the row, so the row
+         ends where the row ends. */
+      if(left>0)row[row.length-1].width+=left;
+      row=[]; left=FULL;
+    }
+    var plan=sorted.map(function(block){
+      var width=Math.min(wantsWidth(block),FULL);
+      if(width>left)closeRow();
+      var seat={ block:block, width:width };
+      row.push(seat); left-=width;
+      if(left<=0)closeRow();
+      return seat;
+    });
+    closeRow();
+    plan.forEach(function(seat){ widthFields(seat.block,seat.width); });
+    clearChosen();
+    render();
+    plan.forEach(function(seat){
+      queuedSave(seat.block,true,{ width:seat.block.width, cols:seat.block.cols, span:seat.block.span });
+    });
   }
   function chosenBlocks(){
     var ids=chosenIds();
@@ -2293,28 +2347,43 @@
   /* How wide a block sits in the grid. Some kinds have always taken the whole
      row because that is what they are usually for; a block can now be told
      otherwise, and what it is told is remembered with it. */
-  var GRID=12;
+  var GRID=48;
   var WIDE_BY_DEFAULT={ note:true, lesson:true, database:true, table:true };
   /* Width is counted in twelfths of the row rather than in halves, so blocks
      can sit three to a row, or split seven-five, and the edge between two of
      them can be dragged. The old halves are still readable: a block saved
      before this counts as six twelfths, or as the whole row. */
+  var QUARTER=12, THIRD=16, HALF=24, TWO_THIRDS=32, THREE_QUARTERS=36, FULL=48;
+  /* Some kinds have a floor: a table or a database squeezed into a quarter of
+     the row is a table with its columns cut off. */
+  var MIN_COLS={ database:HALF, table:HALF, lesson:HALF, schedule:THIRD, image:QUARTER };
+  function minCols(block){ return MIN_COLS[block.type]||QUARTER; }
   function blockSpan(block){
-    var want=Math.round(Number(block.cols));
-    if(want>=1&&want<=GRID)return want;
-    if(block.span===1)return 6;
-    if(block.span===2)return GRID;
-    return WIDE_BY_DEFAULT[block.type]?GRID:6;
+    var want=Math.round(Number(block.width));
+    if(!(want>=1&&want<=GRID)){
+      /* Written when the row was twelve tracks wide rather than forty-eight. */
+      var twelfths=Math.round(Number(block.cols));
+      if(twelfths>=1&&twelfths<=12)want=twelfths*4;
+      else if(block.span===1)want=HALF;
+      else if(block.span===2)want=FULL;
+      else want=WIDE_BY_DEFAULT[block.type]?FULL:HALF;
+    }
+    return Math.max(Math.min(want,GRID),minCols(block));
   }
-  function setBlockSpan(block, cols){
-    block.cols=cols;
-    /* Kept in step so a browser still holding the older script, which only
-       knows halves, puts the block on the side it belongs on. */
-    block.span=cols>6?2:1;
+  function widthFields(block, width){
+    block.width=width;
+    /* Kept in step so a browser still holding an older script, which counted
+       in twelfths or in halves, puts the block somewhere sensible. */
+    block.cols=Math.max(1,Math.round(width/4));
+    block.span=width>HALF?2:1;
+    return { width:block.width, cols:block.cols, span:block.span };
+  }
+  function setBlockSpan(block, width){
+    var fields=widthFields(block,Math.max(width,minCols(block)));
     render();
-    queuedSave(block,true,{ cols:cols, span:block.span });
+    queuedSave(block,true,fields);
   }
-  var WIDTH_CHOICES=[[3,'A quarter'],[4,'A third'],[6,'Half'],[8,'Two thirds'],[9,'Three quarters'],[GRID,'The whole row']];
+  var WIDTH_CHOICES=[[QUARTER,'A quarter'],[THIRD,'A third'],[HALF,'Half'],[TWO_THIRDS,'Two thirds'],[THREE_QUARTERS,'Three quarters'],[FULL,'The whole row']];
   /* ------------------------------------------------ dragging the edge between
      Pulling the right edge of a card moves it a twelfth at a time. If another
      card is beside it on the same row, that one gives up exactly what this one
@@ -2344,15 +2413,27 @@
         mate=liveBlock(mateCard.dataset.block);
       var theirs=mate?blockSpan(mate):0;
       var both=mine+theirs;
+      var floor=minCols(block), mateFloor=mate?minCols(mate):0;
       var startX=event.clientX, now=mine;
+      /* The card can only stand on whole tracks, so on its own it would jump
+         from one to the next while the hand moves smoothly. A line follows the
+         pointer exactly and the card catches up to it, which is the part that
+         reads as smooth. */
+      var guide=document.createElement('div');
+      guide.className='size-guide';
+      grid.appendChild(guide);
+      var edge=card.getBoundingClientRect().right;
+      guide.style.left=(edge-grid.getBoundingClientRect().left)+'px';
       document.body.classList.add('is-sizing');
       grid.classList.add('is-sizing');
       function move(point){
-        var moved=Math.round((point.clientX-startX)/step);
-        var want=mine+moved;
-        var most=mate?both-2:GRID;
-        if(want<2)want=2;
+        var over=point.clientX-startX;
+        var want=mine+Math.round(over/step);
+        var most=mate?Math.min(GRID,both-mateFloor):GRID;
+        if(want<floor)want=floor;
         if(want>most)want=most;
+        var reach=Math.max(floor,Math.min(most,mine+over/step));
+        guide.style.left=(edge-grid.getBoundingClientRect().left+(reach-mine)*step)+'px';
         if(want===now)return;
         now=want;
         card.setAttribute('data-cols',now);
@@ -2364,13 +2445,10 @@
         window.removeEventListener('pointercancel',stop);
         document.body.classList.remove('is-sizing');
         grid.classList.remove('is-sizing');
+        if(guide.parentNode)guide.parentNode.removeChild(guide);
         if(now===mine)return;
-        block.cols=now; block.span=now>6?2:1;
-        queuedSave(block,true,{ cols:block.cols, span:block.span });
-        if(mate){
-          mate.cols=both-now; mate.span=mate.cols>6?2:1;
-          queuedSave(mate,true,{ cols:mate.cols, span:mate.span });
-        }
+        queuedSave(block,true,widthFields(block,now));
+        if(mate)queuedSave(mate,true,widthFields(mate,both-now));
       }
       window.addEventListener('pointermove',move);
       window.addEventListener('pointerup',stop);

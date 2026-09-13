@@ -746,12 +746,13 @@ body.is-carrying *{ cursor:grabbing !important; }
 /* A block's width is its own, and says so on the element, so these come after
    the rules that set a width by kind and win over them. */
 /* ------------------------------------------------------- how wide a block is
-   The row is twelve narrow tracks rather than two columns, so a block can take
-   a quarter, a third, a half or all of it, three can sit side by side, and the
-   edge between two of them can be dragged to any ratio. Below 780px there is
-   only one column to be had, so every block takes it. */
-.block-grid{ grid-template-columns:repeat(12,minmax(0,1fr)); }
-.block-grid>.studio-block,.block-grid>.block-gap{ grid-column:span 6; }
+   The row is forty-eight narrow tracks rather than two columns, so a block can
+   take a quarter, a third, two thirds or all of it, three or four can sit side
+   by side, and the edge between two of them can be dragged a track at a time -
+   fine enough that the hand and the card stay together. Below 780px there is
+   one column to be had, so every block takes it. */
+.block-grid{ grid-template-columns:repeat(48,minmax(0,1fr)); gap:12px; }
+.block-grid>.studio-block,.block-grid>.block-gap{ grid-column:span 24; }
 .block-grid>[data-cols="1"]{ grid-column:span 1; }
 .block-grid>[data-cols="2"]{ grid-column:span 2; }
 .block-grid>[data-cols="3"]{ grid-column:span 3; }
@@ -764,16 +765,69 @@ body.is-carrying *{ cursor:grabbing !important; }
 .block-grid>[data-cols="10"]{ grid-column:span 10; }
 .block-grid>[data-cols="11"]{ grid-column:span 11; }
 .block-grid>[data-cols="12"]{ grid-column:span 12; }
-.width-grip{ position:absolute; top:14%; bottom:14%; right:-7px; width:13px; border:0; background:transparent; cursor:col-resize; opacity:0; transition:opacity .16s; z-index:3; }
+.block-grid>[data-cols="13"]{ grid-column:span 13; }
+.block-grid>[data-cols="14"]{ grid-column:span 14; }
+.block-grid>[data-cols="15"]{ grid-column:span 15; }
+.block-grid>[data-cols="16"]{ grid-column:span 16; }
+.block-grid>[data-cols="17"]{ grid-column:span 17; }
+.block-grid>[data-cols="18"]{ grid-column:span 18; }
+.block-grid>[data-cols="19"]{ grid-column:span 19; }
+.block-grid>[data-cols="20"]{ grid-column:span 20; }
+.block-grid>[data-cols="21"]{ grid-column:span 21; }
+.block-grid>[data-cols="22"]{ grid-column:span 22; }
+.block-grid>[data-cols="23"]{ grid-column:span 23; }
+.block-grid>[data-cols="24"]{ grid-column:span 24; }
+.block-grid>[data-cols="25"]{ grid-column:span 25; }
+.block-grid>[data-cols="26"]{ grid-column:span 26; }
+.block-grid>[data-cols="27"]{ grid-column:span 27; }
+.block-grid>[data-cols="28"]{ grid-column:span 28; }
+.block-grid>[data-cols="29"]{ grid-column:span 29; }
+.block-grid>[data-cols="30"]{ grid-column:span 30; }
+.block-grid>[data-cols="31"]{ grid-column:span 31; }
+.block-grid>[data-cols="32"]{ grid-column:span 32; }
+.block-grid>[data-cols="33"]{ grid-column:span 33; }
+.block-grid>[data-cols="34"]{ grid-column:span 34; }
+.block-grid>[data-cols="35"]{ grid-column:span 35; }
+.block-grid>[data-cols="36"]{ grid-column:span 36; }
+.block-grid>[data-cols="37"]{ grid-column:span 37; }
+.block-grid>[data-cols="38"]{ grid-column:span 38; }
+.block-grid>[data-cols="39"]{ grid-column:span 39; }
+.block-grid>[data-cols="40"]{ grid-column:span 40; }
+.block-grid>[data-cols="41"]{ grid-column:span 41; }
+.block-grid>[data-cols="42"]{ grid-column:span 42; }
+.block-grid>[data-cols="43"]{ grid-column:span 43; }
+.block-grid>[data-cols="44"]{ grid-column:span 44; }
+.block-grid>[data-cols="45"]{ grid-column:span 45; }
+.block-grid>[data-cols="46"]{ grid-column:span 46; }
+.block-grid>[data-cols="47"]{ grid-column:span 47; }
+.block-grid>[data-cols="48"]{ grid-column:span 48; }
+.width-grip{ position:absolute; top:14%; bottom:14%; right:-7px; width:13px; border:0; background:transparent; cursor:col-resize; opacity:0; transition:opacity .16s; z-index:4; }
 .width-grip::before{ content:''; position:absolute; left:5px; top:0; bottom:0; width:3px; border-radius:3px; background:var(--brand,#8065ff); }
-.studio-block:hover .width-grip,.studio-block:focus-within .width-grip{ opacity:.5; }
-.width-grip:hover{ opacity:1 !important; }
+.studio-block:hover .width-grip,.studio-block:focus-within .width-grip{ opacity:.45; }
+.width-grip:hover{ opacity:1; }
 .block-grid.is-sizing .width-grip{ opacity:0; }
+.size-guide{ position:absolute; top:0; bottom:0; width:2px; margin-left:-1px; border-radius:2px; background:var(--brand,#8065ff); box-shadow:0 0 0 4px color-mix(in srgb,var(--brand,#8065ff) 18%,transparent); pointer-events:none; z-index:5; }
 body.is-sizing{ cursor:col-resize; user-select:none; -webkit-user-select:none; }
 body.is-sizing .studio-block{ transition:none; }
+
+/* ------------------------------------------- a card that has to be narrow
+   A quarter of the row is 204px, and everything in the corners was laid out
+   for something twice that. The handles keep their corner, the kicker gives
+   way to them rather than running underneath, and the comment button moves to
+   the bottom where nothing else is. */
+.block-kicker{ padding-right:94px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:16px; }
+.block-title{ width:100%; }
+.studio-block{ padding-bottom:30px; }
+.studio-block .upgrade-comment{ position:absolute; top:auto; bottom:7px; right:9px; margin:0; z-index:3; opacity:0; }
+.studio-block:hover .upgrade-comment,.studio-block:focus-within .upgrade-comment,.studio-block .upgrade-comment.has-comments{ opacity:1; }
+.studio-block input,.studio-block textarea,.studio-block select{ max-width:100%; min-width:0; }
+.task-row{ min-width:0; }
+.task-row .task-text{ min-width:0; }
+.code-body,.table-frame,.db-frame{ max-width:100%; }
+
 @media(max-width:780px){
   .block-grid{ grid-template-columns:minmax(0,1fr); }
   .block-grid>.studio-block,.block-grid>.block-gap,.block-grid>[data-cols]{ grid-column:1 / -1; }
   .width-grip{ display:none; }
+  .studio-block .upgrade-comment{ opacity:1; }
 }
-.block-menu button.is-on{ color:var(--brand); }
