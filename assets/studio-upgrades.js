@@ -296,19 +296,53 @@ async function showComments(blockId){
   await render();
   box.querySelector('form').onsubmit=async e=>{e.preventDefault();const field=e.currentTarget.querySelector('textarea');if(!field.value.trim())return;await cloud().addComment(id,blockId,field.value);field.value='';await render();updateCommentBadges();};
 }
+let closeSlashMenu=function(){};
+function caretRect(body){
+  const selection=window.getSelection&&window.getSelection();
+  if(selection&&selection.rangeCount){
+    const range=selection.getRangeAt(0),rect=range.getBoundingClientRect();
+    if(rect&&(rect.width||rect.height))return rect;
+  }
+  return body.getBoundingClientRect();
+}
+function removeSlashAtCaret(){
+  const selection=window.getSelection&&window.getSelection();
+  if(!selection||!selection.rangeCount)return;
+  const range=selection.getRangeAt(0);
+  if(!range.collapsed||range.startContainer.nodeType!==Node.TEXT_NODE)return;
+  const text=range.startContainer.nodeValue||'',at=range.startOffset;
+  if(at&&text.charAt(at-1)==='/'){
+    range.startContainer.nodeValue=text.slice(0,at-1)+text.slice(at);
+    range.setStart(range.startContainer,at-1);range.collapse(true);
+    selection.removeAllRanges();selection.addRange(range);
+  }
+}
 function slashMenu(body){
-  document.querySelectorAll('.upgrade-slash').forEach(x=>x.remove());
+  closeSlashMenu();
   const menu=document.createElement('div');menu.className='upgrade-slash';
   const commands=[
     ['Heading 1','<h1>Heading</h1>'],['Heading 2','<h2>Heading</h2>'],['Bullet list','<ul><li>List item</li></ul>'],['Divider','<hr>'],['Callout','<blockquote>Important note</blockquote>']
   ];
-  commands.forEach(([name,html])=>{const b=document.createElement('button');b.textContent=name;b.onclick=()=>{body.focus();document.execCommand('insertHTML',false,html);body.dispatchEvent(new Event('input',{bubbles:true}));menu.remove();};menu.appendChild(b);});
-  const rect=body.getBoundingClientRect();menu.style.left=Math.max(12,rect.left)+'px';menu.style.top=(rect.top+12)+'px';document.body.appendChild(menu);
+  const close=function(){menu.remove();window.removeEventListener('scroll',close,true);window.removeEventListener('resize',close);document.removeEventListener('pointerdown',outside,true);closeSlashMenu=function(){};};
+  const outside=function(event){if(!menu.contains(event.target)&&event.target!==body)close();};
+  commands.forEach(([name,html])=>{const b=document.createElement('button');b.type='button';b.textContent=name;b.onclick=()=>{body.focus();removeSlashAtCaret();document.execCommand('insertHTML',false,html);body.dispatchEvent(new Event('input',{bubbles:true}));close();};menu.appendChild(b);});
+  const rect=caretRect(body);
+  menu.style.left=Math.max(12,Math.min(rect.left,window.innerWidth-224))+'px';
+  menu.style.top=Math.min(rect.bottom+8,window.innerHeight-176)+'px';
+  document.body.appendChild(menu);
+  closeSlashMenu=close;
+  window.addEventListener('scroll',close,true);window.addEventListener('resize',close);setTimeout(()=>document.addEventListener('pointerdown',outside,true),0);
 }
 function bindSlash(){
   root.querySelectorAll('[data-body]').forEach(body=>{
     if(body.dataset.slashBound)return;body.dataset.slashBound='1';
-    body.addEventListener('keydown',e=>{if(body.dataset.collabActive==='true')return;if(e.key==='/'&&!e.ctrlKey&&!e.metaKey){const text=window.getSelection&&window.getSelection().toString();if(!text){e.preventDefault();slashMenu(body);}}});
+    body.addEventListener('keydown',e=>{
+      if(body.dataset.collabActive==='true'||e.key!=='/'||e.ctrlKey||e.metaKey||window.getSelection().toString())return;
+      /* Leave the slash in the document like Notion does, then anchor the menu
+         to the caret. If the page moves, the menu closes rather than drifting. */
+      requestAnimationFrame(()=>slashMenu(body));
+    });
+    body.addEventListener('keydown',e=>{if(e.key==='Escape')closeSlashMenu();});
   });
 }
 async function updateCommentBadge(button){
