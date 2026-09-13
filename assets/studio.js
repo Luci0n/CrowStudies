@@ -780,7 +780,7 @@
     }
     var projects=window.__crowProjects||[];
     root.classList.toggle('side-closed',!sideOpen);
-    root.innerHTML='<div class="side-scrim" data-side-close'+(sideOpen?'':' hidden')+'></div><aside class="studio-side'+(sideOpen?' is-open':'')+'">'+sideToggleHTML('in-rail')+'<div class="studio-sidehead"><h2>Projects</h2><div class="side-actions"><button class="btn ghost sm" data-import-project title="Import a project from a .json file">Import</button><button class="btn sm" data-new-project>New</button></div></div><div class="project-list">'+projectListHTML(projects)+'</div></aside><main class="studio-main '+((readOnly||!canEdit())?'read-only':'')+(previewing()?' in-preview':'')+'">'+sideToggleHTML('on-top')+(activeProject ? (view==='settings'?settingsHTML():projectHTML()) : '<div class="studio-empty"><h1>Make a project</h1><p>Collect study notes, plans, schedules, ideas, and your own practice cards in one place.</p><button class="btn" data-new-project>New project</button><button class="btn ghost" data-example-project>Add the example project</button><button class="btn ghost" data-import-project>Import a project</button></div>')+'</main>';
+    root.innerHTML='<div class="side-scrim" data-side-close'+(sideOpen?'':' hidden')+'></div><aside class="studio-side'+(sideOpen?' is-open':'')+'">'+sideToggleHTML('in-rail')+'<div class="studio-sidehead"><h2>Projects</h2><button type="button" class="side-close" data-side-dismiss aria-label="Close projects">×</button><div class="side-actions"><button class="btn ghost sm" data-import-project title="Import a project from a .json file">Import</button><button class="btn sm" data-new-project>New</button></div></div><div class="project-list">'+projectListHTML(projects)+'</div></aside><main class="studio-main '+((readOnly||!canEdit())?'read-only':'')+(previewing()?' in-preview':'')+'">'+sideToggleHTML('on-top')+(activeProject ? (view==='settings'?settingsHTML():projectHTML()) : '<div class="studio-empty"><h1>Make a project</h1><p>Collect study notes, plans, schedules, ideas, and your own practice cards in one place.</p><button class="btn" data-new-project>New project</button><button class="btn ghost" data-example-project>Add the example project</button><button class="btn ghost" data-import-project>Import a project</button></div>')+'</main>';
     bind();
     mountCollaborativeEditors();
     mountDatabases();
@@ -3317,8 +3317,7 @@
        the loading frame both draw the handle too, and both used to draw it
        dead. */
     root.querySelectorAll('[data-side-toggle]').forEach(function(button){ button.onclick=function(){ setSide(!sideOpen); }; });
-    var sideScrim=root.querySelector('[data-side-close]');
-    if(sideScrim)sideScrim.onclick=function(){ setSide(false); };
+    root.querySelectorAll('[data-side-close],[data-side-dismiss]').forEach(function(button){ button.onclick=function(){ setSide(false); }; });
     root.querySelectorAll('[data-new-project]').forEach(function(button){button.onclick=async function(){var title=await askName('New project','e.g. Learn Mandarin','Create project');if(title===null)return;button.disabled=true;try{var projectId=await cloud().createProject(title.trim()||'Untitled project');await loadProjects(projectId);}finally{button.disabled=false;}};});
     root.querySelectorAll('[data-project]').forEach(function(button){button.onclick=function(){view='project';if(narrow())sideOpen=false;loadProject(button.dataset.project);};});
     root.querySelectorAll('[data-project-settings]').forEach(function(button){button.onclick=function(){
