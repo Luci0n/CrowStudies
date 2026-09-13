@@ -1005,8 +1005,8 @@
     var overview=blocks.length+' '+(blocks.length===1?'block':'blocks')+' · '+sections.length+' '+(sections.length===1?'section':'sections');
     var actions=previewing()
       ? '<button class="btn sm" data-restore-preview>Restore this version</button>'
-      : '<button class="btn ghost sm" data-toggle-view data-viewing="'+(readOnly?'true':'false')+'">'+ (readOnly?'Edit project':'View project') +'</button><button class="btn ghost sm" data-new-section>+ Section</button>';
-    return previewBarHTML()+'<div class="project-top"><div class="project-heading"><h1 class="project-title">'+esc(activeProject.title)+'</h1><div class="project-meta"><span class="'+(shared?'shared':'private')+'">'+esc(access)+'</span><span>'+esc(overview)+'</span></div><div class="project-presence" hidden><span>Viewing now</span><div class="collab-people" data-collab-people aria-label="People viewing this project"></div></div></div><div class="project-actions">'+actions+'</div></div><div class="section-bar"><button class="section-filter '+(activeSection==='all'?'active':'')+'" data-section="all">All</button><button class="section-filter '+(activeSection===''?'active':'')+'" data-section="">Unsorted</button>'+sectionButtons+'</div>'+pageBar+(locked?'<p class="section-lock-note">This section is locked. Unlock it from its cog menu to edit.</p>':'')+'<div class="block-grid">'+rowsFrom(shown).map(rowHTML).join('')+'</div><div class="add-row '+(locked?'is-locked':'')+'">'+(locked?'<span>This section is locked</span>':'<button type="button" class="add-open" data-add-open>+ Add block</button>')+'</div>';
+      : '<span class="mode-indicator '+(readOnly?'is-viewing':'is-editing')+'" aria-live="polite"><i aria-hidden="true"></i>'+ (readOnly?'View mode':'Edit mode') +'</span><button class="btn ghost sm" data-toggle-view data-viewing="'+(readOnly?'true':'false')+'">'+ (readOnly?'Switch to edit':'Switch to view') +'</button><button class="btn ghost sm" data-new-section>+ Section</button>';
+    return previewBarHTML()+'<div class="project-top"><div class="project-heading"><h1 class="project-title">'+esc(activeProject.title)+'</h1><div class="project-meta"><span class="'+(shared?'shared':'private')+'">'+esc(access)+'</span><span>'+esc(overview)+'</span></div><div class="project-presence" hidden><span>Viewing now</span><div class="collab-people" data-collab-people aria-label="People viewing this project"></div></div></div><div class="project-actions">'+actions+'</div></div><div class="section-bar"><button class="section-filter '+(activeSection==='all'?'active':'')+'" data-section="all">All</button><button class="section-filter '+(activeSection===''?'active':'')+'" data-section="">Unsorted</button>'+sectionButtons+'</div>'+pageBar+(locked?'<p class="section-lock-note">This section is locked. Unlock it from its cog menu to edit.</p>':'')+'<div class="add-row add-row-start '+(locked?'is-locked':'')+'">'+(locked?'':'<button type="button" class="add-open" data-add-open>+ Add block</button>')+'</div><div class="block-grid">'+rowsFrom(shown).map(rowHTML).join('')+'</div><div class="add-row '+(locked?'is-locked':'')+'">'+(locked?'<span>This section is locked</span>':'<button type="button" class="add-open" data-add-open>+ Add block</button>')+'</div>';
   }
   function personName(uid){
     var people=(activeProject&&activeProject.people)||{};
@@ -2841,6 +2841,9 @@
     });
     scope.querySelectorAll('.code-language,.code-wrap-toggle,.code-height,.code-size').forEach(function(control){ control.remove(); });
   }
+  function richToolsHTML(){
+    return '<div class="rich-tools"><button data-format="bold" title="Bold"><b>B</b></button><button data-format="italic" title="Italic"><i>I</i></button><button data-format="insertUnorderedList" title="Bullet list">• list</button><button data-format="formatBlock" data-value="H1" title="Heading 1">H1</button><button data-format="formatBlock" data-value="H2" title="Heading 2">H2</button><button data-format="formatBlock" data-value="P" title="Paragraph">P</button></div>';
+  }
   function blockHTML(block){
     var labels=BLOCK_LABELS;
     var prompt=block.type==='idea'?'Capture a possibility, question, or connection…':block.type==='lesson'?'Teach the idea in a few clear lines…':'Write something…';
@@ -2850,7 +2853,7 @@
     var hideDefaultTitle=frozen&&titleIsDefault;
     var body='<div class="block-body" data-body contenteditable="'+editable+'" data-placeholder="'+prompt+'">'+cleanHTML(block.body)+'</div>';
     var extra=((block.type==='schedule'||block.type==='milestone')?'<input class="block-date" data-date type="date" value="'+esc(block.due||'')+'">':'');
-    if(block.type==='note') body='<div class="rich-tools"><button data-format="bold"><b>B</b></button><button data-format="italic"><i>I</i></button><button data-format="insertUnorderedList">• list</button><button data-format="formatBlock" data-value="H1">H1</button><button data-format="formatBlock" data-value="H2">H2</button><button data-format="formatBlock" data-value="H3">H3</button><button data-format="formatBlock" data-value="P">P</button></div>'+body;
+    if(block.type==='note'||block.type==='idea') body=richToolsHTML()+body;
     if(block.type==='tasks'){
       /* The handlers reach into items by index, so the list a card is drawn
          from has to be the list the block actually holds. */
@@ -3451,8 +3454,9 @@
     root.querySelectorAll('[data-section-menu]').forEach(function(button){button.onclick=function(event){event.stopPropagation();toggleSectionMenu(button.dataset.sectionMenu);};});
     bindSectionMenu(root);
     watchSectionMenu();
-    var addOpen=root.querySelector('[data-add-open]');
-    if(addOpen)addOpen.onclick=function(event){ event.stopPropagation(); openAddPalette(addOpen); };
+    root.querySelectorAll('[data-add-open]').forEach(function(addOpen){
+      addOpen.onclick=function(event){ event.stopPropagation(); openAddPalette(addOpen); };
+    });
     root.querySelectorAll('[data-block]').forEach(function(card){var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0], body=card.querySelector('[data-body]'), titleField=card.querySelector('[data-title]');if(titleField)titleField.oninput=function(e){block.title=e.target.value;queuedSave(block,false,{title:block.title});};if(body)body.oninput=function(e){block.body=cleanHTML(e.target.innerHTML);queuedSave(block,false,{body:block.body});};var practice=card.querySelector('[data-practice]');if(practice)practice.oninput=function(e){block.practice=e.target.value;queuedSave(block,false,{practice:block.practice});};var answer=card.querySelector('[data-answer]');if(answer)answer.oninput=function(e){block.answer=e.target.value;queuedSave(block,false,{answer:block.answer});};var image=card.querySelector('[data-image-url]');if(image)image.onchange=function(e){block.imageUrl=e.target.value.trim();queuedSave(block,true);render();};var imageUpload=card.querySelector('[data-image-upload]');if(imageUpload)imageUpload.onchange=function(e){var file=e.target.files&&e.target.files[0];if(file)takeImage(block,file,imageUpload);e.target.value='';};
       var drop=card.querySelector('[data-image-drop]');
       if(drop)bindImageDrop(drop,block);
