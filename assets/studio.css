@@ -839,3 +839,19 @@ body.is-sizing .studio-block{ transition:none; }
   .studio-main:has(.studio-block:focus-within) .block-grid{ display:block; }
   .studio-main:has(.studio-block:focus-within) .studio-block:focus-within{ min-height:calc(100dvh - 28px); }
 }
+
+/* A landscape phone uses the drawer as a quick project rail, not as a second
+   column: opening it still leaves most of the editor recognisably present. */
+@media (orientation:landscape) and (max-height:560px) and (pointer:coarse){
+  .studio-side,
+  .studio-shell.side-closed > .studio-side{
+    width:min(232px,52vw);
+    padding:10px;
+  }
+  .studio-sidehead{ flex-wrap:wrap; gap:8px; }
+  .studio-sidehead h2{ font-size:16px; }
+  .side-actions{ display:grid; grid-template-columns:1fr 1fr; width:100%; gap:6px; }
+  .side-actions .btn{ width:100%; min-width:0; padding:7px 4px; font-size:12px; }
+  .project-item{ padding:8px; font-size:13px; }
+  .project-cog{ width:30px; height:30px; }
+}
