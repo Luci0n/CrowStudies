@@ -1001,3 +1001,11 @@ body.is-sizing .studio-block{ transition:none; }
    line and its gutter share the exact same metrics. Colours return on blur. */
 .studio-block:focus-within .code-highlight{ display:none; }
 .studio-block:focus-within .block-code{ color:var(--ink)!important; }
+
+/* This class is written on the workspace itself whenever the View project
+   action is active; it is not inferred from permissions or focus. */
+.studio-main.is-viewing .block-title.is-default-title{ display:none!important; }
+/* A single text layer is the reliable editor. Syntax colouring will return
+   with a real editor integration rather than an overlay that can drift. */
+.code-highlight{ display:none!important; }
+.block-code{ color:var(--ink)!important; caret-color:var(--ink); }
