@@ -3444,10 +3444,25 @@
         var written=(code.innerText!==undefined?code.innerText:code.textContent)||'';
         return written.replace(/\u00a0/g,' ').replace(/\n$/,'');
       }
+      function followCodeCaret(){
+        if(!code)return;
+        var viewport=card.querySelector('.code-body');
+        if(!viewport)return;
+        var range, selection=window.getSelection&&window.getSelection();
+        if(selection&&selection.rangeCount&&code.contains(selection.anchorNode)){
+          range=selection.getRangeAt(0).cloneRange(); range.collapse(true);
+          var point=range.getBoundingClientRect(), frame=viewport.getBoundingClientRect(), pad=18;
+          if(point.bottom>frame.bottom-pad)viewport.scrollTop+=point.bottom-(frame.bottom-pad);
+          else if(point.top<frame.top+pad)viewport.scrollTop-=frame.top+pad-point.top;
+          return;
+        }
+        viewport.scrollTop=viewport.scrollHeight;
+      }
       if(code)code.oninput=function(){
         block.body=readCode();
         if(gutter)gutter.innerHTML=codeLinesHTML(block.body);
         queuedSave(block,false,{body:block.body});
+        requestAnimationFrame(followCodeCaret);
       };
       if(code)code.onkeydown=function(event){
         if(event.key==='Tab'){
