@@ -611,7 +611,7 @@
       changed=true;
     });
     if(blocked)return false;
-    if(changed){ dressRowTracks(); bind(); paintPresence(); }
+    if(changed){ dressRowTracks(); pruneViewOnlyChrome(root); bind(); paintPresence(); }
     return true;
   }
   /* A share that changed elsewhere lives on the row, not on the card, so a
@@ -784,12 +784,7 @@
     /* A view is rendered from the same block markup as editing, but default
        labels and editor furniture are not content. Remove them here, after
        every render path (including live collaboration patches) has settled. */
-    if(readOnly){
-      root.querySelectorAll('[data-title]').forEach(function(field){
-        if(/^untitled(?:\s|$)/i.test(String(field.value||'')))field.remove();
-      });
-      root.querySelectorAll('.code-language,.code-wrap-toggle,.code-height,.code-size').forEach(function(control){ control.remove(); });
-    }
+    pruneViewOnlyChrome(root);
     bind();
     mountCollaborativeEditors();
     mountDatabases();
@@ -2824,12 +2819,35 @@
     }
     return out;
   }
+  /* Default labels are editor scaffolding, not document content. Normalize
+     whitespace and zero-width characters because older blocks may have been
+     created by a browser that inserted one around an empty input. */
+  function implicitBlockTitle(value){
+    var title=String(value==null?'':value)
+      .replace(/[\u200B-\u200D\uFEFF]/g,'')
+      .replace(/\s+/g,' ')
+      .trim();
+    return !title||/^untitled(?:\s|$)/i.test(title);
+  }
+  /* Keep View mode correct even when a live snapshot replaces just one card.
+     This deliberately reads the block model, never a potentially stale input. */
+  function pruneViewOnlyChrome(scope){
+    if(!readOnly||!scope)return;
+    scope.querySelectorAll('[data-block]').forEach(function(card){
+      var block=blocks.filter(function(item){ return item.id===card.dataset.block; })[0];
+      if(block&&implicitBlockTitle(block.title)){
+        card.querySelectorAll('.block-title,[data-title]').forEach(function(title){ title.remove(); });
+      }
+    });
+    scope.querySelectorAll('.code-language,.code-wrap-toggle,.code-height,.code-size').forEach(function(control){ control.remove(); });
+  }
   function blockHTML(block){
     var labels=BLOCK_LABELS;
     var prompt=block.type==='idea'?'Capture a possibility, question, or connection…':block.type==='lesson'?'Teach the idea in a few clear lines…':'Write something…';
     var frozen=readOnly||!canEdit()||sectionLocked(block.sectionId);
     var editable=frozen?'false':'true', disabled=frozen?' disabled':'';
-    var hideDefaultTitle=frozen&&/^untitled(?:\s|$)/i.test(String(block.title||''));
+    var titleIsDefault=implicitBlockTitle(block.title);
+    var hideDefaultTitle=frozen&&titleIsDefault;
     var body='<div class="block-body" data-body contenteditable="'+editable+'" data-placeholder="'+prompt+'">'+cleanHTML(block.body)+'</div>';
     var extra=((block.type==='schedule'||block.type==='milestone')?'<input class="block-date" data-date type="date" value="'+esc(block.due||'')+'">':'');
     if(block.type==='note') body='<div class="rich-tools"><button data-format="bold"><b>B</b></button><button data-format="italic"><i>I</i></button><button data-format="insertUnorderedList">• list</button><button data-format="formatBlock" data-value="H1">H1</button><button data-format="formatBlock" data-value="H2">H2</button><button data-format="formatBlock" data-value="H3">H3</button><button data-format="formatBlock" data-value="P">P</button></div>'+body;
@@ -2883,7 +2901,7 @@
         +'<span data-copy-word>Copy</span></button></div>'
         +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div><div class="code-editor"><pre class="code-highlight" data-code-highlight aria-hidden="true">'+syntaxCodeHTML(written,language)+'</pre><pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+esc(written)+'</pre></div></div></div>';
     }
-    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-cols="'+blockSpan(block)+'" data-block="'+block.id+'" style="--w:'+blockSpan(block)+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<span class="width-grip" data-width-grip title="Drag to set how wide this block is" aria-hidden="true"></span>')+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div>'+(hideDefaultTitle?'':'<input class="block-title'+(/^untitled(?:\s|$)/i.test(String(block.title||''))?' is-default-title':'')+'" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>')+body+extra+'</article>';
+    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-cols="'+blockSpan(block)+'" data-block="'+block.id+'" style="--w:'+blockSpan(block)+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<span class="width-grip" data-width-grip title="Drag to set how wide this block is" aria-hidden="true"></span>')+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div>'+(hideDefaultTitle?'':'<input class="block-title'+(titleIsDefault?' is-default-title':'')+'" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>')+body+extra+'</article>';
   }
   function queuedSave(block, immediate, patch){
     var old=saveTimers[block.id]; if(old) clearTimeout(old);
