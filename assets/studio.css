@@ -1017,3 +1017,23 @@ body.is-sizing .studio-block{ transition:none; }
   padding-top:11px!important;
   padding-bottom:11px!important;
 }
+
+
+/* Studio state and insertion affordances */
+.mode-indicator{ display:inline-flex; align-items:center; gap:7px; align-self:center; padding:7px 10px; border:1px solid var(--glass-edge); border-radius:999px; background:var(--glass); color:var(--ink-2); font-size:12px; font-weight:800; white-space:nowrap; }
+.mode-indicator i{ width:7px; height:7px; border-radius:50%; background:var(--brand); box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 17%,transparent); }
+.mode-indicator.is-viewing{ color:var(--ink-3); }
+.mode-indicator.is-viewing i{ background:var(--good); box-shadow:0 0 0 3px color-mix(in srgb,var(--good) 17%,transparent); }
+.add-row{ display:flex; align-items:center; min-height:32px; margin-top:12px; }
+.add-row-start{ margin:0 0 10px; min-height:24px; }
+.add-row-start .add-open{ opacity:.72; }
+.add-row-start:hover .add-open,.add-row-start .add-open:focus-visible{ opacity:1; }
+.add-open{ border:0; border-radius:6px; background:transparent; color:var(--ink-3); padding:6px 8px; font:750 12px/1.1 inherit; cursor:pointer; transition:color .18s ease, background .18s ease, opacity .18s ease; }
+.add-open:hover,.add-open:focus-visible{ color:var(--brand); background:var(--glass-lift); outline:none; }
+
+/* The command picker belongs at the caret. It closes when that context moves,
+   which is calmer than leaving a detached panel on a scrolled page. */
+.upgrade-slash{ width:min(212px,calc(100vw - 24px)); padding:5px; display:grid; gap:2px; border:1px solid var(--glass-edge); border-radius:9px; background:color-mix(in srgb,var(--card) 94%,transparent); box-shadow:0 14px 34px #0008; backdrop-filter:blur(12px); }
+.upgrade-slash button{ width:100%; border:0; border-radius:6px; background:transparent; color:var(--ink-2); padding:8px 9px; text-align:left; font:700 12px/1.2 inherit; cursor:pointer; }
+.upgrade-slash button:hover,.upgrade-slash button:focus-visible{ background:var(--glass-lift); color:var(--ink); outline:none; }
+@media (max-width:620px){ .mode-indicator{ padding:6px 8px; font-size:11px; }.project-actions{ gap:6px; } }
