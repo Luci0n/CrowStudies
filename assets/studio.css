@@ -938,3 +938,21 @@ body.is-sizing .studio-block{ transition:none; }
   .code-body,.block-table,.db-scroll,.db-board{ max-height:44dvh; }
   .studio-block.code-expanded .code-body{ max-height:58dvh; }
 }
+
+/* Code controls are compact editor furniture, not another toolbar row. The
+   selected height is kept with the block, so a project reopens as it was left. */
+.code-wrap{ --code-height:360px; }
+.code-body{ height:var(--code-height); max-height:none; }
+.studio-block.code-expanded .code-body{ height:min(70vh,760px); max-height:none; }
+.code-language,.code-height{ display:inline-flex; align-items:center; gap:5px; color:var(--ink-3); font:750 10px/1 inherit; letter-spacing:.05em; text-transform:uppercase; }
+.code-language select{ max-width:118px; border:1px solid var(--glass-edge); border-radius:7px; background:var(--card); color:var(--ink-2); padding:5px 7px; font:700 11px/1 inherit; }
+.code-height input{ width:78px; accent-color:var(--brand); }
+.code-wrap-toggle{ border:1px solid var(--glass-edge); border-radius:7px; background:transparent; color:var(--ink-3); padding:5px 8px; font:750 11px/1 inherit; }
+.code-wrap-toggle[aria-pressed="true"]{ border-color:var(--brand); color:var(--brand); background:var(--brand-soft); }
+.code-wrap.is-wrapped .block-code{ white-space:pre-wrap; overflow-x:visible; overflow-wrap:anywhere; }
+.code-wrap.is-wrapped .code-lines{ display:none; }
+.code-wrap.is-wrapped .code-body{ display:block; }
+@media(max-width:640px){
+  .code-tools{ flex-wrap:wrap; justify-content:flex-start; }
+  .code-language span,.code-height span{ display:none; }
+}
