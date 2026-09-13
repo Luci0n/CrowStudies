@@ -755,12 +755,15 @@ body.is-carrying *{ cursor:grabbing !important; }
    about to land in - so the tracks are shared out evenly until it lands. */
 .block-grid.is-reordering .block-row{ grid-template-columns:none!important; }
 /* The handle is the line between two blocks, so the last one on a row has
-   none - there is nothing on its right to trade with. */
+   none - there is nothing on its right to trade with. It is a short mark in
+   the middle of that line rather than a bar down the whole card: a coloured
+   line the height of a card reads as something left behind, not as something
+   to take hold of. It is only coloured while the pointer is on it. */
 .block-row>.studio-block:last-child .width-grip{ display:none; }
-.width-grip{ position:absolute; top:14%; bottom:14%; right:-7px; width:14px; border:0; background:transparent; cursor:col-resize; opacity:0; transition:opacity .16s; z-index:4; touch-action:none; }
-.width-grip::before{ content:''; position:absolute; left:5px; top:0; bottom:0; width:4px; border-radius:4px; background:var(--brand,#8065ff); }
-.studio-block:hover .width-grip,.studio-block:focus-within .width-grip{ opacity:.4; }
-.width-grip:hover{ opacity:1; }
+.width-grip{ position:absolute; top:0; bottom:0; right:-7px; width:14px; border:0; background:transparent; cursor:col-resize; z-index:4; touch-action:none; }
+.width-grip::before{ content:''; position:absolute; left:5px; top:50%; width:4px; height:34px; margin-top:-17px; border-radius:4px; background:var(--ink-3,#aab3c8); opacity:0; transition:opacity .16s ease, height .16s ease, background .16s ease; }
+.block-row:hover .width-grip::before{ opacity:.45; }
+.width-grip:hover::before,body.is-sizing .width-grip:hover::before{ opacity:1; height:56px; margin-top:-28px; background:var(--brand,#8065ff); }
 body.is-sizing{ cursor:col-resize; user-select:none; -webkit-user-select:none; }
 body.is-sizing .studio-block{ transition:none; }
 
