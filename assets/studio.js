@@ -2199,10 +2199,7 @@
     var bulk=Math.max(text.length,(block.items||[]).length*46);
     var want=bulk>760||lines.length>14?FULL:(bulk>280||lines.length>7?HALF:(bulk>96?THIRD:QUARTER));
     /* A line of code that has to wrap is a line of code you cannot read. */
-    if(block.type==='code'){
-      if(longest>58)want=Math.max(want,HALF);
-      if(longest>104)want=FULL;
-    }
+    if(block.type==='code')want=FULL;
     if(block.type==='image')want=Math.max(want,HALF);
     return Math.max(want,floor);
   }
@@ -2837,7 +2834,7 @@
       var codeHeight=Math.max(180,Math.min(720,Number(block.codeHeight)||360));
       var languages=[['plain','Plain text'],['javascript','JavaScript'],['typescript','TypeScript'],['html','HTML'],['css','CSS'],['json','JSON'],['python','Python'],['sql','SQL'],['bash','Shell']];
       var languageOptions=languages.map(function(option){ return '<option value="'+option[0]+'"'+(language===option[0]?' selected':'')+'>'+option[1]+'</option>'; }).join('');
-      body='<div class="code-wrap'+(block.codeWrap?' is-wrapped':'')+'" style="--code-height:'+codeHeight+'px"><div class="code-tools"><label class="code-language"><span>Language</span><select data-code-language'+disabled+'>'+languageOptions+'</select></label><button type="button" class="code-wrap-toggle" data-code-wrap aria-pressed="'+(block.codeWrap?'true':'false')+'">Wrap</button><label class="code-height" title="Editor height"><span>Height</span><input type="range" data-code-height min="180" max="720" step="20" value="'+codeHeight+'"'+disabled+'></label><button type="button" class="code-size" data-code-size aria-expanded="false">Expand</button><button type="button" class="code-copy" data-code-copy title="Copy this code">'
+      body='<div class="code-wrap'+(block.codeWrap?' is-wrapped':'')+'" style="--code-height:'+codeHeight+'px"><div class="code-tools"><label class="code-language" title="Language"><span>Language</span><select data-code-language'+disabled+'>'+languageOptions+'</select></label><button type="button" class="code-wrap-toggle" data-code-wrap aria-pressed="'+(block.codeWrap?'true':'false')+'">Wrap</button><label class="code-height" title="Editor height"><span>Height</span><input type="range" data-code-height min="180" max="720" step="20" value="'+codeHeight+'"'+disabled+'></label><button type="button" class="code-size" data-code-size aria-expanded="false">Expand</button><button type="button" class="code-copy" data-code-copy title="Copy this code">'
         +'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="9" height="9" rx="1.6"></rect><path d="M10.5 3.5v-1a1 1 0 0 0-1-1h-7a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h1"></path></svg>'
         +'<span data-copy-word>Copy</span></button></div>'
         +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div>'
