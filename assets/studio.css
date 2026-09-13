@@ -1009,3 +1009,11 @@ body.is-sizing .studio-block{ transition:none; }
    with a real editor integration rather than an overlay that can drift. */
 .code-highlight{ display:none!important; }
 .block-code{ color:var(--ink)!important; caret-color:var(--ink); }
+
+/* The gutter and source must have identical vertical metrics. */
+.code-lines,.block-code,.code-highlight{
+  font-size:13px!important;
+  line-height:1.5!important;
+  padding-top:11px!important;
+  padding-bottom:11px!important;
+}
