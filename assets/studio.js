@@ -7,7 +7,8 @@
      go so nothing arrives while you read, and every write is refused. */
   var preview=null, liveState=null;
   var SIDE_KEY='crowstudies:studio:projects-open';
-  function narrow(){ try{ return window.matchMedia('(max-width:780px)').matches; }catch(error){ return false; } }
+  function shortLandscape(){ try{ return window.matchMedia('(orientation:landscape) and (max-height:560px) and (pointer:coarse)').matches; }catch(error){ return false; } }
+  function narrow(){ try{ return window.matchMedia('(max-width:780px)').matches||shortLandscape(); }catch(error){ return shortLandscape(); } }
   var sideOpen=narrow()?false:(function(){ try{ return localStorage.getItem(SIDE_KEY)!=='0'; }catch(error){ return true; } }());
   /* Folding the list away is not worth a redraw: it would close every shared
      note on the page and take the cursor with it. */
@@ -21,6 +22,14 @@
     if(scrim)scrim.hidden=!open;
     root.querySelectorAll('[data-side-toggle]').forEach(function(button){ button.setAttribute('aria-expanded',open?'true':'false'); });
   }
+  /* On a short phone landscape, the project drawer must never compete with
+     the keyboard. Closing it only changes shell classes, so it preserves the
+     editor and its cursor. */
+  root.addEventListener('focusin',function(event){
+    if(!shortLandscape()||!sideOpen)return;
+    var editable=event.target.matches('input,textarea,select,[contenteditable="true"]')||event.target.closest('.tiptap,[contenteditable="true"]');
+    if(editable&&event.target.closest('.studio-block'))setSide(false);
+  });
   function sideToggleHTML(where){
     /* The handle keeps still. In the sidebar it is the first thing in the
        header, and when the column folds down to a rail it is all that is left
