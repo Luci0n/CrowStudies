@@ -989,3 +989,7 @@ body.is-sizing .studio-block{ transition:none; }
    not. Copy stays because it is useful to readers. */
 .read-only .code-language,.read-only .code-wrap-toggle,.read-only .code-height,.read-only .code-size{ display:none!important; }
 .read-only .code-tools{ justify-content:flex-end; }
+
+/* Older blocks already render their title input, so view mode hides the
+   default value at the surface as well as during rendering. */
+.read-only .block-title[value^="Untitled"]{ display:none!important; }
