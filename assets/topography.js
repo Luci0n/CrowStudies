@@ -284,10 +284,22 @@
   }
 
   let resizeTimer;
-  window.addEventListener('resize', () => {
+  const mobileViewport = window.matchMedia('(pointer: coarse)');
+  function handleViewportResize(){
+    /* Mobile browser chrome changes height continuously. Resizing the bitmap for
+       that would regenerate the terrain and make it visibly snap. Keep the
+       existing field, only stretch its display surface until a true width/orientation
+       change needs fresh geometry. */
+    if (mobileViewport.matches && width && Math.abs(window.innerWidth - width) < 2) {
+      const displayHeight = window.innerHeight + 'px';
+      primary.style.height = outgoing.style.height = displayHeight;
+      return;
+    }
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => { resize(); draw(); }, 160);
-  });
+  }
+  window.addEventListener('resize', handleViewportResize);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', handleViewportResize);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) { lastFrame = -Infinity; requestAnimationFrame(draw); }
   });
