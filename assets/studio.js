@@ -2820,6 +2820,7 @@
     var prompt=block.type==='idea'?'Capture a possibility, question, or connection…':block.type==='lesson'?'Teach the idea in a few clear lines…':'Write something…';
     var frozen=readOnly||!canEdit()||sectionLocked(block.sectionId);
     var editable=frozen?'false':'true', disabled=frozen?' disabled':'';
+    var hideDefaultTitle=readOnly&&/^untitled(?:\s|$)/i.test(String(block.title||''));
     var body='<div class="block-body" data-body contenteditable="'+editable+'" data-placeholder="'+prompt+'">'+cleanHTML(block.body)+'</div>';
     var extra=((block.type==='schedule'||block.type==='milestone')?'<input class="block-date" data-date type="date" value="'+esc(block.due||'')+'">':'');
     if(block.type==='note') body='<div class="rich-tools"><button data-format="bold"><b>B</b></button><button data-format="italic"><i>I</i></button><button data-format="insertUnorderedList">• list</button><button data-format="formatBlock" data-value="H1">H1</button><button data-format="formatBlock" data-value="H2">H2</button><button data-format="formatBlock" data-value="H3">H3</button><button data-format="formatBlock" data-value="P">P</button></div>'+body;
@@ -2872,7 +2873,7 @@
         +'<span data-copy-word>Copy</span></button></div>'
         +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div><div class="code-editor"><pre class="code-highlight" data-code-highlight aria-hidden="true">'+syntaxCodeHTML(written,language)+'</pre><pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+esc(written)+'</pre></div></div></div>';
     }
-    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-cols="'+blockSpan(block)+'" data-block="'+block.id+'" style="--w:'+blockSpan(block)+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<span class="width-grip" data-width-grip title="Drag to set how wide this block is" aria-hidden="true"></span>')+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
+    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-cols="'+blockSpan(block)+'" data-block="'+block.id+'" style="--w:'+blockSpan(block)+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<span class="width-grip" data-width-grip title="Drag to set how wide this block is" aria-hidden="true"></span>')+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div>'+(hideDefaultTitle?'':'<input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>')+body+extra+'</article>';
   }
   function queuedSave(block, immediate, patch){
     var old=saveTimers[block.id]; if(old) clearTimeout(old);
@@ -3472,10 +3473,11 @@
       /* textContent runs the lines together: the browser writes a line break
          inside an editable pre as an element, and textContent keeps none of
          them. innerText is the one that reads what is actually on screen. */
-      function readCode(){
+      function rawCodeText(){
         var written=(code.innerText!==undefined?code.innerText:code.textContent)||'';
-        return written.replace(/\u00a0/g,' ').replace(/\n$/,'');
+        return written.replace(/\u00a0/g,' ');
       }
+      function readCode(){ return rawCodeText().replace(/\n$/,''); }
       function followCodeCaret(){
         if(!code)return;
         var viewport=card.querySelector('.code-body');
@@ -3499,7 +3501,10 @@
       function paintCode(){ if(highlight)highlight.innerHTML=syntaxCodeHTML(block.body,block.codeLanguage||'plain'); }
       if(code)code.oninput=function(){
         block.body=readCode();
-        if(gutter)gutter.innerHTML=codeLinesHTML(block.body);
+        /* Keep a newly-created blank final line in the gutter. The saved body
+           trims that browser-only newline, but the person is still typing on
+           it and needs its number beside the caret. */
+        if(gutter)gutter.innerHTML=codeLinesHTML(rawCodeText());
         paintCode();
         queuedSave(block,false,{body:block.body});
         requestAnimationFrame(followCodeCaret);
