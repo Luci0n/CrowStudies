@@ -288,7 +288,10 @@ async function showComments(blockId){
   const holder=box.querySelector('.upgrade-comments');
   async function render(){
     const comments=await cloud().listComments(id,blockId);
-    holder.innerHTML=comments.length?comments.map(x=>'<article><b>@'+esc(x.author||'someone')+'</b><p>'+esc(x.text).replace(/(^|\s)@([a-z0-9_]{3,20})/gi,'$1<span class="upgrade-mention">@$2</span>')+'</p></article>').join(''):'<p class="upgrade-copy">No comments yet.</p>';
+    const owner=!!(window.CrowStudio&&window.CrowStudio.isOwner&&window.CrowStudio.isOwner());
+    const mine=cloud().user&&cloud().user.uid;
+    holder.innerHTML=comments.length?comments.map(x=>'<article><div class="upgrade-comment-head"><b>@'+esc(x.author||'someone')+'</b>'+((owner||x.authorId===mine)?'<button type="button" class="upgrade-comment-delete" data-comment-delete="'+esc(x.id)+'" aria-label="Delete comment">Delete</button>':'')+'</div><p>'+esc(x.text).replace(/(^|\s)@([a-z0-9_]{3,20})/gi,'$1<span class="upgrade-mention">@$2</span>')+'</p></article>').join(''):'<p class="upgrade-copy">No comments yet.</p>';
+    holder.querySelectorAll('[data-comment-delete]').forEach(button=>{button.onclick=async()=>{button.disabled=true;try{await cloud().deleteComment(id,button.dataset.commentDelete);await render();updateCommentBadges();}catch(error){button.disabled=false;alert('This comment could not be removed.');}};});
   }
   await render();
   box.querySelector('form').onsubmit=async e=>{e.preventDefault();const field=e.currentTarget.querySelector('textarea');if(!field.value.trim())return;await cloud().addComment(id,blockId,field.value);field.value='';await render();updateCommentBadges();};
