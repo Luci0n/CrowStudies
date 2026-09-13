@@ -390,6 +390,10 @@ const cloud = {
     const value=String(text||'').trim(); if(!value)return;
     await addDoc(cloud.commentsRef(projectId),{blockId:blockId,text:value,author:(cloud.profile&&cloud.profile.username)||'someone',authorId:cloud.user.uid,createdMs:Date.now()});
   },
+  async deleteComment(projectId, commentId){
+    if(!cloud.user)throw new Error('Sign in first');
+    await deleteDoc(doc(db,'projects',projectId,'comments',commentId));
+  },
   async uploadProjectImage(projectId, slot, file){
     if(!cloud.user)throw new Error('Sign in first');
     if(!/^image-(0[1-9]|1[0-9]|20)$/.test(String(slot||'')))throw new Error('This project has no image slot available.');
