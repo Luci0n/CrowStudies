@@ -2201,7 +2201,7 @@
       /* Only blocks that already follow one another can be put on a row
          together; a row is a run, not a gathering. */
       var follows=previous&&blocks.indexOf(block)===blocks.indexOf(previous)+1;
-      if(!row||!follows||want>left){ row={ items:[] }; rows.push(row); left=GRID; }
+      if(!row||!follows||want>left||row.items.length>=rowCap()){ row={ items:[] }; rows.push(row); left=GRID; }
       row.items.push({ block:block, width:want });
       left-=want;
       previous=block;
@@ -2438,12 +2438,24 @@
       widthFields(block,give);
     });
   }
+  /* How many blocks a row can hold before none of them can be read. A block
+     needs about 170px to be worth looking at, and past four a row is a set of
+     columns nobody wants, so that is the ceiling however wide the window is.
+     A row that somehow holds more - dropped there before there was a limit -
+     is split here rather than left crushed. */
+  function rowCap(){
+    var room=gridWidth();
+    if(!(room>0))return 4;
+    return Math.max(1,Math.min(4,Math.floor(room/170)));
+  }
   function rowsFrom(list){
-    var out=[], row=null, used=0;
+    var out=[], row=null, used=0, cap=rowCap();
     list.forEach(function(block){
       var weight=blockSpan(block), named=block.row?String(block.row):'';
-      if(row&&named&&row.id===named){ row.items.push(block); used+=weight; return; }
-      if(row&&!named&&!row.id&&used+weight<=GRID){ row.items.push(block); used+=weight; return; }
+      if(row&&row.items.length<cap){
+        if(named&&row.id===named){ row.items.push(block); used+=weight; return; }
+        if(!named&&!row.id&&used+weight<=GRID){ row.items.push(block); used+=weight; return; }
+      }
       row={ id:named, items:[block] }; used=weight; out.push(row);
     });
     return out;
@@ -2514,7 +2526,7 @@
     rows.forEach(function(row,index){ if(row.items.indexOf(block)>=0)at=index; });
     if(at<1)return;
     var mine=rows[at], above=rows[at-1];
-    if(mine.items.length>1||above.items.length>=4)return;
+    if(mine.items.length>1||above.items.length>=rowCap())return;
     var named=nameRow(above);
     block.row=named;
     var share=Math.round(GRID/(above.items.length+1));
@@ -3589,6 +3601,9 @@
         if(y>bottom)continue;
         if(y<top+BETWEEN)return { row:rowEl };
         if(y>bottom-BETWEEN)return { row:list[i+1]||null };
+        /* A full row cannot take another one, so the card goes above or below
+           it instead of being squeezed in. */
+        if(seats.length>=rowCap())return { row:y<(top+bottom)/2?rowEl:(list[i+1]||null) };
         for(var j=0;j<seats.length;j++){
           var box=restingBox(seats[j]);
           if(x<box.left+box.width/2)return { beside:seats[j] };
