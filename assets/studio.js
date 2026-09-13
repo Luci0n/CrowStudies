@@ -2834,7 +2834,7 @@
     if(block.type==='database') body='<div class="db" data-db-table></div>';
     if(block.type==='code'){
       var written=plainText(block.body);
-      body='<div class="code-wrap"><div class="code-tools"><button type="button" class="code-copy" data-code-copy title="Copy this code">'
+      body='<div class="code-wrap"><div class="code-tools"><button type="button" class="code-size" data-code-size aria-expanded="false">Expand</button><button type="button" class="code-copy" data-code-copy title="Copy this code">'
         +'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="9" height="9" rx="1.6"></rect><path d="M10.5 3.5v-1a1 1 0 0 0-1-1h-7a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h1"></path></svg>'
         +'<span data-copy-word>Copy</span></button></div>'
         +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div>'
@@ -3467,6 +3467,12 @@
         event.preventDefault();
         document.execCommand('insertText',false,text);
       };
+      var size=card.querySelector('[data-code-size]');
+      if(size)size.onclick=function(){
+        var expanded=card.classList.toggle('code-expanded');
+        size.setAttribute('aria-expanded',expanded?'true':'false');
+        size.textContent=expanded?'Collapse':'Expand';
+      };
       var copy=card.querySelector('[data-code-copy]');
       if(copy)copy.onclick=async function(){
         var word=copy.querySelector('[data-copy-word]');
@@ -3983,6 +3989,7 @@
   window.CrowStudio={
     projectId:function(){ return activeProject?activeProject.id:''; },
     canEdit:function(){ return !!activeProject&&canEdit(); },
+    isOwner:function(){ return !!activeProject&&!!cloud().user&&((activeProject.members||{})[cloud().user.uid]==='owner'); },
     /* Always the live project, even while an old version is on screen, so
        history never records what somebody was merely looking at. */
     snapshot:function(){
