@@ -984,3 +984,8 @@ body.is-sizing .studio-block{ transition:none; }
 .code-tools > *{ flex:0 0 auto; max-width:100%; }
 .code-language select{ max-width:110px; }
 .code-height input{ width:min(70px,22vw); }
+
+/* View mode is a reading surface: metadata may remain, editor furniture does
+   not. Copy stays because it is useful to readers. */
+.read-only .code-language,.read-only .code-wrap-toggle,.read-only .code-height,.read-only .code-size{ display:none!important; }
+.read-only .code-tools{ justify-content:flex-end; }
