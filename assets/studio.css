@@ -31,7 +31,7 @@
 .block-skeleton span:first-child{ width:44%; height:16px; }
 .block-skeleton span:last-child{ width:72%; }
 @keyframes skeleton-sweep{ from{ background-position:120% 0; } to{ background-position:-120% 0; } }
-.block-grid>.studio-block{ animation:studio-new .3s cubic-bezier(.2,.75,.28,1) backwards; }
+.block-grid .studio-block{ animation:studio-new .3s cubic-bezier(.2,.75,.28,1) backwards; }
 .studio-spinner{ width:26px; height:26px; border:3px solid var(--line-strong); border-right-color:var(--brand); border-radius:50%; animation:spin .85s linear infinite; margin-bottom:14px; }
 .project-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; border-bottom:1px solid var(--line); padding-bottom:18px; margin-bottom:16px; }
 .project-actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
@@ -64,7 +64,6 @@
 .studio-block:focus-within{ border-color:color-mix(in srgb,var(--brand) 65%,var(--line)); }
 .studio-block.is-pending{ border-color:color-mix(in srgb,var(--brand) 52%,var(--line)); background:color-mix(in srgb,var(--brand) 5%,var(--well)); animation:studio-new .34s cubic-bezier(.2,.75,.28,1) backwards; }
 .studio-block.save-failed{ border-color:var(--bad); }
-.studio-block.note,.studio-block.lesson{ grid-column:1/-1; }
 .studio-block.idea .block-kicker{ color:var(--gold); }
 .studio-block.lesson .block-kicker{ color:var(--brand); }
 /* The held card keeps its slot as the gap. Its entry animation is off, or
@@ -227,7 +226,7 @@
 .share-note{ margin-top:8px; color:var(--ink-3); font-size:12px; }
 .settings-danger{ border-color:color-mix(in srgb,var(--bad) 45%,var(--line)); }
 .studio-practice-overlay{ position:fixed!important; z-index:9999!important; inset:0!important; display:block!important; overflow:auto; background:#0b0d18!important; animation:studio-new .25s ease both; }.studio-practice-host{ position:relative; min-height:100vh; background:#0b0d18; }.studio-practice-host .app{ min-height:100vh; padding-top:24px; background:#0b0d18; }.studio-practice-close{ display:none; }
-@media(max-width:780px){ .lesson-builder{ grid-template-columns:1fr; }.step-rail{ grid-auto-flow:column; grid-auto-columns:minmax(148px,1fr); max-height:none; overflow-x:auto; }.studio-shell{ grid-template-columns:1fr; padding-top:18px; }.studio-side{ position:static; }.block-grid{ grid-template-columns:1fr; }.studio-block.note,.studio-block.lesson{ grid-column:auto; } }
+@media(max-width:780px){ .lesson-builder{ grid-template-columns:1fr; }.step-rail{ grid-auto-flow:column; grid-auto-columns:minmax(148px,1fr); max-height:none; overflow-x:auto; }.studio-shell{ grid-template-columns:1fr; padding-top:18px; }.studio-side{ position:static; }.block-grid{ grid-template-columns:1fr; } }
 
 /* Live collaboration never replays the page animation. */
 .studio-block.remote-patch{ animation:none!important; transition:background .18s ease, border-color .18s ease; }
@@ -571,7 +570,6 @@
 /* A database is a wide thing among narrow ones: it takes the row to itself,
    its columns keep a width you can read and tap, and the box scrolls when
    there are more of them than will fit. */
-.studio-block.database{ grid-column:1 / -1; }
 .db-grid{ width:max-content; min-width:100%; border-collapse:collapse; color:var(--ink-2); }
 .db-grid th,.db-grid td{ min-width:132px; }
 .db-grid th:first-child,.db-grid td:first-child{ min-width:176px; }
@@ -630,7 +628,6 @@
 
 /* ---------- a database on a phone: a card for every row ---------- */
 @media(max-width:640px){
-  .studio-block.database{ grid-column:auto; }
   .db-grid,.db-grid th,.db-grid td,.db-grid td:first-child{ min-width:0; width:auto; }
   .db-scroll{ border:0; overflow:visible; }
   .db-grid,.db-grid tbody,.db-grid tr,.db-grid td{ display:block; width:auto; }
@@ -745,89 +742,49 @@ body.is-carrying *{ cursor:grabbing !important; }
 
 /* A block's width is its own, and says so on the element, so these come after
    the rules that set a width by kind and win over them. */
-/* ------------------------------------------------------- how wide a block is
-   The row is forty-eight narrow tracks rather than two columns, so a block can
-   take a quarter, a third, two thirds or all of it, three or four can sit side
-   by side, and the edge between two of them can be dragged a track at a time -
-   fine enough that the hand and the card stay together. Below 780px there is
-   one column to be had, so every block takes it. */
-.block-grid{ grid-template-columns:repeat(48,minmax(0,1fr)); gap:12px; }
-.block-grid>.studio-block,.block-grid>.block-gap{ grid-column:span 24; }
-.block-grid>[data-cols="1"]{ grid-column:span 1; }
-.block-grid>[data-cols="2"]{ grid-column:span 2; }
-.block-grid>[data-cols="3"]{ grid-column:span 3; }
-.block-grid>[data-cols="4"]{ grid-column:span 4; }
-.block-grid>[data-cols="5"]{ grid-column:span 5; }
-.block-grid>[data-cols="6"]{ grid-column:span 6; }
-.block-grid>[data-cols="7"]{ grid-column:span 7; }
-.block-grid>[data-cols="8"]{ grid-column:span 8; }
-.block-grid>[data-cols="9"]{ grid-column:span 9; }
-.block-grid>[data-cols="10"]{ grid-column:span 10; }
-.block-grid>[data-cols="11"]{ grid-column:span 11; }
-.block-grid>[data-cols="12"]{ grid-column:span 12; }
-.block-grid>[data-cols="13"]{ grid-column:span 13; }
-.block-grid>[data-cols="14"]{ grid-column:span 14; }
-.block-grid>[data-cols="15"]{ grid-column:span 15; }
-.block-grid>[data-cols="16"]{ grid-column:span 16; }
-.block-grid>[data-cols="17"]{ grid-column:span 17; }
-.block-grid>[data-cols="18"]{ grid-column:span 18; }
-.block-grid>[data-cols="19"]{ grid-column:span 19; }
-.block-grid>[data-cols="20"]{ grid-column:span 20; }
-.block-grid>[data-cols="21"]{ grid-column:span 21; }
-.block-grid>[data-cols="22"]{ grid-column:span 22; }
-.block-grid>[data-cols="23"]{ grid-column:span 23; }
-.block-grid>[data-cols="24"]{ grid-column:span 24; }
-.block-grid>[data-cols="25"]{ grid-column:span 25; }
-.block-grid>[data-cols="26"]{ grid-column:span 26; }
-.block-grid>[data-cols="27"]{ grid-column:span 27; }
-.block-grid>[data-cols="28"]{ grid-column:span 28; }
-.block-grid>[data-cols="29"]{ grid-column:span 29; }
-.block-grid>[data-cols="30"]{ grid-column:span 30; }
-.block-grid>[data-cols="31"]{ grid-column:span 31; }
-.block-grid>[data-cols="32"]{ grid-column:span 32; }
-.block-grid>[data-cols="33"]{ grid-column:span 33; }
-.block-grid>[data-cols="34"]{ grid-column:span 34; }
-.block-grid>[data-cols="35"]{ grid-column:span 35; }
-.block-grid>[data-cols="36"]{ grid-column:span 36; }
-.block-grid>[data-cols="37"]{ grid-column:span 37; }
-.block-grid>[data-cols="38"]{ grid-column:span 38; }
-.block-grid>[data-cols="39"]{ grid-column:span 39; }
-.block-grid>[data-cols="40"]{ grid-column:span 40; }
-.block-grid>[data-cols="41"]{ grid-column:span 41; }
-.block-grid>[data-cols="42"]{ grid-column:span 42; }
-.block-grid>[data-cols="43"]{ grid-column:span 43; }
-.block-grid>[data-cols="44"]{ grid-column:span 44; }
-.block-grid>[data-cols="45"]{ grid-column:span 45; }
-.block-grid>[data-cols="46"]{ grid-column:span 46; }
-.block-grid>[data-cols="47"]{ grid-column:span 47; }
-.block-grid>[data-cols="48"]{ grid-column:span 48; }
-.width-grip{ position:absolute; top:14%; bottom:14%; right:-1px; width:12px; border:0; background:transparent; cursor:col-resize; opacity:0; transition:opacity .16s; z-index:4; touch-action:none; }
-.width-grip::before{ content:''; position:absolute; left:4px; top:0; bottom:0; width:3px; border-radius:3px; background:var(--brand,#8065ff); }
-.studio-block:hover .width-grip,.studio-block:focus-within .width-grip{ opacity:.45; }
+/* -------------------------------------------------------------------- rows
+   A row is an element holding one or more blocks, and a block's width is its
+   share of the row it is on rather than a slot in one long grid. Shares are
+   flex weights, so a row of one fills the row whatever its number says, and
+   two blocks split it between them. Nothing outside a row can be moved by
+   anything that happens inside it. */
+.block-grid{ display:grid; grid-template-columns:minmax(0,1fr); gap:12px; }
+.block-row{ display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); align-items:stretch; gap:12px; min-width:0; }
+.block-row>.studio-block,.block-row>.block-gap{ min-width:0; }
+/* While a card is being carried the row holds an extra body - the gap it is
+   about to land in - so the tracks are shared out evenly until it lands. */
+.block-grid.is-reordering .block-row{ grid-template-columns:none!important; }
+/* The handle is the line between two blocks, so the last one on a row has
+   none - there is nothing on its right to trade with. */
+.block-row>.studio-block:last-child .width-grip{ display:none; }
+.width-grip{ position:absolute; top:14%; bottom:14%; right:-7px; width:14px; border:0; background:transparent; cursor:col-resize; opacity:0; transition:opacity .16s; z-index:4; touch-action:none; }
+.width-grip::before{ content:''; position:absolute; left:5px; top:0; bottom:0; width:4px; border-radius:4px; background:var(--brand,#8065ff); }
+.studio-block:hover .width-grip,.studio-block:focus-within .width-grip{ opacity:.4; }
 .width-grip:hover{ opacity:1; }
-.block-grid.is-sizing .width-grip{ opacity:0; }
-.size-guide{ position:absolute; width:2px; margin-left:-1px; border-radius:2px; background:var(--brand,#8065ff); box-shadow:0 0 0 4px color-mix(in srgb,var(--brand,#8065ff) 18%,transparent); pointer-events:none; z-index:5; }
 body.is-sizing{ cursor:col-resize; user-select:none; -webkit-user-select:none; }
 body.is-sizing .studio-block{ transition:none; }
 
 /* ------------------------------------------- a card that has to be narrow
-   A quarter of the row is 204px, and everything in the corners was laid out
-   for something twice that. The handles keep their corner, the kicker gives
-   way to them rather than running underneath, and the comment button moves to
-   the bottom where nothing else is. */
+   A quarter of a row is about 200px, and everything in the corners was laid
+   out for something twice that. The handles keep their corner, the kicker
+   gives way to them rather than running underneath, and the comment button
+   moves to the bottom where nothing else is. */
 .block-kicker{ padding-right:94px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:16px; }
 .block-title{ width:100%; }
 .studio-block{ padding-bottom:30px; }
 .studio-block .upgrade-comment{ position:absolute; top:auto; bottom:7px; right:9px; margin:0; z-index:3; opacity:0; }
 .studio-block:hover .upgrade-comment,.studio-block:focus-within .upgrade-comment,.studio-block .upgrade-comment.has-comments{ opacity:1; }
 .studio-block input,.studio-block textarea,.studio-block select{ max-width:100%; min-width:0; }
-.task-row{ min-width:0; }
-.task-row .task-text{ min-width:0; }
+.task-row,.task-row .task-text{ min-width:0; }
 .code-body,.table-frame,.db-frame{ max-width:100%; }
 
 @media(max-width:780px){
-  .block-grid{ grid-template-columns:minmax(0,1fr); }
-  .block-grid>.studio-block,.block-grid>.block-gap,.block-grid>[data-cols]{ grid-column:1 / -1; }
+  .block-row{ grid-auto-flow:row; grid-template-columns:minmax(0,1fr)!important; }
   .width-grip{ display:none; }
   .studio-block .upgrade-comment{ opacity:1; }
 }
+
+/* A block takes the track it is given. Widths used to be written per kind
+   here, which now reads as a block quietly spanning its whole row and
+   pushing whoever is beside it into a track of their own. */
+.block-row>.studio-block,.block-row>.block-gap{ grid-column:auto; grid-row:auto; }

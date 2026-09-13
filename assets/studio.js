@@ -518,6 +518,7 @@
     if(cols>=1&&cols<=12)copy.cols=cols; else delete copy.cols;
     var width=Math.round(Number(copy.width));
     if(width>=1&&width<=48)copy.width=width; else delete copy.width;
+    copy.row=typeof copy.row==='string'?copy.row:'';
     if(copy.type==='database'){
       if(!Array.isArray(copy.props))copy.props=[];
       if(!Array.isArray(copy.views))copy.views=[];
@@ -971,7 +972,7 @@
     var actions=previewing()
       ? '<button class="btn sm" data-restore-preview>Restore this version</button>'
       : '<button class="btn ghost sm" data-toggle-view>'+ (readOnly?'Edit project':'View project') +'</button><button class="btn ghost sm" data-new-section>+ Section</button>';
-    return previewBarHTML()+'<div class="project-top"><div class="project-heading"><h1 class="project-title">'+esc(activeProject.title)+'</h1><div class="project-meta"><span class="'+(shared?'shared':'private')+'">'+esc(access)+'</span><span>'+esc(overview)+'</span></div><div class="project-presence" hidden><span>Viewing now</span><div class="collab-people" data-collab-people aria-label="People viewing this project"></div></div></div><div class="project-actions">'+actions+'</div></div><div class="section-bar"><button class="section-filter '+(activeSection==='all'?'active':'')+'" data-section="all">All</button><button class="section-filter '+(activeSection===''?'active':'')+'" data-section="">Unsorted</button>'+sectionButtons+'</div>'+pageBar+(locked?'<p class="section-lock-note">This section is locked. Unlock it from its cog menu to edit.</p>':'')+'<div class="block-grid">'+shown.map(blockHTML).join('')+'</div><div class="add-row '+(locked?'is-locked':'')+'">'+(locked?'<span>This section is locked</span>':'<button type="button" class="add-open" data-add-open>+ Add block</button>')+'</div>';
+    return previewBarHTML()+'<div class="project-top"><div class="project-heading"><h1 class="project-title">'+esc(activeProject.title)+'</h1><div class="project-meta"><span class="'+(shared?'shared':'private')+'">'+esc(access)+'</span><span>'+esc(overview)+'</span></div><div class="project-presence" hidden><span>Viewing now</span><div class="collab-people" data-collab-people aria-label="People viewing this project"></div></div></div><div class="project-actions">'+actions+'</div></div><div class="section-bar"><button class="section-filter '+(activeSection==='all'?'active':'')+'" data-section="all">All</button><button class="section-filter '+(activeSection===''?'active':'')+'" data-section="">Unsorted</button>'+sectionButtons+'</div>'+pageBar+(locked?'<p class="section-lock-note">This section is locked. Unlock it from its cog menu to edit.</p>':'')+'<div class="block-grid">'+rowsFrom(shown).map(rowHTML).join('')+'</div><div class="add-row '+(locked?'is-locked':'')+'">'+(locked?'<span>This section is locked</span>':'<button type="button" class="add-open" data-add-open>+ Add block</button>')+'</div>';
   }
   function personName(uid){
     var people=(activeProject&&activeProject.people)||{};
@@ -1284,11 +1285,14 @@
       rows.push('<div class="block-menu-head">Turn into</div>');
       TURN_INTO.forEach(function(type){ if(type!==block.type)rows.push('<button type="button" data-turn="'+type+'">'+BLOCK_LABELS[type]+'</button>'); });
     }
-    var span=blockSpan(block);
-    rows.push('<div class="block-menu-head">Width</div>'
-      +WIDTH_CHOICES.filter(function(choice){ return choice[0]>=minCols(block); }).map(function(choice){
+    var span=blockSpan(block), sits=rowHolding(block);
+    var beside=sits?sits.items.length:1;
+    rows.push('<div class="block-menu-head">'+(beside>1?'Share of the row':'Width')+'</div>'
+      +(beside>1?WIDTH_CHOICES.filter(function(choice){ return choice[0]<GRID; }).map(function(choice){
         return '<button type="button" data-span="'+choice[0]+'"'+(span===choice[0]?' class="is-on"':'')+'>'+choice[1]+'</button>';
-      }).join(''));
+      }).join(''):'')
+      +(beside>1?'<button type="button" data-own-row>Give it its own row</button>'
+        :'<button type="button" data-join-row>Put it beside the block above</button>'));
     rows.push('<div class="block-menu-head">This block</div><button type="button" data-duplicate>Duplicate</button>');
     menu.innerHTML=rows.join('');
     card.appendChild(menu);
@@ -1296,6 +1300,10 @@
     menu.querySelectorAll('[data-span]').forEach(function(choice){
       choice.onclick=function(){ closeBlockMenu(); setBlockSpan(block,+choice.dataset.span); };
     });
+    var alone=menu.querySelector('[data-own-row]');
+    if(alone)alone.onclick=function(){ closeBlockMenu(); ownRow(block); };
+    var join=menu.querySelector('[data-join-row]');
+    if(join)join.onclick=function(){ closeBlockMenu(); joinRowAbove(block); };
     menu.querySelector('[data-duplicate]').onclick=function(){ closeBlockMenu(); duplicateBlock(block); };
     setTimeout(function(){ document.addEventListener('click',awayFromBlockMenu); },0);
   }
@@ -2152,7 +2160,7 @@
      out that way and then packed, so a row is filled rather than left with a
      ragged end. */
   function wantsWidth(block){
-    var floor=minCols(block);
+    var floor=Math.round(minPx(block)/Math.max(1,gridWidth())*GRID);
     if(block.type==='database'||block.type==='table'||block.type==='lesson')return FULL;
     var text=String(block.body||'');
     var lines=text?text.split('\n'):[];
@@ -2172,28 +2180,30 @@
     var picked=chosenBlocks();
     if(!picked.length)return;
     var sorted=blocks.filter(function(block){ return picked.indexOf(block)>=0; });
-    var row=[], left=FULL;
-    function closeRow(){
-      if(!row.length)return;
-      /* Whatever is left over goes to the last block on the row, so the row
-         ends where the row ends. */
-      if(left>0)row[row.length-1].width+=left;
-      row=[]; left=FULL;
-    }
-    var plan=sorted.map(function(block){
-      var width=Math.min(wantsWidth(block),FULL);
-      if(width>left)closeRow();
-      var seat={ block:block, width:width };
-      row.push(seat); left-=width;
-      if(left<=0)closeRow();
-      return seat;
+    var rows=[], row=null, left=0, previous=null;
+    sorted.forEach(function(block){
+      var want=Math.max(1,Math.min(wantsWidth(block),GRID));
+      /* Only blocks that already follow one another can be put on a row
+         together; a row is a run, not a gathering. */
+      var follows=previous&&blocks.indexOf(block)===blocks.indexOf(previous)+1;
+      if(!row||!follows||want>left){ row={ items:[] }; rows.push(row); left=GRID; }
+      row.items.push({ block:block, width:want });
+      left-=want;
+      previous=block;
     });
-    closeRow();
-    plan.forEach(function(seat){ widthFields(seat.block,seat.width); });
+    rows.forEach(function(row){
+      var spare=GRID-row.items.reduce(function(sum,seat){ return sum+seat.width; },0);
+      if(spare>0)row.items[row.items.length-1].width+=spare;
+      var named=row.items.length>1?id():'';
+      row.items.forEach(function(seat){
+        seat.block.row=named;
+        widthFields(seat.block,row.items.length>1?seat.width:GRID);
+      });
+    });
     clearChosen();
     render();
-    plan.forEach(function(seat){
-      queuedSave(seat.block,true,{ width:seat.block.width, cols:seat.block.cols, span:seat.block.span });
+    sorted.forEach(function(block){
+      queuedSave(block,true,{ row:block.row||'', width:block.width, cols:block.cols, span:block.span });
     });
   }
   function chosenBlocks(){
@@ -2354,10 +2364,20 @@
      them can be dragged. The old halves are still readable: a block saved
      before this counts as six twelfths, or as the whole row. */
   var QUARTER=12, THIRD=16, HALF=24, TWO_THIRDS=32, THREE_QUARTERS=36, FULL=48;
-  /* Some kinds have a floor: a table or a database squeezed into a quarter of
-     the row is a table with its columns cut off. */
-  var MIN_COLS={ database:HALF, table:HALF, lesson:HALF, schedule:THIRD, image:QUARTER };
-  function minCols(block){ return MIN_COLS[block.type]||QUARTER; }
+  /* Some kinds have a floor, and it is a real width rather than a share: half
+     a row is roomy beside one block and cramped beside three, so what a table
+     needs is measured in pixels and turned into a share of whatever row it is
+     actually on. */
+  var MIN_PX={ database:280, table:280, lesson:260, schedule:220, image:180 };
+  function minPx(block){ return MIN_PX[block.type]||150; }
+  function minShare(block, roomPx, total){
+    if(!(roomPx>0)||!(total>0))return 1;
+    return Math.max(1,Math.min(total,minPx(block)/roomPx*total));
+  }
+  function gridWidth(){
+    var grid=root.querySelector('.block-grid');
+    return grid?grid.getBoundingClientRect().width:0;
+  }
   function blockSpan(block){
     var want=Math.round(Number(block.width));
     if(!(want>=1&&want<=GRID)){
@@ -2368,7 +2388,7 @@
       else if(block.span===2)want=FULL;
       else want=WIDE_BY_DEFAULT[block.type]?FULL:HALF;
     }
-    return Math.max(Math.min(want,GRID),minCols(block));
+    return Math.max(1,Math.min(want,GRID));
   }
   function widthFields(block, width){
     block.width=width;
@@ -2378,18 +2398,142 @@
     block.span=width>HALF?2:1;
     return { width:block.width, cols:block.cols, span:block.span };
   }
-  function setBlockSpan(block, width){
-    var fields=widthFields(block,Math.max(width,minCols(block)));
+  var WIDTH_CHOICES=[[QUARTER,'A quarter'],[THIRD,'A third'],[HALF,'Half'],[TWO_THIRDS,'Two thirds'],[THREE_QUARTERS,'Three quarters'],[FULL,'The whole row']];
+  /* ---------------------------------------------------------------- rows
+     A row is a thing, not an accident of where the blocks happened to wrap.
+     Each block says which row it is on, and how much weight it carries there;
+     the weights are shares, so a row of one is full width whatever its number
+     says, and a row of two splits between them. Nothing outside a row can be
+     moved by anything that happens inside it, which is the whole point: a
+     width can no longer push somebody onto the next line.
+
+     Blocks written before rows existed have none, so they are packed the way
+     they used to be laid out - along the row until the next one will not fit -
+     and they keep the arrangement they had. Nothing is written until the row
+     is actually touched. */
+  /* The shares on a row are made to add up to a whole row, keeping whatever
+     proportions they already had between them. */
+  function balanceRow(list){
+    var total=list.reduce(function(sum,block){ return sum+blockSpan(block); },0)||1;
+    var roomPx=gridWidth()-12*(list.length-1), spent=0;
+    list.forEach(function(block,index){
+      var floor=Math.round(minShare(block,roomPx,GRID));
+      var give=index===list.length-1?GRID-spent:Math.round(blockSpan(block)/total*GRID);
+      spent+=(give=Math.max(floor,give));
+      widthFields(block,give);
+    });
+  }
+  function rowsFrom(list){
+    var out=[], row=null, used=0;
+    list.forEach(function(block){
+      var weight=blockSpan(block), named=block.row?String(block.row):'';
+      if(row&&named&&row.id===named){ row.items.push(block); used+=weight; return; }
+      if(row&&!named&&!row.id&&used+weight<=GRID){ row.items.push(block); used+=weight; return; }
+      row={ id:named, items:[block] }; used=weight; out.push(row);
+    });
+    return out;
+  }
+  function visibleBlocks(){
+    return blocks.filter(function(block){
+      return (activeSection==='all'||(block.sectionId||'')===activeSection)&&(activePage==='all'||(block.pageId||'')===activePage);
+    });
+  }
+  function shownRows(){ return rowsFrom(visibleBlocks()); }
+  function rowHolding(block){
+    var found=null;
+    shownRows().forEach(function(row){ if(row.items.indexOf(block)>=0)found=row; });
+    return found;
+  }
+  /* A row only needs a name once somebody rearranges it; until then it is
+     whatever the packing says. Naming it writes the name onto every block on
+     it, so the next reading finds the same row. */
+  function nameRow(row){
+    var named=row.id||id();
+    row.id=named;
+    row.items.forEach(function(block){
+      if(block.row===named)return;
+      block.row=named;
+      queuedSave(block,true,{ row:named });
+    });
+    return named;
+  }
+  function shareOut(row, block, want){
+    /* Give this block the share asked for and let the rest of the row keep
+       their proportions between them. Nobody is pushed below the width their
+       kind needs to be readable at. */
+    var total=row.items.reduce(function(sum,item){ return sum+blockSpan(item); },0)||GRID;
+    var others=row.items.filter(function(item){ return item!==block; });
+    if(!others.length)return;
+    var roomPx=gridWidth()-12*(row.items.length-1);
+    var floors=row.items.map(function(item){ return minShare(item,roomPx,total); });
+    var mineFloor=floors[row.items.indexOf(block)];
+    var theirFloors=floors.reduce(function(sum,floor){ return sum+floor; },0)-mineFloor;
+    var mine=Math.max(mineFloor,Math.min(total-theirFloors,Math.round(want/GRID*total)));
+    var rest=total-mine, weight=others.reduce(function(sum,item){ return sum+blockSpan(item); },0)||1;
+    var spent=0;
+    others.forEach(function(item,index){
+      var give=index===others.length-1?rest-spent:Math.round(blockSpan(item)/weight*rest);
+      give=Math.max(Math.round(minShare(item,roomPx,total)),give);
+      spent+=give;
+      queuedSave(item,true,widthFields(item,give));
+    });
+    queuedSave(block,true,widthFields(block,Math.round(mine)));
+  }
+  function setBlockSpan(block, want){
+    var row=rowHolding(block);
+    if(!row||row.items.length<2){
+      queuedSave(block,true,widthFields(block,want));
+      render();
+      return;
+    }
+    nameRow(row);
+    shareOut(row,block,want);
     render();
-    queuedSave(block,true,fields);
+  }
+  /* Put this block beside the one above it, or take it back out onto a row of
+     its own - which is how a row comes to exist and how it stops existing. */
+  function joinRowAbove(block){
+    var rows=shownRows(), at=-1;
+    rows.forEach(function(row,index){ if(row.items.indexOf(block)>=0)at=index; });
+    if(at<1)return;
+    var mine=rows[at], above=rows[at-1];
+    if(mine.items.length>1||above.items.length>=4)return;
+    var named=nameRow(above);
+    block.row=named;
+    var share=Math.round(GRID/(above.items.length+1));
+    queuedSave(block,true,{ row:named });
+    shareOut({ id:named, items:above.items.concat(block) },block,share);
+    render();
+  }
+  function ownRow(block){
+    var row=rowHolding(block);
+    if(!row||row.items.length<2)return;
+    var rest=row.items.filter(function(item){ return item!==block; });
+    /* It leaves from the end of the row rather than from the middle of it, so
+       what is left of the row is still a run of blocks standing together. */
+    var last=rest[rest.length-1];
+    block.row='';
+    widthFields(block,GRID);
+    block.order=(last.order||0)+0.5;
+    blocks.sort(function(one,two){ return (one.order||0)-(two.order||0); });
+    queuedSave(block,true,{ row:'', width:GRID, cols:12, span:2, order:block.order });
+    if(rest.length<2){
+      rest[0].row='';
+      widthFields(rest[0],GRID);
+      queuedSave(rest[0],true,{ row:'', width:GRID, cols:12, span:2 });
+    }else{
+      balanceRow(rest);
+      rest.forEach(function(item){ queuedSave(item,true,{ width:item.width, cols:item.cols, span:item.span }); });
+    }
+    render();
   }
   var WIDTH_CHOICES=[[QUARTER,'A quarter'],[THIRD,'A third'],[HALF,'Half'],[TWO_THIRDS,'Two thirds'],[THREE_QUARTERS,'Three quarters'],[FULL,'The whole row']];
-  /* ------------------------------------------------ dragging the edge between
-     Pulling the right edge of a card moves it a twelfth at a time. If another
-     card is beside it on the same row, that one gives up exactly what this one
-     takes, so the pair keeps its place and only the ratio changes - which is
-     what dragging a divider is supposed to mean. Otherwise the card simply
-     grows or shrinks into the space left on the row. */
+  /* -------------------------------------------- the divider between two blocks
+     It exists only between two blocks on the same row, and it is strictly
+     zero-sum: one gives exactly what the other takes. Nothing else on the page
+     can move, so there is nothing to clamp against except the two floors. The
+     blocks follow the pointer continuously - the shares are only rounded once,
+     when the drag ends. */
   function bindWidth(){
     var grid=root.querySelector('.block-grid');
     if(!grid||grid.dataset.widthBound)return;
@@ -2400,63 +2544,33 @@
       if(event.button&&event.button!==0)return;
       if(window.innerWidth<=780)return;
       var card=grip.closest('[data-block]');
-      var block=card&&liveBlock(card.dataset.block);
-      if(!block)return;
+      var mateCard=card&&card.nextElementSibling;
+      if(!card||!mateCard||!mateCard.hasAttribute('data-block'))return;
+      var block=liveBlock(card.dataset.block), mate=liveBlock(mateCard.dataset.block);
+      if(!block||!mate)return;
       event.preventDefault();
       event.stopPropagation();
-      var space=parseFloat(getComputedStyle(grid).columnGap)||0;
-      var track=(grid.getBoundingClientRect().width-space*(GRID-1))/GRID;
-      var step=track+space;
-      if(!(step>0))return;
-      /* Who else is on this row, and how much of it is spare. A block grows
-         into the spare room first and only then asks the block beside it; it
-         never grows so far that the row has to break and throw somebody onto
-         the next one. */
-      var frame=grid.getBoundingClientRect(), mineBox=card.getBoundingClientRect();
-      var row=[], taken=0;
-      Array.prototype.forEach.call(grid.children,function(node){
-        if(!node.hasAttribute||!node.hasAttribute('data-block'))return;
-        if(Math.abs(node.getBoundingClientRect().top-mineBox.top)>4)return;
-        row.push(node);
-        taken+=Number(node.getAttribute('data-cols'))||0;
-      });
-      var spare=Math.max(0,GRID-taken);
-      var mateCard=card.nextElementSibling, mate=null;
-      if(mateCard&&row.indexOf(mateCard)>=0)mate=liveBlock(mateCard.dataset.block);
-      var mine=blockSpan(block), theirs=mate?blockSpan(mate):0;
-      var both=mine+theirs;
-      var floor=minCols(block), mateFloor=mate?minCols(mate):0;
-      var most=Math.min(GRID,mine+spare+(mate?theirs-mateFloor:0));
-      if(most<floor)most=floor;
-      var startX=event.clientX, now=mine, was=mine;
-      /* The card can only stand on whole tracks, so on its own it would jump
-         from one to the next while the hand moves smoothly. A line follows the
-         pointer exactly and the card catches up to it, which is the part that
-         reads as smooth. It is drawn beside this row only - a line down the
-         whole page says something is wrong even when nothing is. */
-      var guide=document.createElement('div');
-      guide.className='size-guide';
-      guide.style.top=(mineBox.top-frame.top)+'px';
-      guide.style.height=mineBox.height+'px';
-      grid.appendChild(guide);
-      var home=mineBox.right-frame.left;
-      guide.style.left=home+'px';
+      var rowEl=card.parentNode;
+      var seats=Array.prototype.filter.call(rowEl.children,function(node){ return node.hasAttribute&&node.hasAttribute('data-block'); });
+      var at=seats.indexOf(card);
+      if(at<0||seats[at+1]!==mateCard)return;
+      var weights=seats.map(function(node){ return Number(node.getAttribute('data-cols'))||HALF; });
+      var room=card.getBoundingClientRect().width+mateCard.getBoundingClientRect().width;
+      if(!(room>0))return;
+      var mine=blockSpan(block), theirs=blockSpan(mate), both=mine+theirs;
+      var floor=minShare(block,room,both), mateFloor=minShare(mate,room,both);
+      if(both-mateFloor<floor)return;
+      var startX=event.clientX, now=mine;
       document.body.classList.add('is-sizing');
-      grid.classList.add('is-sizing');
-      function width(want){
-        now=want;
-        card.setAttribute('data-cols',now);
-        if(mate)mateCard.setAttribute('data-cols',Math.max(mateFloor,both-now));
+      function show(weight){
+        now=weight;
+        weights[at]=weight; weights[at+1]=both-weight;
+        rowEl.style.gridTemplateColumns=weights.map(function(weight){ return 'minmax(0,'+weight+'fr)'; }).join(' ');
       }
       function move(point){
-        /* A pointerup that went astray - a lost window, a drag off the page -
-           would otherwise leave the whole page in sizing mode. */
         if(point.buttons===0){ stop(); return; }
-        var over=point.clientX-startX;
-        var reach=Math.max(floor,Math.min(most,mine+over/step));
-        guide.style.left=(home+(reach-mine)*step)+'px';
-        var want=Math.max(floor,Math.min(most,mine+Math.round(over/step)));
-        if(want!==now)width(want);
+        var over=(point.clientX-startX)/room*both;
+        show(Math.max(floor,Math.min(both-mateFloor,mine+over)));
       }
       function done(){
         window.removeEventListener('pointermove',move,true);
@@ -2465,19 +2579,23 @@
         window.removeEventListener('blur',stop);
         document.removeEventListener('keydown',onKey,true);
         document.body.classList.remove('is-sizing');
-        grid.classList.remove('is-sizing');
-        if(guide.parentNode)guide.parentNode.removeChild(guide);
       }
       function stop(){
         done();
-        if(now===was)return;
-        queuedSave(block,true,widthFields(block,now));
-        if(mate)queuedSave(mate,true,widthFields(mate,Math.max(mateFloor,both-now)));
+        var landed=Math.max(floor,Math.min(both-mateFloor,Math.round(now)));
+        show(landed);
+        card.setAttribute('data-cols',landed);
+        mateCard.setAttribute('data-cols',both-landed);
+        if(landed===mine)return;
+        var row=rowHolding(block);
+        if(row)nameRow(row);
+        queuedSave(block,true,widthFields(block,landed));
+        queuedSave(mate,true,widthFields(mate,both-landed));
       }
       function onKey(key){
         if(key.key!=='Escape')return;
         key.preventDefault();
-        width(was);
+        show(mine);
         done();
       }
       window.addEventListener('pointermove',move,true);
@@ -2612,6 +2730,17 @@
       window.addEventListener('pointercancel',stop);
     };
   }
+  /* The shares are grid tracks rather than flex weights: a track can be told
+     to go down to nothing, so the proportions come out exactly as asked
+     instead of being bent by each card's own padding. */
+  function rowTracks(items){
+    return items.map(function(block){ return 'minmax(0,'+blockSpan(block)+'fr)'; }).join(' ');
+  }
+  function rowHTML(row){
+    return '<div class="block-row"'+(row.id?' data-row="'+esc(row.id)+'"':'')
+      +' style="grid-template-columns:'+rowTracks(row.items)+'">'
+      +row.items.map(blockHTML).join('')+'</div>';
+  }
   function blockHTML(block){
     var labels=BLOCK_LABELS;
     var prompt=block.type==='idea'?'Capture a possibility, question, or connection…':block.type==='lesson'?'Teach the idea in a few clear lines…':'Write something…';
@@ -2667,7 +2796,7 @@
         +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div>'
         +'<pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+esc(written)+'</pre></div></div>';
     }
-    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-cols="'+blockSpan(block)+'" data-block="'+block.id+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<span class="width-grip" data-width-grip title="Drag to set how wide this block is" aria-hidden="true"></span>')+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
+    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-cols="'+blockSpan(block)+'" data-block="'+block.id+'" style="--w:'+blockSpan(block)+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<span class="width-grip" data-width-grip title="Drag to set how wide this block is" aria-hidden="true"></span>')+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
   }
   function queuedSave(block, immediate, patch){
     var old=saveTimers[block.id]; if(old) clearTimeout(old);
@@ -3332,9 +3461,27 @@
     var lifted=null, gap=null, armed=null, pointer=null;
     var startX=0, startY=0, grabX=0, grabY=0, lastX=0, lastY=0;
 
+    /* Cards live inside rows now, so they are gathered from the whole grid
+       rather than from its children. */
     function cards(){
+      return Array.prototype.filter.call(grid.querySelectorAll('[data-block]'),function(node){
+        return node!==lifted&&node!==gap;
+      });
+    }
+    function rowsOnPage(){
       return Array.prototype.filter.call(grid.children,function(node){
-        return node!==lifted&&node!==gap&&node.hasAttribute('data-block');
+        return node.classList&&node.classList.contains('block-row');
+      });
+    }
+    function inRow(rowEl){
+      return Array.prototype.filter.call(rowEl.children,function(node){
+        return node.hasAttribute&&node.hasAttribute('data-block')&&node!==lifted;
+      });
+    }
+    function emptyRows(){
+      rowsOnPage().forEach(function(rowEl){
+        if(rowEl.querySelector('[data-block]')||rowEl.contains(gap))return;
+        rowEl.parentNode.removeChild(rowEl);
       });
     }
     /* First card, in reading order, that the pointer has not gone past. Cards
@@ -3347,11 +3494,16 @@
        are part-way there. Reading that mid-slide put the gap in the wrong slot,
        which showed up most on a diagonal drag because it re-slots often enough
        that a slide is nearly always in flight. Offsets ignore transforms. */
+    function offsetIn(node){
+      var x=0, y=0, at=node;
+      while(at&&at!==grid){ x+=at.offsetLeft; y+=at.offsetTop; at=at.offsetParent; }
+      return { x:x, y:y };
+    }
     function restingBox(node){
-      var frame=grid.getBoundingClientRect();
+      var frame=grid.getBoundingClientRect(), spot=offsetIn(node);
       return {
-        left:frame.left+(node.offsetLeft-grid.offsetLeft),
-        top:frame.top+(node.offsetTop-grid.offsetTop),
+        left:frame.left+spot.x,
+        top:frame.top+spot.y,
         width:node.offsetWidth,
         height:node.offsetHeight,
         get right(){ return this.left+this.width; },
@@ -3404,16 +3556,61 @@
        last one, and twice that to go straight back where it came from. The card
        itself is glued to the pointer regardless, so this stays light. */
     var HOLD=8, anchorX=0, anchorY=0, cameFrom=null, hasMoved=false;
+    /* Near the line between two rows the card goes onto a row of its own;
+       anywhere else it joins the row it is over, beside the card it has not
+       gone past. That is the whole grammar: rows are made by dropping between
+       them and joined by dropping into them. */
+    var BETWEEN=18;
+    function landing(x, y){
+      var list=rowsOnPage();
+      for(var i=0;i<list.length;i++){
+        var rowEl=list[i];
+        var seats=inRow(rowEl);
+        if(!seats.length)continue;
+        var top=Math.min.apply(null,seats.map(function(node){ return restingBox(node).top; }));
+        var bottom=Math.max.apply(null,seats.map(function(node){ return restingBox(node).bottom; }));
+        if(y>bottom)continue;
+        if(y<top+BETWEEN)return { row:rowEl };
+        if(y>bottom-BETWEEN)return { row:list[i+1]||null };
+        for(var j=0;j<seats.length;j++){
+          var box=restingBox(seats[j]);
+          if(x<box.left+box.width/2)return { beside:seats[j] };
+        }
+        return { beside:null, into:rowEl };
+      }
+      return { row:null };
+    }
+    function put(spot){
+      if(spot.beside){ spot.beside.parentNode.insertBefore(gap,spot.beside); return; }
+      if(spot.into){ spot.into.appendChild(gap); return; }
+      var holder=gap.parentNode;
+      if(holder&&holder.classList.contains('block-row')&&holder.dataset.tempRow){
+        grid.insertBefore(holder,spot.row);
+        return;
+      }
+      var made=document.createElement('div');
+      made.className='block-row';
+      made.dataset.tempRow='1';
+      made.appendChild(gap);
+      grid.insertBefore(made,spot.row);
+    }
+    function sameSpot(spot){
+      if(spot.beside)return gap.nextElementSibling===spot.beside;
+      if(spot.into)return gap.parentNode===spot.into&&!gap.nextElementSibling;
+      var holder=gap.parentNode;
+      return !!(holder&&holder.dataset.tempRow&&holder.nextElementSibling===spot.row);
+    }
     function place(x, y, exact){
-      var mark=reference(x,y);
-      if(mark===gap.nextElementSibling)return;
+      var spot=landing(x,y);
+      if(sameSpot(spot))return;
+      var mark=spot.beside||spot.row||spot.into;
       if(hasMoved&&!exact){
         var travel=Math.abs(x-anchorX)+Math.abs(y-anchorY);
         if(travel<HOLD)return;
         if(mark===cameFrom&&travel<HOLD*2)return;
       }
-      cameFrom=gap.nextElementSibling;
-      glide(function(){ grid.insertBefore(gap,mark); });
+      cameFrom=mark;
+      glide(function(){ put(spot); emptyRows(); });
       anchorX=x; anchorY=y; hasMoved=true;
     }
     function follow(x, y){
@@ -3427,12 +3624,14 @@
       /* The gap carries the card's own classes so it takes the same slot: a
          note or a lesson spans the full row, everything else takes a half. */
       gap.className='block-gap '+card.className;
-      /* Width lives on the attribute now, and the gap has to stand in the same
-         slot as the card it replaces. */
-      gap.setAttribute('data-cols',card.getAttribute('data-cols')||'6');
+      /* The gap stands in the card's place on its row, carrying the same share
+         of it. */
+      var weight=card.getAttribute('data-cols')||'24';
+      gap.setAttribute('data-cols',weight);
+      gap.style.setProperty('--w',weight);
       gap.classList.remove('is-pending','save-failed');
       gap.style.height=box.height+'px';
-      grid.insertBefore(gap,card);
+      card.parentNode.insertBefore(gap,card);
       lifted=card;
       lifted.classList.add('is-floating');
       lifted.style.width=box.width+'px';
@@ -3455,9 +3654,12 @@
     function drop(){
       /* Settle from wherever the card is floating into its slot. */
       var from=lifted.getBoundingClientRect();
-      grid.insertBefore(lifted,gap);
+      var holder=gap.parentNode;
+      holder.insertBefore(lifted,gap);
+      holder.removeAttribute('data-temp-row');
       gap.parentNode.removeChild(gap);
       gap=null;
+      emptyRows();
       lifted.classList.remove('is-floating');
       lifted.style.width=''; lifted.style.height=''; lifted.style.left=''; lifted.style.top='';
       var to=lifted.getBoundingClientRect();
@@ -3475,20 +3677,46 @@
       setTimeout(function(){ landed.style.transition=''; landed.style.transform=''; },220);
     }
     function commit(){
-      var order=Array.prototype.filter.call(grid.children,function(node){ return node.hasAttribute('data-block'); })
-        .map(function(node){ return node.dataset.block; });
+      if(previewing())return;
+      /* What the grid now shows: rows in order, and the blocks on each. A row
+         of one is simply a full-width block and needs no name; a row of two or
+         more is named, and its shares are made to add up. */
+      var plan=[], order=[];
+      rowsOnPage().forEach(function(rowEl){
+        var list=Array.prototype.filter.call(rowEl.children,function(node){ return node.hasAttribute&&node.hasAttribute('data-block'); })
+          .map(function(node){ return liveBlock(node.dataset.block); })
+          .filter(function(block){ return !!block; });
+        if(!list.length)return;
+        plan.push({ id:rowEl.dataset.row||'', items:list, node:rowEl });
+        list.forEach(function(block){ order.push(block.id); });
+      });
       var was=blocks.filter(function(block){ return order.indexOf(block.id)>=0; })
         .sort(function(a,b){ return (a.order||0)-(b.order||0); })
-        .map(function(block){ return block.id; });
-      if(previewing())return;
-      if(was.join('\u0000')===order.join('\u0000'))return;
-      var stamp=Date.now(), moved=[];
-      order.forEach(function(id,index){
-        var block=blocks.filter(function(b){ return b.id===id; })[0];
-        if(!block)return;
-        block.order=stamp+index;
-        moved.push(block);
+        .map(function(block){ return block.id+':'+(block.row||'')+':'+blockSpan(block); });
+      var stamp=Date.now(), moved=[], seat=0;
+      plan.forEach(function(row){
+        if(row.items.length<2){
+          row.items[0].row='';
+          widthFields(row.items[0],GRID);
+        }else{
+          var named=row.id||id();
+          row.items.forEach(function(block){ block.row=named; });
+          balanceRow(row.items);
+        }
+        row.items.forEach(function(block){ block.order=stamp+(seat++); moved.push(block); });
+        /* The row was carrying the tracks it had before the drop. Dressing it
+           again here means the landing is right without a redraw, which would
+           throw away the animation the card has just finished. */
+        if(row.items.length<2)row.node.removeAttribute('data-row');
+        else row.node.dataset.row=row.items[0].row||'';
+        row.node.style.gridTemplateColumns=rowTracks(row.items);
+        row.items.forEach(function(block){
+          var seatEl=row.node.querySelector('[data-block="'+block.id+'"]');
+          if(seatEl)seatEl.setAttribute('data-cols',blockSpan(block));
+        });
       });
+      var now=moved.map(function(block){ return block.id+':'+(block.row||'')+':'+blockSpan(block); });
+      if(was.join('\u0000')===now.join('\u0000'))return;
       /* Keep the list in the order the grid now shows, so the next render
          agrees with what was just dropped instead of springing back. */
       blocks.sort(function(a,b){ return (a.order||0)-(b.order||0); });
