@@ -781,6 +781,15 @@
     var projects=window.__crowProjects||[];
     root.classList.toggle('side-closed',!sideOpen);
     root.innerHTML='<div class="side-scrim" data-side-close'+(sideOpen?'':' hidden')+'></div><aside class="studio-side'+(sideOpen?' is-open':'')+'">'+sideToggleHTML('in-rail')+'<div class="studio-sidehead"><h2>Projects</h2><button type="button" class="side-close" data-side-dismiss aria-label="Close projects">×</button><div class="side-actions"><button class="btn ghost sm" data-import-project title="Import a project from a .json file">Import</button><button class="btn sm" data-new-project>New</button></div></div><div class="project-list">'+projectListHTML(projects)+'</div></aside><main class="studio-main '+((readOnly||!canEdit())?'read-only':'')+(readOnly?' is-viewing':'')+(previewing()?' in-preview':'')+'">'+sideToggleHTML('on-top')+(activeProject ? (view==='settings'?settingsHTML():projectHTML()) : '<div class="studio-empty"><h1>Make a project</h1><p>Collect study notes, plans, schedules, ideas, and your own practice cards in one place.</p><button class="btn" data-new-project>New project</button><button class="btn ghost" data-example-project>Add the example project</button><button class="btn ghost" data-import-project>Import a project</button></div>')+'</main>';
+    /* A view is rendered from the same block markup as editing, but default
+       labels and editor furniture are not content. Remove them here, after
+       every render path (including live collaboration patches) has settled. */
+    if(readOnly){
+      root.querySelectorAll('[data-title]').forEach(function(field){
+        if(/^untitled(?:\s|$)/i.test(String(field.value||'')))field.remove();
+      });
+      root.querySelectorAll('.code-language,.code-wrap-toggle,.code-height,.code-size').forEach(function(control){ control.remove(); });
+    }
     bind();
     mountCollaborativeEditors();
     mountDatabases();
