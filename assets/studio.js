@@ -2199,7 +2199,10 @@
     var bulk=Math.max(text.length,(block.items||[]).length*46);
     var want=bulk>760||lines.length>14?FULL:(bulk>280||lines.length>7?HALF:(bulk>96?THIRD:QUARTER));
     /* A line of code that has to wrap is a line of code you cannot read. */
-    if(block.type==='code')want=FULL;
+    if(block.type==='code'){
+      if(longest>58)want=Math.max(want,HALF);
+      if(longest>104)want=FULL;
+    }
     if(block.type==='image')want=Math.max(want,HALF);
     return Math.max(want,floor);
   }
@@ -2782,6 +2785,36 @@
       +' style="grid-template-columns:'+rowTracks(row.items)+'">'
       +row.items.map(blockHTML).join('')+'</div>';
   }
+  function syntaxCodeHTML(source, language){
+    source=String(source||''); language=String(language||'plain');
+    if(language==='plain')return esc(source);
+    var keywords={
+      javascript:'const let var function return if else for while class new import from export async await throw try catch true false null undefined',
+      typescript:'const let var function return if else for while class interface type extends implements public private export import async await true false null undefined',
+      python:'def class return if elif else for while in import from as try except finally True False None lambda yield',
+      sql:'select from where join left right inner outer on insert update delete create alter drop table into values set and or null order group by limit',
+      css:'color background display position margin padding border grid flex font width height media keyframes',
+      bash:'if then fi for in do done function case esac echo export sudo cd mkdir rm true false'
+    };
+    var words=(keywords[language]||'').split(' '), wordSet={}; words.forEach(function(word){wordSet[word]=true;});
+    var out='',i=0;
+    function takeWhile(test){var at=i;while(i<source.length&&test(source.charAt(i)))i++;return source.slice(at,i);}
+    while(i<source.length){
+      var rest=source.slice(i), ch=source.charAt(i);
+      if(language==='html'&&ch==='<'){var close=source.indexOf('>',i);if(close<0)close=source.length-1;out+='<span class="tok-tag">'+esc(source.slice(i,close+1))+'</span>';i=close+1;continue;}
+      if((language==='javascript'||language==='typescript'||language==='css')&&(rest.indexOf('//')===0||rest.indexOf('/*')===0)){
+        var end=rest.indexOf('/*')===0?source.indexOf('*/',i+2):source.indexOf('\n',i);if(end<0)end=source.length;else if(rest.indexOf('/*')===0)end+=2;
+        out+='<span class="tok-comment">'+esc(source.slice(i,end))+'</span>';i=end;continue;
+      }
+      if((language==='python'||language==='bash')&&ch==='#'){var hashEnd=source.indexOf('\n',i);if(hashEnd<0)hashEnd=source.length;out+='<span class="tok-comment">'+esc(source.slice(i,hashEnd))+'</span>';i=hashEnd;continue;}
+      if(language==='sql'&&rest.indexOf('--')===0){var sqlEnd=source.indexOf('\n',i);if(sqlEnd<0)sqlEnd=source.length;out+='<span class="tok-comment">'+esc(source.slice(i,sqlEnd))+'</span>';i=sqlEnd;continue;}
+      if(ch==='"'||ch==="'"||ch===String.fromCharCode(96)){var quote=ch,at=i++;while(i<source.length){if(source.charAt(i)==='\\'){i+=2;continue;}if(source.charAt(i++)===quote)break;}out+='<span class="tok-string">'+esc(source.slice(at,i))+'</span>';continue;}
+      if(/[0-9]/.test(ch)){out+='<span class="tok-number">'+esc(takeWhile(function(c){return /[0-9a-fA-Fx._]/.test(c);}))+'</span>';continue;}
+      if(/[A-Za-z_$]/.test(ch)){var word=takeWhile(function(c){return /[A-Za-z0-9_$]/.test(c);});out+=wordSet[word.toLowerCase()]?'<span class="tok-keyword">'+esc(word)+'</span>':esc(word);continue;}
+      out+=esc(ch);i++;
+    }
+    return out;
+  }
   function blockHTML(block){
     var labels=BLOCK_LABELS;
     var prompt=block.type==='idea'?'Capture a possibility, question, or connection…':block.type==='lesson'?'Teach the idea in a few clear lines…':'Write something…';
@@ -2837,8 +2870,7 @@
       body='<div class="code-wrap'+(block.codeWrap?' is-wrapped':'')+'" style="--code-height:'+codeHeight+'px"><div class="code-tools"><label class="code-language" title="Language"><span>Language</span><select data-code-language'+disabled+'>'+languageOptions+'</select></label><button type="button" class="code-wrap-toggle" data-code-wrap aria-pressed="'+(block.codeWrap?'true':'false')+'">Wrap</button><label class="code-height" title="Editor height"><span>Height</span><input type="range" data-code-height min="180" max="720" step="20" value="'+codeHeight+'"'+disabled+'></label><button type="button" class="code-size" data-code-size aria-expanded="false">Expand</button><button type="button" class="code-copy" data-code-copy title="Copy this code">'
         +'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="9" height="9" rx="1.6"></rect><path d="M10.5 3.5v-1a1 1 0 0 0-1-1h-7a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h1"></path></svg>'
         +'<span data-copy-word>Copy</span></button></div>'
-        +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div>'
-        +'<pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+esc(written)+'</pre></div></div>';
+        +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div><div class="code-editor"><pre class="code-highlight" data-code-highlight aria-hidden="true">'+syntaxCodeHTML(written,language)+'</pre><pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+esc(written)+'</pre></div></div></div>';
     }
     return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-cols="'+blockSpan(block)+'" data-block="'+block.id+'" style="--w:'+blockSpan(block)+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<span class="width-grip" data-width-grip title="Drag to set how wide this block is" aria-hidden="true"></span>')+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
   }
@@ -3463,9 +3495,12 @@
         }
         viewport.scrollTop=viewport.scrollHeight;
       }
+      var highlight=card.querySelector('[data-code-highlight]');
+      function paintCode(){ if(highlight)highlight.innerHTML=syntaxCodeHTML(block.body,block.codeLanguage||'plain'); }
       if(code)code.oninput=function(){
         block.body=readCode();
         if(gutter)gutter.innerHTML=codeLinesHTML(block.body);
+        paintCode();
         queuedSave(block,false,{body:block.body});
         requestAnimationFrame(followCodeCaret);
       };
@@ -3498,6 +3533,7 @@
       var languageSelect=card.querySelector('[data-code-language]');
       if(languageSelect)languageSelect.onchange=function(){
         block.codeLanguage=languageSelect.value;
+        paintCode();
         queuedSave(block,true,{codeLanguage:block.codeLanguage});
       };
       var heightControl=card.querySelector('[data-code-height]');
