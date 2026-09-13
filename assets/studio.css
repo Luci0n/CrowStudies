@@ -742,3 +742,10 @@ body.is-carrying *{ cursor:grabbing !important; }
 .db-lane-add:hover{ background:var(--glass-lift); color:var(--brand); }
 .db-lane header b{ margin-left:auto; }
 @media (hover:none){ .db-lane-add{ opacity:.6; } }
+
+/* A block's width is its own, and says so on the element, so these come after
+   the rules that set a width by kind and win over them. */
+.studio-block[data-span="1"]{ grid-column:auto; }
+.studio-block[data-span="2"]{ grid-column:1 / -1; }
+@media(max-width:780px){ .studio-block[data-span="1"],.studio-block[data-span="2"]{ grid-column:auto; } }
+.block-menu button.is-on{ color:var(--brand); }

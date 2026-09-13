@@ -513,6 +513,7 @@
     if(typeof copy.body!=='string')copy.body='';
     ['lessonSection','lessonBlurb','lessonIcon','lessonColor','lessonHint'].forEach(function(key){ if(typeof copy[key]!=='string')copy[key]=''; });
     if(typeof copy.icon!=='string')copy.icon='';
+    if(copy.span!==1&&copy.span!==2)delete copy.span;
     if(copy.type==='database'){
       if(!Array.isArray(copy.props))copy.props=[];
       if(!Array.isArray(copy.views))copy.views=[];
@@ -1279,10 +1280,17 @@
       rows.push('<div class="block-menu-head">Turn into</div>');
       TURN_INTO.forEach(function(type){ if(type!==block.type)rows.push('<button type="button" data-turn="'+type+'">'+BLOCK_LABELS[type]+'</button>'); });
     }
+    var span=blockSpan(block);
+    rows.push('<div class="block-menu-head">Width</div>'
+      +'<button type="button" data-span="1"'+(span===1?' class="is-on"':'')+'>One column</button>'
+      +'<button type="button" data-span="2"'+(span===2?' class="is-on"':'')+'>Both columns</button>');
     rows.push('<div class="block-menu-head">This block</div><button type="button" data-duplicate>Duplicate</button>');
     menu.innerHTML=rows.join('');
     card.appendChild(menu);
     menu.querySelectorAll('[data-turn]').forEach(function(button){ button.onclick=function(){ closeBlockMenu(); turnInto(block,button.dataset.turn); }; });
+    menu.querySelectorAll('[data-span]').forEach(function(choice){
+      choice.onclick=function(){ closeBlockMenu(); setBlockSpan(block,+choice.dataset.span); };
+    });
     menu.querySelector('[data-duplicate]').onclick=function(){ closeBlockMenu(); duplicateBlock(block); };
     setTimeout(function(){ document.addEventListener('click',awayFromBlockMenu); },0);
   }
@@ -2279,6 +2287,19 @@
     for(var line=1;line<=count;line++)rows.push('<span>'+line+'</span>');
     return rows.join('');
   }
+  /* How wide a block sits in the grid. Some kinds have always taken the whole
+     row because that is what they are usually for; a block can now be told
+     otherwise, and what it is told is remembered with it. */
+  var WIDE_BY_DEFAULT={ note:true, lesson:true, database:true, table:true };
+  function blockSpan(block){
+    if(block.span===1||block.span===2)return block.span;
+    return WIDE_BY_DEFAULT[block.type]?2:1;
+  }
+  function setBlockSpan(block, span){
+    block.span=span;
+    render();
+    queuedSave(block,true,{ span:span });
+  }
   function taskRowHTML(item, index, frozen){
     var disabled=frozen?' disabled':'';
     return '<div class="task-row'+(item.done?' done':'')+'" data-task-row="'+index+'">'
@@ -2459,7 +2480,7 @@
         +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div>'
         +'<pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+esc(written)+'</pre></div></div>';
     }
-    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-block="'+block.id+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
+    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-span="'+blockSpan(block)+'" data-block="'+block.id+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
   }
   function queuedSave(block, immediate, patch){
     var old=saveTimers[block.id]; if(old) clearTimeout(old);
