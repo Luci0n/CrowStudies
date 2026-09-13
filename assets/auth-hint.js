@@ -14,8 +14,8 @@
   script.defer = true;
   script.dataset.crowTopography = 'true';
   script.src = document.currentScript && document.currentScript.src
-    ? new URL('topography.js?v=terrain-smooth-20260912', document.currentScript.src).href
-    : 'assets/topography.js?v=terrain-smooth-20260912';
+    ? new URL('topography.js?v=terrain-mobile-20260913', document.currentScript.src).href
+    : 'assets/topography.js?v=terrain-mobile-20260913';
   document.head.appendChild(script);
 }());
 
