@@ -896,3 +896,19 @@ body.is-sizing .studio-block{ transition:none; }
     box-shadow:0 5px 18px #0004;
   }
 }
+
+/* Projects takes its own, compact line on a phone held sideways. It must not
+   sit above History, Tasks, and View project, which are already meaningful
+   project actions. */
+@media (orientation:landscape) and (max-height:560px) and (pointer:coarse){
+  .studio-main > .studio-crumb{
+    position:static!important; display:flex!important; justify-content:flex-end;
+    margin:0 0 8px!important; z-index:auto!important;
+  }
+  .studio-main > .studio-crumb .side-toggle{
+    padding:6px 9px; box-shadow:none; font-size:10px;
+  }
+  .project-top{ align-items:center; }
+  .project-actions{ gap:6px; }
+  .project-actions .btn{ padding:7px 8px; font-size:12px; }
+}
