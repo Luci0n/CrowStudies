@@ -22,13 +22,19 @@
     if(scrim)scrim.hidden=!open;
     root.querySelectorAll('[data-side-toggle]').forEach(function(button){ button.setAttribute('aria-expanded',open?'true':'false'); });
   }
-  /* On a short phone landscape, the project drawer must never compete with
-     the keyboard. Closing it only changes shell classes, so it preserves the
-     editor and its cursor. */
+  /* In a short phone landscape there is no useful room for the project list
+     beside an active editor. Any interaction in the workspace clears it,
+     without rendering again or touching the text selection. */
+  function editingSurface(node){ return node&&!node.closest('.studio-side,.side-scrim,[data-side-toggle]'); }
   root.addEventListener('focusin',function(event){
-    if(!shortLandscape()||!sideOpen)return;
-    var editable=event.target.matches('input,textarea,select,[contenteditable="true"]')||event.target.closest('.tiptap,[contenteditable="true"]');
-    if(editable&&event.target.closest('.studio-block'))setSide(false);
+    if(shortLandscape()&&sideOpen&&editingSurface(event.target))setSide(false);
+  });
+  root.addEventListener('pointerdown',function(event){
+    if(shortLandscape()&&sideOpen&&editingSurface(event.target))setSide(false);
+  },true);
+  if(window.visualViewport)window.visualViewport.addEventListener('resize',function(){
+    var active=document.activeElement;
+    if(shortLandscape()&&sideOpen&&editingSurface(active))setSide(false);
   });
   function sideToggleHTML(where){
     /* The handle keeps still. In the sidebar it is the first thing in the
