@@ -2403,56 +2403,88 @@
       var block=card&&liveBlock(card.dataset.block);
       if(!block)return;
       event.preventDefault();
-      var style=getComputedStyle(grid);
-      var space=parseFloat(style.columnGap)||0;
-      var frame=grid.getBoundingClientRect();
-      var track=(frame.width-space*(GRID-1))/GRID;
+      event.stopPropagation();
+      var space=parseFloat(getComputedStyle(grid).columnGap)||0;
+      var track=(grid.getBoundingClientRect().width-space*(GRID-1))/GRID;
       var step=track+space;
-      var mine=blockSpan(block), mateCard=card.nextElementSibling, mate=null;
-      if(mateCard&&mateCard.hasAttribute('data-block')&&Math.abs(mateCard.offsetTop-card.offsetTop)<4)
-        mate=liveBlock(mateCard.dataset.block);
-      var theirs=mate?blockSpan(mate):0;
+      if(!(step>0))return;
+      /* Who else is on this row, and how much of it is spare. A block grows
+         into the spare room first and only then asks the block beside it; it
+         never grows so far that the row has to break and throw somebody onto
+         the next one. */
+      var frame=grid.getBoundingClientRect(), mineBox=card.getBoundingClientRect();
+      var row=[], taken=0;
+      Array.prototype.forEach.call(grid.children,function(node){
+        if(!node.hasAttribute||!node.hasAttribute('data-block'))return;
+        if(Math.abs(node.getBoundingClientRect().top-mineBox.top)>4)return;
+        row.push(node);
+        taken+=Number(node.getAttribute('data-cols'))||0;
+      });
+      var spare=Math.max(0,GRID-taken);
+      var mateCard=card.nextElementSibling, mate=null;
+      if(mateCard&&row.indexOf(mateCard)>=0)mate=liveBlock(mateCard.dataset.block);
+      var mine=blockSpan(block), theirs=mate?blockSpan(mate):0;
       var both=mine+theirs;
       var floor=minCols(block), mateFloor=mate?minCols(mate):0;
-      var startX=event.clientX, now=mine;
+      var most=Math.min(GRID,mine+spare+(mate?theirs-mateFloor:0));
+      if(most<floor)most=floor;
+      var startX=event.clientX, now=mine, was=mine;
       /* The card can only stand on whole tracks, so on its own it would jump
          from one to the next while the hand moves smoothly. A line follows the
          pointer exactly and the card catches up to it, which is the part that
-         reads as smooth. */
+         reads as smooth. It is drawn beside this row only - a line down the
+         whole page says something is wrong even when nothing is. */
       var guide=document.createElement('div');
       guide.className='size-guide';
+      guide.style.top=(mineBox.top-frame.top)+'px';
+      guide.style.height=mineBox.height+'px';
       grid.appendChild(guide);
-      var edge=card.getBoundingClientRect().right;
-      guide.style.left=(edge-grid.getBoundingClientRect().left)+'px';
+      var home=mineBox.right-frame.left;
+      guide.style.left=home+'px';
       document.body.classList.add('is-sizing');
       grid.classList.add('is-sizing');
-      function move(point){
-        var over=point.clientX-startX;
-        var want=mine+Math.round(over/step);
-        var most=mate?Math.min(GRID,both-mateFloor):GRID;
-        if(want<floor)want=floor;
-        if(want>most)want=most;
-        var reach=Math.max(floor,Math.min(most,mine+over/step));
-        guide.style.left=(edge-grid.getBoundingClientRect().left+(reach-mine)*step)+'px';
-        if(want===now)return;
+      function width(want){
         now=want;
         card.setAttribute('data-cols',now);
-        if(mate)mateCard.setAttribute('data-cols',both-now);
+        if(mate)mateCard.setAttribute('data-cols',Math.max(mateFloor,both-now));
       }
-      function stop(){
-        window.removeEventListener('pointermove',move);
-        window.removeEventListener('pointerup',stop);
-        window.removeEventListener('pointercancel',stop);
+      function move(point){
+        /* A pointerup that went astray - a lost window, a drag off the page -
+           would otherwise leave the whole page in sizing mode. */
+        if(point.buttons===0){ stop(); return; }
+        var over=point.clientX-startX;
+        var reach=Math.max(floor,Math.min(most,mine+over/step));
+        guide.style.left=(home+(reach-mine)*step)+'px';
+        var want=Math.max(floor,Math.min(most,mine+Math.round(over/step)));
+        if(want!==now)width(want);
+      }
+      function done(){
+        window.removeEventListener('pointermove',move,true);
+        window.removeEventListener('pointerup',stop,true);
+        window.removeEventListener('pointercancel',stop,true);
+        window.removeEventListener('blur',stop);
+        document.removeEventListener('keydown',onKey,true);
         document.body.classList.remove('is-sizing');
         grid.classList.remove('is-sizing');
         if(guide.parentNode)guide.parentNode.removeChild(guide);
-        if(now===mine)return;
-        queuedSave(block,true,widthFields(block,now));
-        if(mate)queuedSave(mate,true,widthFields(mate,both-now));
       }
-      window.addEventListener('pointermove',move);
-      window.addEventListener('pointerup',stop);
-      window.addEventListener('pointercancel',stop);
+      function stop(){
+        done();
+        if(now===was)return;
+        queuedSave(block,true,widthFields(block,now));
+        if(mate)queuedSave(mate,true,widthFields(mate,Math.max(mateFloor,both-now)));
+      }
+      function onKey(key){
+        if(key.key!=='Escape')return;
+        key.preventDefault();
+        width(was);
+        done();
+      }
+      window.addEventListener('pointermove',move,true);
+      window.addEventListener('pointerup',stop,true);
+      window.addEventListener('pointercancel',stop,true);
+      window.addEventListener('blur',stop);
+      document.addEventListener('keydown',onKey,true);
     });
   }
   function taskRowHTML(item, index, frozen){
