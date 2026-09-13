@@ -927,3 +927,14 @@ body.is-sizing .studio-block{ transition:none; }
 .upgrade-comment-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .upgrade-comment-delete{ padding:3px 6px; font-size:10px; }
 .upgrade-comment-delete:disabled{ opacity:.5; }
+
+/* Dense data keeps a useful reading window. Headers remain in view and the
+   inside scrolls, while ordinary writing still grows like a document. */
+.block-table{ max-height:360px; overflow:auto; }
+.block-table th{ position:sticky; top:0; z-index:1; }
+.db-scroll,.db-board{ max-height:360px; overflow:auto; }
+.db-grid thead th{ position:sticky; top:0; z-index:2; }
+@media(max-width:780px){
+  .code-body,.block-table,.db-scroll,.db-board{ max-height:44dvh; }
+  .studio-block.code-expanded .code-body{ max-height:58dvh; }
+}
