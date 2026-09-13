@@ -2833,8 +2833,11 @@
        stray angle bracket stays a stray angle bracket. */
     if(block.type==='database') body='<div class="db" data-db-table></div>';
     if(block.type==='code'){
-      var written=plainText(block.body);
-      body='<div class="code-wrap"><div class="code-tools"><button type="button" class="code-size" data-code-size aria-expanded="false">Expand</button><button type="button" class="code-copy" data-code-copy title="Copy this code">'
+      var written=plainText(block.body), language=String(block.codeLanguage||'plain');
+      var codeHeight=Math.max(180,Math.min(720,Number(block.codeHeight)||360));
+      var languages=[['plain','Plain text'],['javascript','JavaScript'],['typescript','TypeScript'],['html','HTML'],['css','CSS'],['json','JSON'],['python','Python'],['sql','SQL'],['bash','Shell']];
+      var languageOptions=languages.map(function(option){ return '<option value="'+option[0]+'"'+(language===option[0]?' selected':'')+'>'+option[1]+'</option>'; }).join('');
+      body='<div class="code-wrap'+(block.codeWrap?' is-wrapped':'')+'" style="--code-height:'+codeHeight+'px"><div class="code-tools"><label class="code-language"><span>Language</span><select data-code-language'+disabled+'>'+languageOptions+'</select></label><button type="button" class="code-wrap-toggle" data-code-wrap aria-pressed="'+(block.codeWrap?'true':'false')+'">Wrap</button><label class="code-height" title="Editor height"><span>Height</span><input type="range" data-code-height min="180" max="720" step="20" value="'+codeHeight+'"'+disabled+'></label><button type="button" class="code-size" data-code-size aria-expanded="false">Expand</button><button type="button" class="code-copy" data-code-copy title="Copy this code">'
         +'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="9" height="9" rx="1.6"></rect><path d="M10.5 3.5v-1a1 1 0 0 0-1-1h-7a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h1"></path></svg>'
         +'<span data-copy-word>Copy</span></button></div>'
         +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div>'
@@ -3486,6 +3489,26 @@
         if(text===undefined||text===null)return;
         event.preventDefault();
         document.execCommand('insertText',false,text);
+      };
+      var codeWrap=card.querySelector('.code-wrap');
+      var wrapToggle=card.querySelector('[data-code-wrap]');
+      if(wrapToggle)wrapToggle.onclick=function(){
+        block.codeWrap=!block.codeWrap;
+        if(codeWrap)codeWrap.classList.toggle('is-wrapped',block.codeWrap);
+        wrapToggle.setAttribute('aria-pressed',block.codeWrap?'true':'false');
+        queuedSave(block,true,{codeWrap:block.codeWrap});
+      };
+      var languageSelect=card.querySelector('[data-code-language]');
+      if(languageSelect)languageSelect.onchange=function(){
+        block.codeLanguage=languageSelect.value;
+        queuedSave(block,true,{codeLanguage:block.codeLanguage});
+      };
+      var heightControl=card.querySelector('[data-code-height]');
+      if(heightControl)heightControl.oninput=function(){
+        var next=Math.max(180,Math.min(720,Number(heightControl.value)||360));
+        block.codeHeight=next;
+        if(codeWrap)codeWrap.style.setProperty('--code-height',next+'px');
+        queuedSave(block,false,{codeHeight:next});
       };
       var size=card.querySelector('[data-code-size]');
       if(size)size.onclick=function(){
