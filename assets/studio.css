@@ -880,3 +880,19 @@ body.is-sizing .studio-block{ transition:none; }
   }
   .studio-side .side-close:active{ background:var(--glass-lift); color:var(--ink); }
 }
+
+/* Opening Projects must always win over an editor that still owns focus.
+   The handle lives on the main surface as a fixed, labelled control so it
+   remains reachable after the drawer has been dismissed. */
+@media (orientation:landscape) and (max-height:560px) and (pointer:coarse){
+  .studio-shell:has(.studio-main :focus) .studio-side.is-open{ transform:none!important; }
+  .studio-shell:has(.studio-main :focus) .side-scrim:not([hidden]){ display:block!important; }
+  .studio-main > .studio-crumb{
+    display:block!important; position:fixed; top:8px; right:10px; z-index:58;
+    margin:0;
+  }
+  .studio-main > .studio-crumb .side-toggle{
+    padding:8px 10px; border-color:var(--glass-edge); background:var(--glass-deep);
+    box-shadow:0 5px 18px #0004;
+  }
+}
