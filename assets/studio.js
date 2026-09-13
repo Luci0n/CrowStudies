@@ -577,6 +577,10 @@
     var oldShown=visibleBlocks(before), nextShown=visibleBlocks(after);
     if(oldShown.length!==nextShown.length)return false;
     for(var i=0;i<oldShown.length;i++)if(oldShown[i].id!==nextShown[i].id)return false;
+    /* Which row a block is on is the shape of the page, not the contents of a
+       card, and patching cards in place cannot move one between rows. A change
+       of row is left to a full redraw. */
+    for(var r=0;r<nextShown.length;r++)if((oldShown[r].row||'')!==(nextShown[r].row||''))return false;
     var changed=false, blocked=false;
     nextShown.forEach(function(block,index){
       if(stableJSON(withoutStamps(oldShown[index]))===stableJSON(withoutStamps(block)))return;
@@ -592,8 +596,19 @@
       changed=true;
     });
     if(blocked)return false;
-    if(changed){ bind(); paintPresence(); }
+    if(changed){ dressRowTracks(); bind(); paintPresence(); }
     return true;
+  }
+  /* A share that changed elsewhere lives on the row, not on the card, so a
+     patched card needs its row's tracks written again. */
+  function dressRowTracks(){
+    if(!root)return;
+    root.querySelectorAll('.block-row').forEach(function(rowEl){
+      var list=Array.prototype.filter.call(rowEl.children,function(node){ return node.hasAttribute&&node.hasAttribute('data-block'); })
+        .map(function(node){ return liveBlock(node.dataset.block); })
+        .filter(function(block){ return !!block; });
+      if(list.length)rowEl.style.gridTemplateColumns=rowTracks(list);
+    });
   }
   var livePeople=[], presenceTimer=null, presenceFrame=0, lastPresenceKey='', lastPresenceSent=0, presenceWarningShown=false;
   function initialsFrom(name){ return String(name||'?').trim().split(/\s+/).slice(0,2).map(function(part){return part.charAt(0);}).join('').toUpperCase()||'?'; }
@@ -2433,12 +2448,14 @@
     });
     return out;
   }
-  function visibleBlocks(){
-    return blocks.filter(function(block){
-      return (activeSection==='all'||(block.sectionId||'')===activeSection)&&(activePage==='all'||(block.pageId||'')===activePage);
-    });
-  }
-  function shownRows(){ return rowsFrom(visibleBlocks()); }
+  /* The rows on screen right now. This asks visibleBlocks, which already
+     knows what the section and page bars are filtering to - declaring a
+     second function of that name here quietly replaced the first one, and
+     patchLiveBlocks then compared the block list against itself, decided
+     nothing had changed and reported the page already patched. The first
+     snapshot of a project was swallowed that way and the skeleton never
+     went away. */
+  function shownRows(){ return rowsFrom(visibleBlocks(blocks)); }
   function rowHolding(block){
     var found=null;
     shownRows().forEach(function(row){ if(row.items.indexOf(block)>=0)found=row; });
