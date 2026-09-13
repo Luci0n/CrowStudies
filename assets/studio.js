@@ -514,6 +514,8 @@
     ['lessonSection','lessonBlurb','lessonIcon','lessonColor','lessonHint'].forEach(function(key){ if(typeof copy[key]!=='string')copy[key]=''; });
     if(typeof copy.icon!=='string')copy.icon='';
     if(copy.span!==1&&copy.span!==2)delete copy.span;
+    var cols=Math.round(Number(copy.cols));
+    if(cols>=1&&cols<=12)copy.cols=cols; else delete copy.cols;
     if(copy.type==='database'){
       if(!Array.isArray(copy.props))copy.props=[];
       if(!Array.isArray(copy.views))copy.views=[];
@@ -1282,8 +1284,9 @@
     }
     var span=blockSpan(block);
     rows.push('<div class="block-menu-head">Width</div>'
-      +'<button type="button" data-span="1"'+(span===1?' class="is-on"':'')+'>One column</button>'
-      +'<button type="button" data-span="2"'+(span===2?' class="is-on"':'')+'>Both columns</button>');
+      +WIDTH_CHOICES.map(function(choice){
+        return '<button type="button" data-span="'+choice[0]+'"'+(span===choice[0]?' class="is-on"':'')+'>'+choice[1]+'</button>';
+      }).join(''));
     rows.push('<div class="block-menu-head">This block</div><button type="button" data-duplicate>Duplicate</button>');
     menu.innerHTML=rows.join('');
     card.appendChild(menu);
@@ -2290,15 +2293,89 @@
   /* How wide a block sits in the grid. Some kinds have always taken the whole
      row because that is what they are usually for; a block can now be told
      otherwise, and what it is told is remembered with it. */
+  var GRID=12;
   var WIDE_BY_DEFAULT={ note:true, lesson:true, database:true, table:true };
+  /* Width is counted in twelfths of the row rather than in halves, so blocks
+     can sit three to a row, or split seven-five, and the edge between two of
+     them can be dragged. The old halves are still readable: a block saved
+     before this counts as six twelfths, or as the whole row. */
   function blockSpan(block){
-    if(block.span===1||block.span===2)return block.span;
-    return WIDE_BY_DEFAULT[block.type]?2:1;
+    var want=Math.round(Number(block.cols));
+    if(want>=1&&want<=GRID)return want;
+    if(block.span===1)return 6;
+    if(block.span===2)return GRID;
+    return WIDE_BY_DEFAULT[block.type]?GRID:6;
   }
-  function setBlockSpan(block, span){
-    block.span=span;
+  function setBlockSpan(block, cols){
+    block.cols=cols;
+    /* Kept in step so a browser still holding the older script, which only
+       knows halves, puts the block on the side it belongs on. */
+    block.span=cols>6?2:1;
     render();
-    queuedSave(block,true,{ span:span });
+    queuedSave(block,true,{ cols:cols, span:block.span });
+  }
+  var WIDTH_CHOICES=[[3,'A quarter'],[4,'A third'],[6,'Half'],[8,'Two thirds'],[9,'Three quarters'],[GRID,'The whole row']];
+  /* ------------------------------------------------ dragging the edge between
+     Pulling the right edge of a card moves it a twelfth at a time. If another
+     card is beside it on the same row, that one gives up exactly what this one
+     takes, so the pair keeps its place and only the ratio changes - which is
+     what dragging a divider is supposed to mean. Otherwise the card simply
+     grows or shrinks into the space left on the row. */
+  function bindWidth(){
+    var grid=root.querySelector('.block-grid');
+    if(!grid||grid.dataset.widthBound)return;
+    grid.dataset.widthBound='1';
+    grid.addEventListener('pointerdown',function(event){
+      var grip=event.target.closest&&event.target.closest('[data-width-grip]');
+      if(!grip)return;
+      if(event.button&&event.button!==0)return;
+      if(window.innerWidth<=780)return;
+      var card=grip.closest('[data-block]');
+      var block=card&&liveBlock(card.dataset.block);
+      if(!block)return;
+      event.preventDefault();
+      var style=getComputedStyle(grid);
+      var space=parseFloat(style.columnGap)||0;
+      var frame=grid.getBoundingClientRect();
+      var track=(frame.width-space*(GRID-1))/GRID;
+      var step=track+space;
+      var mine=blockSpan(block), mateCard=card.nextElementSibling, mate=null;
+      if(mateCard&&mateCard.hasAttribute('data-block')&&Math.abs(mateCard.offsetTop-card.offsetTop)<4)
+        mate=liveBlock(mateCard.dataset.block);
+      var theirs=mate?blockSpan(mate):0;
+      var both=mine+theirs;
+      var startX=event.clientX, now=mine;
+      document.body.classList.add('is-sizing');
+      grid.classList.add('is-sizing');
+      function move(point){
+        var moved=Math.round((point.clientX-startX)/step);
+        var want=mine+moved;
+        var most=mate?both-2:GRID;
+        if(want<2)want=2;
+        if(want>most)want=most;
+        if(want===now)return;
+        now=want;
+        card.setAttribute('data-cols',now);
+        if(mate)mateCard.setAttribute('data-cols',both-now);
+      }
+      function stop(){
+        window.removeEventListener('pointermove',move);
+        window.removeEventListener('pointerup',stop);
+        window.removeEventListener('pointercancel',stop);
+        document.body.classList.remove('is-sizing');
+        grid.classList.remove('is-sizing');
+        if(now===mine)return;
+        block.cols=now; block.span=now>6?2:1;
+        queuedSave(block,true,{ cols:block.cols, span:block.span });
+        if(mate){
+          mate.cols=both-now; mate.span=mate.cols>6?2:1;
+          queuedSave(mate,true,{ cols:mate.cols, span:mate.span });
+        }
+      }
+      window.addEventListener('pointermove',move);
+      window.addEventListener('pointerup',stop);
+      window.addEventListener('pointercancel',stop);
+    });
   }
   function taskRowHTML(item, index, frozen){
     var disabled=frozen?' disabled':'';
@@ -2480,7 +2557,7 @@
         +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div>'
         +'<pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+esc(written)+'</pre></div></div>';
     }
-    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-span="'+blockSpan(block)+'" data-block="'+block.id+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
+    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-cols="'+blockSpan(block)+'" data-block="'+block.id+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<span class="width-grip" data-width-grip title="Drag to set how wide this block is" aria-hidden="true"></span>')+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div><input class="block-title" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>'+body+extra+'</article>';
   }
   function queuedSave(block, immediate, patch){
     var old=saveTimers[block.id]; if(old) clearTimeout(old);
@@ -3128,6 +3205,7 @@
     });
     bindDrag();
     bindMarquee();
+    bindWidth();
     paintChosenBar();
   }
   async function deleteActiveProject(){if(!await askConfirm('Delete project?', 'This removes the project and every block inside it. This cannot be undone.', 'Delete project'))return;var removed=activeProject.id;activeProject=null;blocks=[];view='project';render();try{await cloud().deleteProject(removed);await loadProjects();}catch(error){studioError='The project could not be deleted. Try again.';render();}}
@@ -3239,6 +3317,9 @@
       /* The gap carries the card's own classes so it takes the same slot: a
          note or a lesson spans the full row, everything else takes a half. */
       gap.className='block-gap '+card.className;
+      /* Width lives on the attribute now, and the gap has to stand in the same
+         slot as the card it replaces. */
+      gap.setAttribute('data-cols',card.getAttribute('data-cols')||'6');
       gap.classList.remove('is-pending','save-failed');
       gap.style.height=box.height+'px';
       grid.insertBefore(gap,card);
