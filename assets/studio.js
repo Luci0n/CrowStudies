@@ -2873,7 +2873,8 @@
        stray angle bracket stays a stray angle bracket. */
     if(block.type==='database') body='<div class="db" data-db-table></div>';
     if(block.type==='code'){
-      var written=plainText(block.body), language=String(block.codeLanguage||'plain');
+      /* Leading empty lines are an editor artefact, never useful source. */
+      var written=plainText(block.body).replace(/^\n+/,''), language=String(block.codeLanguage||'plain');
       var codeHeight=Math.max(180,Math.min(720,Number(block.codeHeight)||360));
       var languages=[['plain','Plain text'],['javascript','JavaScript'],['typescript','TypeScript'],['html','HTML'],['css','CSS'],['json','JSON'],['python','Python'],['sql','SQL'],['bash','Shell']];
       var languageOptions=languages.map(function(option){ return '<option value="'+option[0]+'"'+(language===option[0]?' selected':'')+'>'+option[1]+'</option>'; }).join('');
