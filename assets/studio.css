@@ -977,3 +977,10 @@ body.is-sizing .studio-block{ transition:none; }
 .block-code::selection{ color:transparent; background:color-mix(in srgb,var(--brand) 42%,transparent); }
 .tok-keyword{ color:#b895ff; }.tok-string{ color:#8bdda8; }.tok-number{ color:#f7bc72; }.tok-comment{ color:var(--ink-3); font-style:italic; }.tok-tag{ color:#6db7f3; }
 .code-wrap.is-wrapped .code-highlight,.code-wrap.is-wrapped .block-code{ white-space:pre-wrap; overflow-wrap:anywhere; }
+
+/* A code card may share a row. Its controls therefore wrap within its own
+   width rather than escaping across the neighbouring card. */
+.code-tools{ flex-wrap:wrap; justify-content:flex-start; max-width:100%; }
+.code-tools > *{ flex:0 0 auto; max-width:100%; }
+.code-language select{ max-width:110px; }
+.code-height input{ width:min(70px,22vw); }
