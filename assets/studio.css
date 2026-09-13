@@ -1043,3 +1043,13 @@ body.is-sizing .studio-block{ transition:none; }
 .project-action-buttons{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 .project-actions>.mode-indicator{ margin-bottom:1px; }
 @media (max-width:620px){ .project-actions{ width:100%; align-items:flex-start; }.project-action-buttons{ justify-content:flex-start; } }
+
+/* Keep the state label independent of the command strip on wide layouts. */
+@media (min-width:621px){
+  .project-top{ position:relative; }
+  .project-actions{ position:absolute; top:0; right:0; width:auto; }
+  .project-actions>.mode-indicator{ position:absolute; top:0; right:0; margin:0; }
+  .project-action-buttons{ padding-top:34px; }
+  .mode-indicator{ padding:5px 8px; font-size:11px; }
+  .mode-indicator i{ width:6px; height:6px; }
+}
