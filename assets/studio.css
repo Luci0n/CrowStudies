@@ -956,3 +956,15 @@ body.is-sizing .studio-block{ transition:none; }
   .code-tools{ flex-wrap:wrap; justify-content:flex-start; }
   .code-language span,.code-height span{ display:none; }
 }
+
+/* Code is an editor, not a small note: it gets a whole row. The toolbar reads
+   as compact controls rather than a string of competing form labels. */
+.block-row > .studio-block.code{ grid-column:1 / -1!important; }
+.code-language span,.code-height span{ display:none; }
+.code-tools{ align-items:center; justify-content:flex-end; padding:0 1px; }
+.code-language select{ max-width:132px; }
+.code-height{ padding:0 2px; }
+.code-height input{ width:70px; }
+@media(max-width:640px){
+  .code-tools{ justify-content:flex-start; }
+}
