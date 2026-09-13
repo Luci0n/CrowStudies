@@ -912,3 +912,18 @@ body.is-sizing .studio-block{ transition:none; }
   .project-actions{ gap:6px; }
   .project-actions .btn{ padding:7px 8px; font-size:12px; }
 }
+
+/* Tall interactive blocks get an internal viewport instead of taking over a
+   project. This mirrors Notion's approach: prose grows naturally, while code,
+   data, and media remain inspectable surfaces with their own scrolling. */
+.code-body{ max-height:360px; overflow:auto; }
+.studio-block.code-expanded .code-body{ max-height:min(70vh,760px); }
+.code-size,.upgrade-comment-delete{
+  border:1px solid var(--glass-edge); border-radius:7px; background:color-mix(in srgb,var(--card) 88%,transparent);
+  color:var(--ink-3); padding:5px 8px; font-family:inherit; font-weight:750; font-size:11px;
+}
+.code-size:hover,.upgrade-comment-delete:hover{ color:var(--brand); border-color:var(--brand); }
+.code-tools{ gap:6px; }
+.upgrade-comment-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.upgrade-comment-delete{ padding:3px 6px; font-size:10px; }
+.upgrade-comment-delete:disabled{ opacity:.5; }
