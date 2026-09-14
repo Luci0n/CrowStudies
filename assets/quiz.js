@@ -198,6 +198,14 @@ function CrowQuiz(config){
       return (a.due||0) - (b.due||0);
     });
   }
+  function reviewGuideHidden(){
+    if (window.CrowCloud && window.CrowCloud.reviewGuideHidden) return window.CrowCloud.reviewGuideHidden();
+    try{return localStorage.getItem('crowstudies:review-guide-hidden') === '1';}catch(e){return false;}
+  }
+  function setReviewGuideHidden(hidden){
+    if (window.CrowCloud && window.CrowCloud.setReviewGuideHidden) window.CrowCloud.setReviewGuideHidden(hidden);
+    else try{localStorage.setItem('crowstudies:review-guide-hidden',hidden?'1':'0');}catch(e){}
+  }
   function scheduleCard(unitId, q, grade, hinted){
     if (!save.cards) save.cards={};
     var key=stableQuestionKey(q), id=cardId(unitId,key), now=Date.now();
@@ -324,6 +332,12 @@ function CrowQuiz(config){
       + '<div class="backdrop" data-f="modal" hidden>'
       +   '<div class="modal"><h3>Hint</h3><p data-f="modalText"></p>'
       +   '<button class="btn wide" data-f="modalClose">Got it</button></div>'
+      + '</div>'
+      + '<div class="backdrop" data-f="reviewGuide" hidden>'
+      +   '<div class="modal"><h3>How Review works</h3>'
+      +   '<p>Answer from memory, then choose how it felt. <b>Again</b> brings it back soon; <b>Hard</b> gives a short interval; <b>Good</b> uses the normal interval; <b>Easy</b> waits longer.</p>'
+      +   '<label class="setting-toggle"><span><b>Don\'t show this again</b><small>You can change this in Account settings.</small></span><input type="checkbox" data-f="reviewGuideSkip"><i aria-hidden="true"></i></label>'
+      +   '<button class="btn wide" data-f="reviewGuideStart">Start reviewing</button></div>'
       + '</div>';
 
     root.querySelectorAll('[data-f]').forEach(function(n){ dom[n.dataset.f] = n; });
@@ -769,6 +783,18 @@ function CrowQuiz(config){
     if (!ranOut && SOUNDS.fanfare && s.correct >= Math.ceil(s.totalQ * 0.8)) SOUNDS.fanfare();
   }
 
+  function startReview(){
+    var cards=reviewableCards().slice(0,20);
+    if (cards.length) startSession(cards[0].unit, cards);
+  }
+  function openReview(){
+    if (!reviewableCards().length) return;
+    if (reviewGuideHidden()){ startReview(); return; }
+    dom.reviewGuideSkip.checked=false;
+    dom.reviewGuide.hidden=false;
+    dom.reviewGuideStart.focus({ preventScroll:true });
+  }
+
   /* ---------- wiring ---------- */
   function start(rootSelector){
     var root = document.querySelector(rootSelector || '#app');
@@ -783,9 +809,11 @@ function CrowQuiz(config){
         else { renderHome(); showScreen('home'); }
       } else startSession(state.session ? state.session.unit : UNITS[0].id);
     };
-    dom.reviewDue.onclick = function(){
-      var cards=reviewableCards().slice(0,20);
-      if (cards.length) startSession(cards[0].unit, cards);
+    dom.reviewDue.onclick = openReview;
+    dom.reviewGuideStart.onclick = function(){
+      if (dom.reviewGuideSkip.checked) setReviewGuideHidden(true);
+      dom.reviewGuide.hidden=true;
+      startReview();
     };
     dom['continue'].onclick = advance;
     dom.extraBack.onclick = function(){ renderHome(); showScreen('home'); };

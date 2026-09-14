@@ -151,9 +151,10 @@ async function validateAvatar(file){
 function openAccountSettings(){
   var user=cloud.user, profile=cloud.profile||{}, shade=document.createElement('div'), dialog=document.createElement('section');
   shade.className='app-overlay'; dialog.className='app-dialog'; shade.appendChild(dialog);
-  dialog.innerHTML='<h2>Account settings</h2><p>Your email is private. Other people see only this username and optional picture.</p><div class="account-profile"><div class="account-avatar"></div><div><b>@'+(profile.username||'')+'</b><small>Public username</small></div></div><div class="dialog-actions"><button class="btn ghost" data-avatar>Choose picture</button><button class="btn ghost" data-remove-avatar '+(profile.avatarUrl?'':'disabled')+'>Remove picture</button><button class="btn" data-close>Done</button></div>';
+  dialog.innerHTML='<h2>Account settings</h2><p>Your email is private. Other people see only this username and optional picture.</p><div class="account-profile"><div class="account-avatar"></div><div><b>@'+(profile.username||'')+'</b><small>Public username</small></div></div><label class="setting-toggle"><span><b>Show Review guide</b><small>Explain Again, Hard, Good, and Easy when starting Review.</small></span><input type="checkbox" data-review-guide '+(profile.reviewGuideHidden?'':'checked')+'><i aria-hidden="true"></i></label><div class="dialog-actions"><button class="btn ghost" data-avatar>Choose picture</button><button class="btn ghost" data-remove-avatar '+(profile.avatarUrl?'':'disabled')+'>Remove picture</button><button class="btn" data-close>Done</button></div>';
   var avatar=dialog.querySelector('.account-avatar'); if(profile.avatarUrl){avatar.style.backgroundImage='url("'+profile.avatarUrl.replace(/"/g,'')+'")'; avatar.textContent='';}else avatar.textContent=initials({displayName:profile.username||user.displayName||user.email});
   dialog.querySelector('[data-close]').onclick=function(){shade.remove();};
+  dialog.querySelector('[data-review-guide]').onchange=function(){ cloud.setReviewGuideHidden(!this.checked); };
   dialog.querySelector('[data-avatar]').onclick=function(){var input=document.createElement('input');input.type='file';input.accept='image/jpeg,image/png,image/webp';input.onchange=async function(){try{var file=input.files&&input.files[0];await validateAvatar(file);var path=ref(storage,'avatars/'+user.uid+'/avatar');await uploadBytes(path,file,{contentType:file.type});var url=await getDownloadURL(path);await updateDoc(doc(db,'profiles',user.uid),{avatarUrl:url});cloud.profile.avatarUrl=url;writeAuthHint(user);updateAuthControls(user);shade.remove();openAccountSettings();}catch(error){await overlay({title:'Picture not uploaded',body:error.message||'Try another image.',confirmLabel:'OK',notice:true});}};input.click();};
   dialog.querySelector('[data-remove-avatar]').onclick=async function(){try{await deleteObject(ref(storage,'avatars/'+user.uid+'/avatar'));await updateDoc(doc(db,'profiles',user.uid),{avatarUrl:''});cloud.profile.avatarUrl='';writeAuthHint(user);updateAuthControls(user);shade.remove();openAccountSettings();}catch(error){}};
   document.body.appendChild(shade);
@@ -192,6 +193,16 @@ const cloud = {
   },
   async signOut(){
     await signOut(auth);
+  },
+  reviewGuideHidden(){
+    if (cloud.user) return !!(cloud.profile && cloud.profile.reviewGuideHidden);
+    try{return localStorage.getItem('crowstudies:review-guide-hidden') === '1';}catch(error){return false;}
+  },
+  async setReviewGuideHidden(hidden){
+    try{localStorage.setItem('crowstudies:review-guide-hidden',hidden?'1':'0');}catch(error){}
+    if (!cloud.user) return;
+    cloud.profile=Object.assign({},cloud.profile||{},{reviewGuideHidden:!!hidden});
+    try{await setDoc(doc(db,'profiles',cloud.user.uid),{reviewGuideHidden:!!hidden},{merge:true});}catch(error){}
   },
   async loadCourse(course){
     if (!cloud.user) return null;
