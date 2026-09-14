@@ -56,6 +56,7 @@ function CrowQuiz(config){
   var SOUNDS     = config.sounds || {};
   var STORE      = 'crowstudies_' + config.course;
   var HOME_TABS  = config.homeTabs || null;
+  var UNIT_PRACTICE = config.unitPractice !== false;
   var activeHomeTab = HOME_TABS && HOME_TABS.length ? HOME_TABS[0].id : null;
 
   var PRAISE = ['Nice', 'Exactly', "That's it", 'Clean', 'Locked in', 'Correct'];
@@ -133,6 +134,23 @@ function CrowQuiz(config){
   function unitGens(u){
     return u.steps.reduce(function(a,s){ return a.concat(s.gens); }, []);
   }
+  function buildLessonReference(root){
+    root.innerHTML='';
+    UNITS.forEach(function(u){
+      var section=el('section','teach');
+      section.appendChild(el('h2',null,u.title));
+      if (u.blurb) section.appendChild(el('p','body',u.blurb));
+      u.steps.filter(function(step){ return step.title; }).forEach(function(step){
+        var lesson=el('div','practice-preview');
+        lesson.appendChild(el('b',null,step.title));
+        lesson.appendChild(el('p','body',step.body));
+        if (step.demo) lesson.appendChild(step.demo());
+        section.appendChild(lesson);
+      });
+      root.appendChild(section);
+    });
+  }
+  var EXTRA = config.extra || { label:'Lessons', title:'Lessons', build:buildLessonReference, asTab:true };
   /* A compact SM-2-inspired scheduler. New cards take a short learning step,
      then move to a day and grow by an adaptive ease factor. A miss or hint
      puts the card back into short relearning instead of treating it as known. */
@@ -267,8 +285,8 @@ function CrowQuiz(config){
     root.querySelector('.coursehero h1').textContent = config.title || '';
     root.querySelector('.coursehero p').textContent = config.tagline || '';
 
-    if (config.extra){
-      var b = el('button', 'btn ghost sm', config.extra.label);
+    if (EXTRA){
+      var b = el('button', 'btn ghost sm', EXTRA.label);
       function syncCourseTabs(screen){
         [dom.courseTabs,dom.extraCourseTabs].forEach(function(tabs){
           if (!tabs || tabs.hidden) return;
@@ -278,14 +296,14 @@ function CrowQuiz(config){
       dom.syncCourseTabs = syncCourseTabs;
       function openExtra(){
         if (!dom.extraBody.dataset.built){
-          config.extra.build(dom.extraBody);
+          EXTRA.build(dom.extraBody);
           dom.extraBody.dataset.built = '1';
         }
-        if (config.extra.asTab) syncCourseTabs('extra');
+        if (EXTRA.asTab) syncCourseTabs('extra');
         showScreen('extra');
       }
       b.onclick = openExtra;
-      if (config.extra.asTab){
+      if (EXTRA.asTab){
         dom.extraHero.hidden = false;
         if (dom.extraCrumb) dom.extraCrumb.hidden = false;
         dom.extraTopbar.hidden = true;
@@ -297,14 +315,14 @@ function CrowQuiz(config){
           var practiceTab = el('button', 'course-tab active', 'Practice');
           practiceTab.type = 'button'; practiceTab.dataset.screen = 'home';
           practiceTab.onclick = function(){ if (dom.screen_home.classList.contains('active')) return; renderHome(); showScreen('home'); };
-          var lessonTab = el('button', 'course-tab', config.extra.label);
+          var lessonTab = el('button', 'course-tab', EXTRA.label);
           lessonTab.type = 'button'; lessonTab.dataset.screen = 'extra'; lessonTab.onclick = function(){ if (dom.screen_extra.classList.contains('active')) return; openExtra(); };
           tabs.appendChild(practiceTab); tabs.appendChild(lessonTab);
         });
       } else {
         root.querySelector('.pathhead').appendChild(b);
       }
-      dom.extraTitle.textContent = config.extra.title || config.extra.label;
+      dom.extraTitle.textContent = EXTRA.title || EXTRA.label;
     }
 
     if (HOME_TABS){
@@ -423,6 +441,12 @@ function CrowQuiz(config){
     }
     if (reviewCards){
       reviewCards.forEach(function(card){ addQuestion(unitGens(unitById(card.unit)), card.key, card.unit); });
+      return queue;
+    }
+    if (UNIT_PRACTICE){
+      var practicePool=unitGens(u);
+      var practiceCount=u.questionCount != null ? u.questionCount : (config.unitPracticeCount || 6);
+      for (var p=0;p<practiceCount;p++) addQuestion(practicePool);
       return queue;
     }
     var teaching = u.steps.filter(function(s){ return s.title; }).length > 0;
