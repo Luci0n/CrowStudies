@@ -181,7 +181,7 @@ function CrowQuiz(config){
   /* A compact SM-2-inspired scheduler. New cards take a short learning step,
      then move to a day and grow by an adaptive ease factor. A miss or hint
      puts the card back into short relearning instead of treating it as known. */
-  var MINUTE = 60 * 1000, DAY = 24 * 60 * MINUTE;
+  var MINUTE = 60 * 1000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
   function stableQuestionKey(q){
     return [q.type || '', q.tag || '', q.headlineHtml || q.headline || '', q.sub || '', q.answer || '', q.hanzi || ''].join('~');
   }
@@ -218,7 +218,7 @@ function CrowQuiz(config){
     } else if (grade === 'hard'){
       card.reps++;
       card.ease = Math.max(1.3, (card.ease || 2.3) - 0.15);
-      card.interval = card.reps === 1 ? 15 * MINUTE : Math.max(DAY, Math.round((card.interval || DAY) * 1.2));
+      card.interval = card.reps === 1 ? 6 * HOUR : Math.max(6 * HOUR, Math.round((card.interval || DAY) * 1.2));
     } else if (grade === 'easy'){
       card.reps++;
       card.ease = Math.min(2.9, (card.ease || 2.3) + 0.15);
@@ -242,12 +242,13 @@ function CrowQuiz(config){
     var id=cardId(unitId, stableQuestionKey(q)), card=(save.cards||{})[id] || { reps:0, interval:0 };
     var interval;
     if (grade === 'again') interval=10*MINUTE;
-    else if (grade === 'hard') interval=card.reps ? Math.max(DAY,Math.round((card.interval||DAY)*1.2)) : 15*MINUTE;
+    else if (grade === 'hard') interval=card.reps ? (card.reps===1 ? 6*HOUR : Math.max(6*HOUR,Math.round((card.interval||DAY)*1.2))) : 15*MINUTE;
     else if (grade === 'easy') interval=card.reps ? Math.max(4*DAY,Math.round((card.interval||DAY)*3)) : 4*DAY;
     else if (!card.reps) interval=10*MINUTE;
     else if (card.reps === 1) interval=DAY;
     else interval=Math.min(365*DAY,Math.max((card.interval||DAY)+DAY,Math.round((card.interval||DAY)*(card.ease||2.3))));
-    return interval < DAY ? Math.round(interval/MINUTE)+'m' : Math.max(1,Math.round(interval/DAY))+'d';
+    if (interval < HOUR) return Math.max(1,Math.round(interval/MINUTE))+'m';
+    return interval < DAY ? Math.round(interval/HOUR)+'h' : Math.max(1,Math.round(interval/DAY))+'d';
   }
   function dueLabel(card){
     var ms=Math.max(0,(card.due||0)-Date.now());
