@@ -65,7 +65,7 @@ function CrowQuiz(config){
      separate browser cache and synced to Firebase, so signing out never makes
      an account's work look like anonymous progress. */
   var GUEST_STORE = STORE + ':guest';
-  function blankSave(){ return { xp:0, bestRun:0, sessions:0, units:{} }; }
+  function blankSave(){ return { xp:0, bestRun:0, sessions:0, units:{}, cards:{} }; }
   function loadSave(key, legacy){
     try{
       var raw=localStorage.getItem(key);
@@ -76,11 +76,18 @@ function CrowQuiz(config){
   }
   function accountStore(uid){ return STORE + ':account:' + uid; }
   function mergeSave(local, remote){
-    var merged = { xp:Math.max(local.xp||0,remote.xp||0), bestRun:Math.max(local.bestRun||0,remote.bestRun||0), sessions:Math.max(local.sessions||0,remote.sessions||0), units:{} };
+    var merged = { xp:Math.max(local.xp||0,remote.xp||0), bestRun:Math.max(local.bestRun||0,remote.bestRun||0), sessions:Math.max(local.sessions||0,remote.sessions||0), units:{}, cards:{} };
     var ids = Object.keys(local.units||{}).concat(Object.keys(remote.units||{}).filter(function(id){ return !(local.units||{})[id]; }));
     ids.forEach(function(id){
       var a=(local.units||{})[id]||{}, b=(remote.units||{})[id]||{};
       merged.units[id]={ done:Math.max(a.done||0,b.done||0), best:Math.max(a.best||0,b.best||0), total:Math.max(a.total||0,b.total||0) };
+    });
+    var cardIds=Object.keys(local.cards||{}).concat(Object.keys(remote.cards||{}).filter(function(id){ return !(local.cards||{})[id]; }));
+    cardIds.forEach(function(id){
+      var a=(local.cards||{})[id], b=(remote.cards||{})[id];
+      if (!a) merged.cards[id]=b;
+      else if (!b) merged.cards[id]=a;
+      else merged.cards[id]=(a.updatedAt||0) >= (b.updatedAt||0) ? a : b;
     });
     return merged;
   }
@@ -126,6 +133,56 @@ function CrowQuiz(config){
   function unitGens(u){
     return u.steps.reduce(function(a,s){ return a.concat(s.gens); }, []);
   }
+  /* A compact SM-2-inspired scheduler. New cards take a short learning step,
+     then move to a day and grow by an adaptive ease factor. A miss or hint
+     puts the card back into short relearning instead of treating it as known. */
+  var MINUTE = 60 * 1000, DAY = 24 * 60 * MINUTE;
+  function stableQuestionKey(q){
+    return [q.type || '', q.tag || '', q.headlineHtml || q.headline || '', q.sub || '', q.answer || '', q.hanzi || ''].join('~');
+  }
+  function cardId(unitId, key){ return unitId + '::' + key; }
+  function dueCards(unitId){
+    var now=Date.now(), cards=save.cards || {};
+    return Object.keys(cards).map(function(id){ return cards[id]; }).filter(function(card){
+      return card && (!unitId || card.unit === unitId) && card.due <= now;
+    }).sort(function(a,b){ return (a.due||0) - (b.due||0); });
+  }
+  function reviewableCards(){
+    var cards=save.cards || {};
+    return Object.keys(cards).map(function(id){ return cards[id]; }).filter(Boolean).sort(function(a,b){
+      return (a.due||0) - (b.due||0);
+    });
+  }
+  function scheduleCard(unitId, q, success, hinted){
+    if (!save.cards) save.cards={};
+    var key=stableQuestionKey(q), id=cardId(unitId,key), now=Date.now();
+    var card=save.cards[id] || { id:id, unit:unitId, key:key, reps:0, lapses:0, interval:0, ease:2.3, due:now };
+    if (!success || hinted){
+      card.lapses += success ? 0 : 1;
+      card.reps = Math.max(0, card.reps - 1);
+      card.ease = Math.max(1.3, (card.ease || 2.3) - (success ? 0.05 : 0.2));
+      card.interval = 10 * MINUTE;
+    } else if (!card.reps){
+      card.reps=1;
+      card.interval=10 * MINUTE;
+    } else if (card.reps === 1){
+      card.reps=2;
+      card.interval=DAY;
+    } else {
+      card.reps++;
+      card.ease=Math.min(2.7, (card.ease || 2.3) + 0.03);
+      card.interval=Math.min(365 * DAY, Math.max(card.interval + DAY, Math.round(card.interval * card.ease)));
+    }
+    card.due=now + card.interval;
+    card.updatedAt=now;
+    save.cards[id]=card;
+  }
+  function dueLabel(card){
+    var ms=Math.max(0,(card.due||0)-Date.now());
+    if (!ms) return 'Review due';
+    if (ms < DAY) return 'Review later today';
+    return 'Review in '+Math.ceil(ms/DAY)+'d';
+  }
 
   var state = { session:null, question:null, locked:false, hinted:false, lastQuestionKey:'' };
   var dom = {};
@@ -145,7 +202,7 @@ function CrowQuiz(config){
       +       '<div class="stat streak"><b data-f="run">0</b><span>Best run</span></div>'
       +       '<div class="stat acc"><b data-f="sessions">0</b><span>Sessions</span></div>'
       +     '</div>'
-      +     '<div class="pathhead"><h2>Practice</h2></div>'
+      +     '<div class="pathhead"><h2>Practice</h2><button class="btn ghost sm" data-f="reviewDue">Review cards</button></div>'
       +     '<div class="home-tabs" data-f="homeTabs"></div>'
       +     '<div class="path" data-f="path"></div>'
       +   '</section>'
@@ -277,6 +334,9 @@ function CrowQuiz(config){
     if (dom.syncCourseTabs) dom.syncCourseTabs('home');
     dom.run.textContent = save.bestRun;
     dom.sessions.textContent = save.sessions;
+    var due=dueCards(), available=reviewableCards();
+    dom.reviewDue.disabled=!available.length;
+    dom.reviewDue.textContent=due.length ? 'Review '+due.length+' due' : 'Review cards';
 
     var visibleUnits = HOME_TABS
       ? UNITS.filter(function(u){ return (u.homeTab || HOME_TABS[0].id) === activeHomeTab; })
@@ -299,6 +359,7 @@ function CrowQuiz(config){
 
     visibleUnits.forEach(function(u, i){
       var rec = save.units[u.id] || { done:0, best:0, total:0 };
+      var unitDue=dueCards(u.id);
       var btn = el('button', 'unit' + (rec.done>0 ? ' done' : (i===next ? ' next' : '')));
       btn.style.setProperty('--u', u.color);
 
@@ -310,9 +371,11 @@ function CrowQuiz(config){
       var txt = el('span', 'utext');
       txt.appendChild(el('b', null, u.title));
       var lessons = u.steps.filter(function(s){ return s.title; }).length;
-      txt.appendChild(el('span', null, rec.done>0
+      txt.appendChild(el('span', null, unitDue.length
+        ? unitDue.length+' review '+(unitDue.length===1?'card':'cards')+' due'
+        : (rec.done>0
         ? 'Best ' + rec.best + '/' + (rec.total||'?') + ' · ' + rec.done + (rec.done===1?' run':' runs')
-        : (lessons ? lessons + (lessons===1?' lesson · ':' lessons · ') + u.blurb : u.blurb)));
+        : (lessons ? lessons + (lessons===1?' lesson · ':' lessons · ') + u.blurb : u.blurb))));
       if (rec.done>0){
         var meter = el('span', 'meter');
         var fill = el('i');
@@ -323,57 +386,41 @@ function CrowQuiz(config){
 
       btn.appendChild(disc);
       btn.appendChild(txt);
+      btn.appendChild(el('span', 'chev', '›'));
       btn.onclick = function(){ startSession(u.id); };
-
-      if (config.unitPractice && unitGens(u).length){
-        var row = el('div', 'unitrow');
-        row.appendChild(btn);
-        var practice = el('button', 'unit-practice', 'Practice questions');
-        practice.type = 'button';
-        practice.setAttribute('aria-label', 'Practice questions from ' + u.title + ' without teaching cards');
-        practice.onclick = function(){ startSession(u.id, true); };
-        row.appendChild(practice);
-        dom.path.appendChild(row);
-      } else {
-        dom.path.appendChild(btn);
-      }
+      dom.path.appendChild(btn);
     });
   }
 
   /* ---------- session ---------- */
-  function buildQueue(u, practiceOnly){
+  function buildQueue(u, reviewCards){
     var queue = [];
     var lastGen = null;
     var seenQuestionKeys = {};
-    function questionKey(q){
-      return [q.type, q.headlineHtml || q.headline || '', q.sub || '', (q.choices || []).join('|'), q.answer || '', q.hanzi || ''].join('~');
-    }
-    function addQuestion(pool){
+    function addQuestion(pool, targetKey, sourceUnit){
       if (!pool || !pool.length) return;
       var choices = pool.filter(function(gen){ return gen !== lastGen; });
       var gens = choices.length ? choices : pool;
       var candidate = null, key = '';
       /* A generator may choose randomly from a small pool. Generate first,
          then keep only a prompt the learner has not already seen this run. */
-      for (var attempt=0; attempt<Math.max(12, gens.length*4); attempt++){
+      for (var attempt=0; attempt<(targetKey ? 2400 : Math.max(12, gens.length*4)); attempt++){
         var gen = gens[randInt(gens.length)];
         var q = gen();
-        var qKey = questionKey(q);
-        if (!seenQuestionKeys[qKey]){
+        var qKey = stableQuestionKey(q);
+        if ((!targetKey || qKey===targetKey) && !seenQuestionKeys[qKey]){
           candidate = q; key = qKey; lastGen = gen; break;
         }
       }
       if (!candidate) return;
       seenQuestionKeys[key] = true;
-      queue.push({ kind:'q', question:candidate });
+      queue.push({ kind:'q', question:candidate, unit:sourceUnit || u.id, cardKey:key });
     }
-    var teaching = u.steps.filter(function(s){ return s.title; }).length > 0;
-    if (practiceOnly){
-      var practicePool = unitGens(u);
-      var practiceCount = u.practiceCount != null ? u.practiceCount : (config.unitPracticeCount || 6);
-      for (var p=0;p<practiceCount;p++) addQuestion(practicePool);
+    if (reviewCards){
+      reviewCards.forEach(function(card){ addQuestion(unitGens(unitById(card.unit)), card.key, card.unit); });
       return queue;
     }
+    var teaching = u.steps.filter(function(s){ return s.title; }).length > 0;
     if (!teaching){
       var pool = unitGens(u);
       var questionCount = u.questionCount != null ? u.questionCount : MIXED;
@@ -392,10 +439,10 @@ function CrowQuiz(config){
     return queue;
   }
 
-  function startSession(unitId, practiceOnly){
-    var queue = buildQueue(unitById(unitId), practiceOnly);
+  function startSession(unitId, reviewCards){
+    var queue = buildQueue(unitById(unitId), reviewCards);
     state.session = {
-      unit:unitId, practiceOnly:!!practiceOnly, queue:queue, index:0,
+      unit:unitId, queue:queue, review:!!reviewCards, index:0,
       totalQ: queue.filter(function(it){ return it.kind==='q'; }).length,
       answered:0, correct:0, run:0, bestRun:0, hearts:HEARTS, xp:0
     };
@@ -431,6 +478,7 @@ function CrowQuiz(config){
       return;
     }
     state.question = item.question;
+    state.questionUnit = item.unit || state.session.unit;
     state.hinted = false;
     renderQuestion();
   }
@@ -449,9 +497,7 @@ function CrowQuiz(config){
     var box = el('div', 'teach');
     box.appendChild(el('div', 'newchip', 'New idea'));
     box.appendChild(el('h2', null, step.title));
-    var body = el('p', 'body');
-    body.innerHTML = step.body;
-    box.appendChild(body);
+    box.appendChild(el('p', 'body', step.body));
     if (step.demo) box.appendChild(step.demo());
     /* A preview can be useful for authored workspace lessons, but course
        practice text often contains a worked example. Let a course opt out so
@@ -544,6 +590,8 @@ function CrowQuiz(config){
     var s = state.session;
     var counted = !state.hinted;
     s.answered++;
+    scheduleCard(state.questionUnit || s.unit, state.question, success, state.hinted);
+    persist();
 
     if (success){
       if (counted){
@@ -555,11 +603,6 @@ function CrowQuiz(config){
     } else {
       s.run = 0;
       s.hearts--;
-      if (s.hearts > 0 && state.question){
-        /* Keep a missed prompt for a final retry instead of making the learner
-           restart the whole lesson. A second miss simply spends another heart. */
-        s.queue.push({ kind:'q', question:state.question });
-      }
       renderHearts();
       if (SOUNDS.wrong) SOUNDS.wrong();
     }
@@ -567,8 +610,8 @@ function CrowQuiz(config){
     dom.sheet.className = 'sheet up ' + (state.hinted ? '' : (success ? 'right' : 'wrong'));
     dom.vmark.textContent = success ? '✓' : '✕';
     dom.vtext.textContent = state.hinted
-      ? 'Hint used. Keep going.'
-      : (success ? PRAISE[randInt(PRAISE.length)] : (s.hearts > 0 ? 'Not this time — you will see this again at the end.' : 'Not this time'));
+      ? 'Hint used. No score this time.'
+      : (success ? PRAISE[randInt(PRAISE.length)] : 'Not this time');
     dom.vexplain.textContent = state.question.explain || '';
     dom['continue'].className = 'btn wide ' + (success && counted ? 'good' : (success ? '' : 'bad'));
     dom['continue'].textContent = (s.hearts <= 0 || s.index + 1 >= s.queue.length) ? 'See results' : 'Continue';
@@ -600,10 +643,10 @@ function CrowQuiz(config){
     persist();
 
     var ranOut = s.hearts <= 0;
-    dom.resTitle.textContent = ranOut ? 'Out of hearts' : (s.practiceOnly ? 'Practice complete' : 'Unit cleared');
+    dom.resTitle.textContent = ranOut ? 'Out of hearts' : (s.review ? 'Review complete' : 'Unit cleared');
     dom.resSub.textContent = ranOut
       ? 'You got ' + s.correct + ' right before the third slip. Run it back.'
-      : unitById(s.unit).title + ': ' + s.correct + ' of ' + s.totalQ + ' correct.';
+      : (s.review ? 'You reviewed '+s.totalQ+' '+(s.totalQ===1?'card':'cards')+'.' : unitById(s.unit).title + ': ' + s.correct + ' of ' + s.totalQ + ' correct.');
     dom.resAcc.textContent = Math.round((s.correct / Math.max(1, s.answered)) * 100) + '%';
     dom.resRun.textContent = s.bestRun;
     showScreen('results');
@@ -617,7 +660,17 @@ function CrowQuiz(config){
 
     dom.quit.onclick = function(){ hideSheet(); renderHome(); showScreen('home'); };
     dom.home.onclick = function(){ renderHome(); showScreen('home'); };
-    dom.again.onclick = function(){ startSession(state.session ? state.session.unit : UNITS[0].id); };
+    dom.again.onclick = function(){
+      if (state.session && state.session.review){
+        var cards=reviewableCards();
+        if (cards.length) startSession(cards[0].unit, cards.slice(0, Math.min(20,cards.length)));
+        else { renderHome(); showScreen('home'); }
+      } else startSession(state.session ? state.session.unit : UNITS[0].id);
+    };
+    dom.reviewDue.onclick = function(){
+      var cards=reviewableCards().slice(0,20);
+      if (cards.length) startSession(cards[0].unit, cards);
+    };
     dom['continue'].onclick = advance;
     dom.extraBack.onclick = function(){ renderHome(); showScreen('home'); };
     dom.hint.onclick = function(){

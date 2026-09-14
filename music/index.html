@@ -197,7 +197,7 @@
 <div id="app"></div>
 
 <script type="module" src="../assets/firebase.js?v=steady-list-20260912"></script>
-<script src="../assets/quiz.js?v=separate-guest-progress-20260910"></script>
+<script src="../assets/quiz.js?v=spaced-review-anytime-20260914"></script>
 <script>
 (function(){
   "use strict";
@@ -620,7 +620,7 @@
     ];
     var x = examples[randInt(examples.length)];
     var set = choiceSet('Half step', ['Whole step','Half step'], 2);
-    return { type:'mcq', tag:'Half steps',
+    return { type:'mcq', tag:'Keyboard distance',
       headline:x.from + ' to ' + x.to + ': half step or whole step?',
       choices:set.choices, correctIndex:set.correctIndex,
       explain:x.from + ' and ' + x.to + ' are neighboring keys, even though both are white. That makes the distance a half step.' };
@@ -1033,12 +1033,12 @@
           body:'Moving between two neighboring piano keys is called a half step. C to C♯ is a half step because there is no key in between them.',
           demo:function(){ return demoStepExample(0, 1, 'C', 'C♯', 'No key lies between C and C♯. This exact distance is one half step.'); },
           practice:'Label <strong>C to C♯</strong> as a <strong>half step</strong>.',
-          questions:1, gens:[function(){ return { type:'mcq', tag:'Half steps', headline:'C to C♯ is a…', choices:['Whole step','Half step'], correctIndex:1, explain:'C and C♯ are neighboring keys, so their distance is a half step.' }; }] },
+          questions:1, gens:[function(){ return { type:'mcq', tag:'Keyboard distance', headline:'C to C♯ is a…', choices:['Whole step','Half step'], correctIndex:1, explain:'C and C♯ are neighboring keys, so their distance is a half step.' }; }] },
         { title:'A whole step skips one key',
           body:'Now move from C to D. C♯ sits between them, so C and D are not neighbors. When exactly one key sits in the middle, the distance is a whole step.',
           demo:function(){ return demoStepExample(0, 2, 'C', 'D', 'C♯ is the key between C and D. Skipping it makes C to D a whole step.'); },
           practice:'Label <strong>C to D</strong> as a <strong>whole step</strong> because C♯ is between them.',
-          questions:1, gens:[function(){ return { type:'mcq', tag:'Whole steps', headline:'C to D is a…', choices:['Whole step','Half step'], correctIndex:0, explain:'C♯ sits between C and D. One key in the middle means a whole step.' }; }] },
+          questions:1, gens:[function(){ return { type:'mcq', tag:'Keyboard distance', headline:'C to D is a…', choices:['Whole step','Half step'], correctIndex:0, explain:'C♯ sits between C and D. One key in the middle means a whole step.' }; }] },
         { title:'White keys can touch too',
           body:'The rule is about neighboring keys, not key color. E and F touch with no black key between them. B and C do too. Both pairs are half steps.',
           demo:function(){ return demoStepExample(4, 5, 'E', 'F', 'E and F are neighboring white keys. They are still one half step apart.'); },
