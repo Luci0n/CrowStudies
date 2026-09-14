@@ -323,7 +323,7 @@ a.subject:active{ transform:translateY(3px); border-bottom-width:2px; margin-bot
 .unit{
   display:flex; align-items:center; gap:11px; width:100%; min-height:60px;
   background:var(--card); border:1px solid var(--line); border-left:3px solid var(--u);
-  border-radius:7px; padding:9px 106px 9px 11px; text-align:left;
+  border-radius:7px; padding:9px 190px 9px 11px; text-align:left;
   transition:border-color .15s ease, transform .06s ease, background .15s ease;
 }
 .unit:hover{ border-color:var(--u); background:var(--glass-lift); backdrop-filter:var(--frost-lift); -webkit-backdrop-filter:var(--frost-lift); }
@@ -344,18 +344,26 @@ a.subject:active{ transform:translateY(3px); border-bottom-width:2px; margin-bot
 .utext span{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; color:var(--ink-3); font-weight:700; }
 .meter{ grid-column:1/-1; height:6px; border-radius:999px; background:var(--well); overflow:hidden; margin: -2px 12px 0 0; }
 .meter i{ display:block; height:100%; border-radius:999px; background:var(--u); }
-.unit-practice{
+.unit-actions{
   position:absolute; z-index:2; right:10px; top:50%; transform:translateY(-50%);
+  display:flex; gap:6px; align-items:center;
+}
+.unit-practice,.unit-learn{
+  position:static;
   min-height:30px; padding:5px 7px; border:1px dashed var(--line-strong);
   border-radius:6px; background:transparent; color:var(--ink-3);
+  font:700 12px/1 "Space Grotesk",sans-serif; cursor:pointer;
+}
+.unit-practice{
   font-family:"Space Grotesk",sans-serif; font-size:10px; font-weight:750;
   transition:border-color .15s ease, color .15s ease, background .15s ease, transform .06s ease;
 }
-.unit-practice:hover{ color:var(--u); border-color:var(--u); background:color-mix(in srgb, var(--u) 7%, transparent); }
-.unit-practice:active{ transform:translateY(calc(-50% + 2px)); }
+.unit-practice:hover,.unit-learn:hover{ color:var(--u); border-color:var(--u); background:color-mix(in srgb, var(--u) 7%, transparent); }
+.unit-practice:active,.unit-learn:active{ transform:translateY(2px); }
 
 @media (max-width:520px){
-  .unit{ padding-right:108px; }
+  .unit{ padding-right:11px; flex-wrap:wrap; }
+  .unit-actions{ position:static; transform:none; width:100%; padding-left:51px; }
   .utext{ grid-template-columns:1fr; gap:1px; }
   .utext span{ white-space:normal; }
   .chev{ display:none; }

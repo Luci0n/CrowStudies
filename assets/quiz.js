@@ -451,19 +451,30 @@ function CrowQuiz(config){
         txt.appendChild(meter);
       }
 
+      var actions = el('div', 'unit-actions');
+      /* A unit's Learn route is deliberately separate from its drill route.
+         The former plays its authored material in order; the latter is only
+         randomized recall questions. Review-only units have no lesson route. */
+      if (lessons){
+        var learn = el('button', 'btn sm unit-learn', 'Learn');
+        learn.type = 'button';
+        learn.onclick = function(){ startSession(u.id, null, true); };
+        actions.appendChild(learn);
+      }
       var practice = el('button', 'btn sm unit-practice', 'Practice');
       practice.type = 'button';
       practice.onclick = function(){ startSession(u.id); };
+      actions.appendChild(practice);
       card.appendChild(disc);
       card.appendChild(txt);
-      card.appendChild(practice);
+      card.appendChild(actions);
       row.appendChild(card);
       dom.path.appendChild(row);
     });
   }
 
   /* ---------- session ---------- */
-  function buildQueue(u, reviewCards){
+  function buildQueue(u, reviewCards, lessonMode){
     var queue = [];
     var lastGen = null;
     var seenQuestionKeys = {};
@@ -490,7 +501,7 @@ function CrowQuiz(config){
       reviewCards.forEach(function(card){ addQuestion(unitGens(unitById(card.unit)), card.key, card.unit); });
       return queue;
     }
-    if (UNIT_PRACTICE){
+    if (UNIT_PRACTICE && !lessonMode){
       var practicePool=unitGens(u);
       var practiceCount=u.questionCount != null ? u.questionCount : (config.unitPracticeCount || 6);
       for (var p=0;p<practiceCount;p++) addQuestion(practicePool);
@@ -515,10 +526,10 @@ function CrowQuiz(config){
     return queue;
   }
 
-  function startSession(unitId, reviewCards){
-    var queue = buildQueue(unitById(unitId), reviewCards);
+  function startSession(unitId, reviewCards, lessonMode){
+    var queue = buildQueue(unitById(unitId), reviewCards, lessonMode);
     state.session = {
-      unit:unitId, queue:queue, review:!!reviewCards, index:0,
+      unit:unitId, queue:queue, review:!!reviewCards, lesson:!!lessonMode, index:0,
       totalQ: queue.filter(function(it){ return it.kind==='q'; }).length,
       answered:0, correct:0, run:0, bestRun:0, hearts:HEARTS, xp:0
     };
@@ -751,7 +762,7 @@ function CrowQuiz(config){
     dom.resTitle.textContent = ranOut ? 'Out of hearts' : (s.review ? 'Review complete' : 'Unit cleared');
     dom.resSub.textContent = ranOut
       ? 'You got ' + s.correct + ' right before the third slip. Run it back.'
-      : (s.review ? 'You reviewed '+s.totalQ+' '+(s.totalQ===1?'card':'cards')+'.' : unitById(s.unit).title + ': ' + s.correct + ' of ' + s.totalQ + ' correct.');
+      : (s.review ? 'You reviewed '+s.totalQ+' '+(s.totalQ===1?'card':'cards')+'.' : (s.lesson ? 'Lesson complete: ' : '') + unitById(s.unit).title + ': ' + s.correct + ' of ' + s.totalQ + ' correct.');
     dom.resAcc.textContent = Math.round((s.correct / Math.max(1, s.answered)) * 100) + '%';
     dom.resRun.textContent = s.bestRun;
     showScreen('results');
