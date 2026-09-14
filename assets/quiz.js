@@ -27,22 +27,49 @@
    Custom renderers call api.finish(true|false) when the answer lands.
    ============================================================ */
 
-/* Uses the language voice already installed on the learner's device. A course
-   requests the correct locale; the browser selects the closest available voice. */
-window.CrowSpeak = function(text, lang, rate){
-  if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) return false;
-  window.speechSynthesis.cancel();
-  var utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = lang;
-  utterance.rate = rate || 0.82;
-  var voices = window.speechSynthesis.getVoices();
-  var primary = String(lang || '').toLowerCase().split('-')[0];
-  var voice = voices.filter(function(v){ return String(v.lang || '').toLowerCase() === String(lang || '').toLowerCase(); })[0]
-    || voices.filter(function(v){ return String(v.lang || '').toLowerCase().split('-')[0] === primary; })[0];
-  if (voice) utterance.voice = voice;
-  window.speechSynthesis.speak(utterance);
-  return true;
-};
+/* Pronunciation is deliberately one utterance at a time. Calling speak directly
+   after cancel can leave Firefox (and some Chromium builds) reading its old
+   queue as well as the new letter. Waiting one event turn makes the cancel
+   reliable and selecting a voice after voiceschanged covers late-loading voices. */
+(function(){
+  var synth = window.speechSynthesis, pending = 0, timer = null, voices = [];
+  function refreshVoices(){ voices = synth && synth.getVoices ? synth.getVoices() : []; }
+  if (synth){ refreshVoices(); synth.onvoiceschanged = refreshVoices; }
+  function fallbackAudio(text, lang){
+    /* Speech voices are supplied by the operating system. This fallback keeps
+       Russian and Japanese playable in browsers where that voice is absent. */
+    try{
+      var audio = new Audio('https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl='
+        + encodeURIComponent(String(lang || '').split('-')[0]) + '&q=' + encodeURIComponent(text));
+      audio.play().catch(function(){});
+    }catch(e){}
+  }
+  window.CrowSpeak = function(text, lang, rate){
+    if (!synth || !('SpeechSynthesisUtterance' in window)){ fallbackAudio(text, lang); return false; }
+    var request = ++pending;
+    clearTimeout(timer);
+    synth.cancel();
+    timer = setTimeout(function(){
+      if (request !== pending) return;
+      refreshVoices();
+      var utterance = new SpeechSynthesisUtterance(text);
+      var wanted = String(lang || '').toLowerCase(), primary = wanted.split('-')[0];
+      var voice = voices.filter(function(v){ return String(v.lang || '').toLowerCase() === wanted; })[0]
+        || voices.filter(function(v){ return String(v.lang || '').toLowerCase().split('-')[0] === primary; })[0];
+      /* Do not let a random English system voice attempt Cyrillic or kana.
+         It sounds broken even though the browser technically made a sound. */
+      if (!voice){ fallbackAudio(text, lang); return; }
+      utterance.lang = lang;
+      utterance.rate = rate || 0.82;
+      if (voice) utterance.voice = voice;
+      utterance.onerror = function(){ if (request === pending) fallbackAudio(text, lang); };
+      synth.speak(utterance);
+      /* Firefox can remain paused after a cancelled utterance. */
+      setTimeout(function(){ if (request === pending && synth.paused) synth.resume(); }, 120);
+    }, 45);
+    return true;
+  };
+}());
 
 function CrowQuiz(config){
   'use strict';
@@ -171,15 +198,23 @@ function CrowQuiz(config){
       return (a.due||0) - (b.due||0);
     });
   }
-  function scheduleCard(unitId, q, success, hinted){
+  function scheduleCard(unitId, q, grade, hinted){
     if (!save.cards) save.cards={};
     var key=stableQuestionKey(q), id=cardId(unitId,key), now=Date.now();
     var card=save.cards[id] || { id:id, unit:unitId, key:key, reps:0, lapses:0, interval:0, ease:2.3, due:now };
-    if (!success || hinted){
-      card.lapses += success ? 0 : 1;
+    if (grade === 'again' || hinted){
+      card.lapses += grade === 'again' ? 1 : 0;
       card.reps = Math.max(0, card.reps - 1);
-      card.ease = Math.max(1.3, (card.ease || 2.3) - (success ? 0.05 : 0.2));
+      card.ease = Math.max(1.3, (card.ease || 2.3) - (grade === 'again' ? 0.2 : 0.05));
       card.interval = 10 * MINUTE;
+    } else if (grade === 'hard'){
+      card.reps++;
+      card.ease = Math.max(1.3, (card.ease || 2.3) - 0.15);
+      card.interval = card.reps === 1 ? 15 * MINUTE : Math.max(DAY, Math.round((card.interval || DAY) * 1.2));
+    } else if (grade === 'easy'){
+      card.reps++;
+      card.ease = Math.min(2.9, (card.ease || 2.3) + 0.15);
+      card.interval = card.reps === 1 ? 4 * DAY : Math.min(365 * DAY, Math.max(4 * DAY, Math.round((card.interval || DAY) * 3)));
     } else if (!card.reps){
       card.reps=1;
       card.interval=10 * MINUTE;
@@ -194,6 +229,17 @@ function CrowQuiz(config){
     card.due=now + card.interval;
     card.updatedAt=now;
     save.cards[id]=card;
+  }
+  function ratingPreview(unitId, q, grade){
+    var id=cardId(unitId, stableQuestionKey(q)), card=(save.cards||{})[id] || { reps:0, interval:0 };
+    var interval;
+    if (grade === 'again') interval=10*MINUTE;
+    else if (grade === 'hard') interval=card.reps ? Math.max(DAY,Math.round((card.interval||DAY)*1.2)) : 15*MINUTE;
+    else if (grade === 'easy') interval=card.reps ? Math.max(4*DAY,Math.round((card.interval||DAY)*3)) : 4*DAY;
+    else if (!card.reps) interval=10*MINUTE;
+    else if (card.reps === 1) interval=DAY;
+    else interval=Math.min(365*DAY,Math.max((card.interval||DAY)+DAY,Math.round((card.interval||DAY)*(card.ease||2.3))));
+    return interval < DAY ? Math.round(interval/MINUTE)+'m' : Math.max(1,Math.round(interval/DAY))+'d';
   }
   function dueLabel(card){
     var ms=Math.max(0,(card.due||0)-Date.now());
@@ -271,6 +317,7 @@ function CrowQuiz(config){
       +   '<div class="sheet-inner">'
       +     '<div class="verdict"><span class="vmark" data-f="vmark">&#10003;</span><h3 data-f="vtext"></h3></div>'
       +     '<p class="explain" data-f="vexplain"></p>'
+      +     '<div class="rating" data-f="rating" hidden></div>'
       +     '<button class="btn good wide" data-f="continue">Continue</button>'
       +   '</div>'
       + '</div>'
@@ -619,8 +666,12 @@ function CrowQuiz(config){
     var s = state.session;
     var counted = !state.hinted;
     s.answered++;
-    scheduleCard(state.questionUnit || s.unit, state.question, success, state.hinted);
-    persist();
+    /* Practice creates a card from the observed answer. Review is different:
+       it waits for the learner's own recall rating before scheduling. */
+    if (!s.review){
+      scheduleCard(state.questionUnit || s.unit, state.question, success ? 'good' : 'again', state.hinted);
+      persist();
+    }
 
     if (success){
       if (counted){
@@ -642,12 +693,37 @@ function CrowQuiz(config){
       ? 'Hint used. No score this time.'
       : (success ? PRAISE[randInt(PRAISE.length)] : 'Not this time');
     dom.vexplain.textContent = state.question.explain || '';
+    dom.rating.hidden = !s.review;
+    dom['continue'].hidden = s.review;
+    if (s.review){
+      dom.rating.innerHTML = '';
+      ['again','hard','good','easy'].forEach(function(grade){
+        var labels={again:'Again',hard:'Hard',good:'Good',easy:'Easy'};
+        var button=el('button','btn sm rating-'+grade,labels[grade]+' · '+ratingPreview(state.questionUnit || s.unit,state.question,grade));
+        button.type='button';
+        button.onclick=function(){ rateReview(grade); };
+        dom.rating.appendChild(button);
+      });
+      dom.rating.querySelector('button').focus({ preventScroll:true });
+      return;
+    }
     dom['continue'].className = 'btn wide ' + (success && counted ? 'good' : (success ? '' : 'bad'));
     dom['continue'].textContent = (s.hearts <= 0 || s.index + 1 >= s.queue.length) ? 'See results' : 'Continue';
     dom['continue'].focus({ preventScroll:true });
   }
 
-  function hideSheet(){ if (dom.sheet) dom.sheet.className = 'sheet'; }
+  function rateReview(grade){
+    if (!state.session || !state.session.review || !state.locked) return;
+    scheduleCard(state.questionUnit || state.session.unit, state.question, grade, state.hinted);
+    persist();
+    advance();
+  }
+
+  function hideSheet(){
+    if (dom.sheet) dom.sheet.className = 'sheet';
+    if (dom.rating) { dom.rating.hidden=true; dom.rating.innerHTML=''; }
+    if (dom['continue']) dom['continue'].hidden=false;
+  }
 
   function advance(){
     var s = state.session;
@@ -712,7 +788,7 @@ function CrowQuiz(config){
     dom.modal.onclick = function(e){ if (e.target === dom.modal) dom.modal.hidden = true; };
 
     document.addEventListener('keydown', function(e){
-      if (e.key === 'Enter' && state.locked && dom.sheet.classList.contains('up')){
+      if (e.key === 'Enter' && state.locked && dom.sheet.classList.contains('up') && !state.session.review){
         e.preventDefault(); advance();
       }
       if (e.key === 'Escape' && !dom.modal.hidden) dom.modal.hidden = true;

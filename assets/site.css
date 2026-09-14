@@ -531,6 +531,13 @@ a.subject:active{ transform:translateY(3px); border-bottom-width:2px; margin-bot
 .explain{ margin:0; font-size:16px; font-weight:700; color:var(--ink-2); }
 .sheet.right .explain{ color:var(--good-shelf); }
 .sheet.wrong .explain{ color:var(--bad-shelf); }
+.rating{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+.rating .btn{ min-width:0; padding:9px 4px; font-size:13px; }
+.rating-again{ background:var(--bad); box-shadow:0 var(--shelf) 0 var(--bad-shelf); }
+.rating-hard{ background:var(--gold); box-shadow:0 var(--shelf) 0 var(--gold-shelf); color:#382800; }
+.rating-good{ background:var(--good); box-shadow:0 var(--shelf) 0 var(--good-shelf); }
+.rating-easy{ background:var(--brand); box-shadow:0 var(--shelf) 0 var(--brand-shelf); }
+@media(max-width:460px){ .rating{ grid-template-columns:repeat(2,1fr); } }
 
 /* ---------- results ---------- */
 .result{ text-align:center; padding:26px 0 10px; }
