@@ -178,9 +178,10 @@ function CrowQuiz(config){
     });
   }
   var EXTRA = config.extra || { label:'Lessons', title:'Lessons', build:buildLessonReference, asTab:true };
-  /* A compact SM-2-inspired scheduler. New cards take a short learning step,
-     then move to a day and grow by an adaptive ease factor. A miss or hint
-     puts the card back into short relearning instead of treating it as known. */
+  /* FSRS-6 models each card's stability, difficulty, and retrievability. The
+     official scheduler uses a learner's growing review history rather than a
+     fixed ease multiplier. We retain its complete card state in each course
+     save, so account sync carries the model between devices. */
   var MINUTE = 60 * 1000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
   function stableQuestionKey(q){
     return [q.type || '', q.tag || '', q.headlineHtml || q.headline || '', q.sub || '', q.answer || '', q.hanzi || ''].join('~');
@@ -206,47 +207,39 @@ function CrowQuiz(config){
     if (window.CrowCloud && window.CrowCloud.setReviewGuideHidden) window.CrowCloud.setReviewGuideHidden(hidden);
     else try{localStorage.setItem('crowstudies:review-guide-hidden',hidden?'1':'0');}catch(e){}
   }
+  function fsrsScheduler(){
+    var retention=window.CrowCloud&&window.CrowCloud.reviewRetention ? window.CrowCloud.reviewRetention() : 0.9;
+    return window.FSRS && window.FSRS.fsrs ? window.FSRS.fsrs({request_retention:retention,maximum_interval:36500,enable_fuzz:false,enable_short_term:true,learning_steps:['10m'],relearning_steps:['10m']}) : null;
+  }
+  function fsrsCard(card, now){
+    var lib=window.FSRS, stored=card && card.fsrs;
+    if (!stored) {
+      if (card && card.reps){
+        return {due:new Date(card.due||now.getTime()),stability:Math.max(.1,(card.interval||DAY)/DAY),difficulty:5,elapsed_days:0,scheduled_days:Math.max(1,Math.round((card.interval||DAY)/DAY)),reps:card.reps||0,lapses:card.lapses||0,learning_steps:0,state:2,last_review:new Date(card.updatedAt||now.getTime())};
+      }
+      return lib.createEmptyCard(now);
+    }
+    return {due:new Date(stored.due),stability:stored.stability,difficulty:stored.difficulty,elapsed_days:stored.elapsed_days||0,scheduled_days:stored.scheduled_days||0,reps:stored.reps||0,lapses:stored.lapses||0,learning_steps:stored.learning_steps||0,state:stored.state,last_review:stored.last_review?new Date(stored.last_review):undefined};
+  }
+  function ratingNumber(grade){ return {again:1,hard:2,good:3,easy:4}[grade] || 3; }
+  function applyFsrs(card, next, now){
+    card.fsrs={due:next.due.getTime(),stability:next.stability,difficulty:next.difficulty,elapsed_days:next.elapsed_days,scheduled_days:next.scheduled_days,reps:next.reps,lapses:next.lapses,learning_steps:next.learning_steps,state:next.state,last_review:next.last_review&&next.last_review.getTime()};
+    card.reps=next.reps; card.lapses=next.lapses; card.interval=Math.max(0,next.due.getTime()-now.getTime()); card.due=next.due.getTime(); card.updatedAt=now.getTime();
+  }
   function scheduleCard(unitId, q, grade, hinted){
     if (!save.cards) save.cards={};
-    var key=stableQuestionKey(q), id=cardId(unitId,key), now=Date.now();
-    var card=save.cards[id] || { id:id, unit:unitId, key:key, reps:0, lapses:0, interval:0, ease:2.3, due:now };
-    if (grade === 'again' || hinted){
-      card.lapses += grade === 'again' ? 1 : 0;
-      card.reps = Math.max(0, card.reps - 1);
-      card.ease = Math.max(1.3, (card.ease || 2.3) - (grade === 'again' ? 0.2 : 0.05));
-      card.interval = 10 * MINUTE;
-    } else if (grade === 'hard'){
-      card.reps++;
-      card.ease = Math.max(1.3, (card.ease || 2.3) - 0.15);
-      card.interval = card.reps === 1 ? 6 * HOUR : Math.max(6 * HOUR, Math.round((card.interval || DAY) * 1.2));
-    } else if (grade === 'easy'){
-      card.reps++;
-      card.ease = Math.min(2.9, (card.ease || 2.3) + 0.15);
-      card.interval = card.reps === 1 ? 4 * DAY : Math.min(365 * DAY, Math.max(4 * DAY, Math.round((card.interval || DAY) * 3)));
-    } else if (!card.reps){
-      card.reps=1;
-      card.interval=10 * MINUTE;
-    } else if (card.reps === 1){
-      card.reps=2;
-      card.interval=DAY;
-    } else {
-      card.reps++;
-      card.ease=Math.min(2.7, (card.ease || 2.3) + 0.03);
-      card.interval=Math.min(365 * DAY, Math.max(card.interval + DAY, Math.round(card.interval * card.ease)));
-    }
-    card.due=now + card.interval;
-    card.updatedAt=now;
+    var key=stableQuestionKey(q), id=cardId(unitId,key), now=new Date(), card=save.cards[id] || {id:id,unit:unitId,key:key};
+    var scheduler=fsrsScheduler();
+    if (!scheduler) return;
+    var result=scheduler.next(fsrsCard(card,now),now, ratingNumber(hinted?'again':grade)), next=result.card;
+    applyFsrs(card,next,now);
+    card.history=(card.history||[]).concat({at:now.getTime(),rating:ratingNumber(hinted?'again':grade),elapsedDays:result.log.elapsed_days,state:result.log.state}).slice(-200);
     save.cards[id]=card;
   }
   function ratingPreview(unitId, q, grade){
-    var id=cardId(unitId, stableQuestionKey(q)), card=(save.cards||{})[id] || { reps:0, interval:0 };
-    var interval;
-    if (grade === 'again') interval=10*MINUTE;
-    else if (grade === 'hard') interval=card.reps ? (card.reps===1 ? 6*HOUR : Math.max(6*HOUR,Math.round((card.interval||DAY)*1.2))) : 15*MINUTE;
-    else if (grade === 'easy') interval=card.reps ? Math.max(4*DAY,Math.round((card.interval||DAY)*3)) : 4*DAY;
-    else if (!card.reps) interval=10*MINUTE;
-    else if (card.reps === 1) interval=DAY;
-    else interval=Math.min(365*DAY,Math.max((card.interval||DAY)+DAY,Math.round((card.interval||DAY)*(card.ease||2.3))));
+    var scheduler=fsrsScheduler(), id=cardId(unitId,stableQuestionKey(q)), card=(save.cards||{})[id] || {id:id,unit:unitId,key:stableQuestionKey(q)}, now=new Date();
+    if (!scheduler) return '—';
+    var due=scheduler.repeat(fsrsCard(card,now),now)[ratingNumber(grade)].card.due.getTime(), interval=Math.max(0,due-now.getTime());
     if (interval < HOUR) return Math.max(1,Math.round(interval/MINUTE))+'m';
     return interval < DAY ? Math.round(interval/HOUR)+'h' : Math.max(1,Math.round(interval/DAY))+'d';
   }
@@ -416,7 +409,7 @@ function CrowQuiz(config){
     dom.sessions.textContent = save.sessions;
     var due=dueCards(), available=reviewableCards();
     dom.reviewDue.disabled=!available.length;
-    dom.reviewDue.textContent=due.length ? 'Review '+due.length+' due' : 'Review cards';
+    dom.reviewDue.textContent=due.length ? 'Review '+due.length+' due' : (available.length ? 'Review '+available.length+' cards' : 'Review cards');
     dom.reviewDue.title=available.length ? 'Practice previously seen cards; due cards appear first.' : 'Answer practice questions first to create review cards.';
 
     var visibleUnits = HOME_TABS
