@@ -199,14 +199,6 @@ function CrowQuiz(config){
       return (a.due||0) - (b.due||0);
     });
   }
-  function reviewGuideHidden(){
-    if (window.CrowCloud && window.CrowCloud.reviewGuideHidden) return window.CrowCloud.reviewGuideHidden();
-    try{return localStorage.getItem('crowstudies:review-guide-hidden') === '1';}catch(e){return false;}
-  }
-  function setReviewGuideHidden(hidden){
-    if (window.CrowCloud && window.CrowCloud.setReviewGuideHidden) window.CrowCloud.setReviewGuideHidden(hidden);
-    else try{localStorage.setItem('crowstudies:review-guide-hidden',hidden?'1':'0');}catch(e){}
-  }
   function fsrsScheduler(){
     var retention=window.CrowCloud&&window.CrowCloud.reviewRetention ? window.CrowCloud.reviewRetention() : 0.9;
     return window.FSRS && window.FSRS.fsrs ? window.FSRS.fsrs({request_retention:retention,maximum_interval:36500,enable_fuzz:false,enable_short_term:true,learning_steps:['10m'],relearning_steps:['10m']}) : null;
@@ -278,6 +270,7 @@ function CrowQuiz(config){
       +       '<div class="progresstrack"><div class="progressfill" data-f="progress"></div></div>'
       +       '<div class="attempts" data-f="hearts" aria-label="Attempts remaining"></div>'
       +     '</div>'
+      +     '<div class="review-mode-help" data-f="reviewModeHelp" hidden><button type="button" data-f="reviewInfoOpen"><i aria-hidden="true">?</i> Review mode</button></div>'
       +     '<div data-f="question"></div>'
       +     '<div class="hintrow"><button class="hintbtn" data-f="hint">Show me a hint</button></div>'
       +   '</section>'
@@ -327,11 +320,12 @@ function CrowQuiz(config){
       +   '<div class="modal"><h3>Hint</h3><p data-f="modalText"></p>'
       +   '<button class="btn wide" data-f="modalClose">Got it</button></div>'
       + '</div>'
-      + '<div class="backdrop" data-f="reviewGuide" hidden>'
-      +   '<div class="modal"><h3>How Review works</h3>'
-      +   '<p>Answer from memory, then choose how it felt. <b>Again</b> brings it back soon; <b>Hard</b> gives a short interval; <b>Good</b> uses the normal interval; <b>Easy</b> waits longer.</p>'
-      +   '<label class="setting-toggle"><span><b>Don\'t show this again</b><small>You can change this in Account settings.</small></span><input type="checkbox" data-f="reviewGuideSkip"><i aria-hidden="true"></i></label>'
-      +   '<button class="btn wide" data-f="reviewGuideStart">Start reviewing</button></div>'
+      + '<div class="backdrop" data-f="reviewInfo" hidden>'
+      +   '<div class="modal review-info"><div class="review-info-mark" aria-hidden="true">↻</div><h3>Review mode</h3>'
+      +   '<p>These cards return at the moment you are most likely to need them. Try to recall before looking at the answer, then rate the effort honestly.</p>'
+      +   '<div class="review-info-ratings"><span><b>Again</b> I missed it</span><span><b>Hard</b> I got it, barely</span><span><b>Good</b> I recalled it</span><span><b>Easy</b> Instant recall</span></div>'
+      +   '<p class="review-info-note">Your choice sets the next review time. The schedule adapts to your history and retention setting.</p>'
+      +   '<button class="btn wide" data-f="reviewInfoClose">Got it</button></div>'
       + '</div>';
 
     root.querySelectorAll('[data-f]').forEach(function(n){ dom[n.dataset.f] = n; });
@@ -542,6 +536,7 @@ function CrowQuiz(config){
       answered:0, correct:0, run:0, bestRun:0, hearts:HEARTS, xp:0
     };
     state.lastQuestionKey = '';
+    dom.reviewModeHelp.hidden=!reviewCards;
     showScreen('session');
     renderHearts();
     nextItem();
@@ -782,11 +777,7 @@ function CrowQuiz(config){
     if (cards.length) startSession(cards[0].unit, cards);
   }
   function openReview(){
-    if (!reviewableCards().length) return;
-    if (reviewGuideHidden()){ startReview(); return; }
-    dom.reviewGuideSkip.checked=false;
-    dom.reviewGuide.hidden=false;
-    dom.reviewGuideStart.focus({ preventScroll:true });
+    startReview();
   }
 
   /* ---------- wiring ---------- */
@@ -804,11 +795,9 @@ function CrowQuiz(config){
       } else startSession(state.session ? state.session.unit : UNITS[0].id);
     };
     dom.reviewDue.onclick = openReview;
-    dom.reviewGuideStart.onclick = function(){
-      if (dom.reviewGuideSkip.checked) setReviewGuideHidden(true);
-      dom.reviewGuide.hidden=true;
-      startReview();
-    };
+    dom.reviewInfoOpen.onclick = function(){ dom.reviewInfo.hidden=false; dom.reviewInfoClose.focus({preventScroll:true}); };
+    dom.reviewInfoClose.onclick = function(){ dom.reviewInfo.hidden=true; };
+    dom.reviewInfo.onclick = function(e){ if(e.target===dom.reviewInfo) dom.reviewInfo.hidden=true; };
     dom['continue'].onclick = advance;
     dom.extraBack.onclick = function(){ renderHome(); showScreen('home'); };
     dom.hint.onclick = function(){
