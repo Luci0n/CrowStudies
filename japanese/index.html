@@ -6,7 +6,8 @@
 <title>Japanese kana · CrowStudies</title>
 <meta name="description" content="Learn all 46 hiragana and 46 katakana row by row, with mnemonics, practice, and help for look-alike characters.">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+JP:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap">
-<link rel="stylesheet" href="../assets/site.css?v=mobile-writing-20260910">
+<script src="../assets/theme.js?v=palette-families-20260912"></script>
+<link rel="stylesheet" href="../assets/site.css?v=terrain-mobile-20260913">
 <style>
   .jp{ font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif; }
   .disc{ font-family:"Noto Sans JP","Space Grotesk",sans-serif; font-weight:500; font-size:26px; }
@@ -41,25 +42,17 @@
   .pairside .romaji{ font-family:"Space Grotesk",sans-serif; font-weight:650; font-size:20px; color:var(--brand); }
   .pairside .tell{ display:block; font-size:13px; color:var(--ink-3); margin-top:6px; line-height:1.35; }
 
-  .writing{ background:var(--well); border:1px solid var(--line); border-radius:8px; padding:14px; }
-  .writerbox{ width:270px; max-width:100%; margin:0 auto; touch-action:none; }
-  /* The writer host fills the square. Keeping the SVG at auto height pinned
-     a number of kana to its top edge instead of the centre guide. */
-  .writerbox svg{ display:block; width:100%; height:100%; }
-  .writer-status{ min-height:22px; text-align:center; color:var(--ink-3); font-size:14px; font-weight:700; margin:8px 0 0; }
-  .writer-actions{ display:flex; justify-content:center; gap:10px; flex-wrap:wrap; }
-  .writer-actions .btn{ width:auto; padding:11px 15px; font-size:14px; }
-
   @media (max-width:560px){
     .bigkana{ font-size:88px; }
     .kanagrid{ grid-template-columns:repeat(3,1fr); gap:8px; }
     .kanacard .glyph{ font-size:40px; }
     .kanacard .mnem{ font-size:12px; }
-    .writerbox{ width:250px; }
+
   }
 </style>
 </head>
 <body>
+<script src="../assets/topography.js?v=terrain-mobile-20260913"></script>
 
 <header class="sitehead">
   <div class="inner">
@@ -77,7 +70,7 @@
 
 <div id="app"></div>
 
-<script type="module" src="../assets/firebase.js?v=20260909-32"></script>
+<script type="module" src="../assets/firebase.js?v=steady-list-20260912"></script>
 <script>
 /**
  * Hanzi Writer v3.7.3 | https://chanind.github.io/hanzi-writer
@@ -87,7 +80,8 @@ var HanziWriter=function(){"use strict";var t,e,r;const i="undefined"==typeof wi
 //# sourceMappingURL=hanzi-writer.min.js.map
 
 </script>
-<script src="../assets/quiz.js?v=writing-direct-20260914"></script>
+<script src="../assets/stroke-practice.js?v=kana-kanjivg-20260912"></script>
+<script src="../assets/quiz.js?v=linear-lessons-20260914"></script>
 <script>
 (function(){
   "use strict";
@@ -354,14 +348,14 @@ var HanziWriter=function(){"use strict";var t,e,r;const i="undefined"==typeof wi
   var ROW_BODY = {
     a:'Everything else is built on these five vowel sounds, always in this order: a, i, u, e, o. Learn the order now and every chart afterwards makes sense.',
     ka:'Each row is a consonant plus those same five vowels. Here it is k: ka, ki, ku, ke, ko.',
-      sa:'The s row has one catch: し is conventionally romanised “shi” (rather than “si” in Hepburn-style spelling). Listen for its softer sh-like sound.',
-      ta:'The t row has two catches: ち is conventionally “chi”, and つ is “tsu”. These spellings are conventions for Japanese sounds, so use the audio as well as the letters.',
+    sa:'The s row has one catch: the second one is “shi”, not “si”. Japanese has no “si” sound.',
+    ta:'The t row has two catches: “chi” instead of “ti”, and “tsu” instead of “tu”.',
     na:'The n row is regular: na, ni, nu, ne, no. Watch ぬ and ね because they are easy to swap.',
-      ha:'The h row has ふ / フ (“fu”) in the middle. Its sound is made with both lips and is softer than English “foo”; use the audio rather than forcing it into an English f or h.',
+    ha:'The h row has “fu” in the middle. It is a soft sound, halfway between f and h.',
     ma:'The m row: ma, mi, mu, me, mo. All five, no exceptions.',
-      ya:'Only three modern basic kana appear here: ya, yu, and yo. Treat them as a short row rather than trying to fill five slots.',
-      ra:'The r row is usually a quick tongue tap, not an English r or l. Listen, then aim for a light single tap.',
-      wa:'わ is wa. を is written wo but is usually pronounced o when it marks an object. ん is the only basic kana that represents a consonant on its own.'
+    ya:'Only three here. Japanese dropped yi and ye centuries ago.',
+    ra:'The r row sits between English r and l. Make it with a light tap of the tongue.',
+    wa:'Two survivors and one special: ん is the only kana that is a consonant on its own.'
   };
 
   function scriptUnits(setName, set, wide, colors){
@@ -428,27 +422,41 @@ var HanziWriter=function(){"use strict";var t,e,r;const i="undefined"==typeof wi
   function fullKanaWriteGen(pool){ return cycle(pool, kanaWriteQuestion); }
   function kanaWritingType(area, q, api){
     var box=document.createElement('div'); box.className='writing';
-    var stage=document.createElement('div'); stage.className='writer-stage';
+    var stage=document.createElement('div'); stage.className='writer-stage locked';
     var host=document.createElement('div'); host.className='writerbox';
     var actions=document.createElement('div'); actions.className='writer-actions';
-    var status=document.createElement('div'); status.className='writer-status'; status.textContent='Drawing is active. Draw the first stroke.';
-    stage.appendChild(host); box.appendChild(stage); box.appendChild(actions); box.appendChild(status); area.appendChild(box);
-    var writer=HanziWriter.create(host,q.kana,{width:270,height:270,padding:12,showOutline:true,showCharacter:false,strokeColor:'#f1f4fb',outlineColor:'#374154',drawingColor:'#d64a86',highlightColor:'#f2b94b',drawingWidth:26,drawingFadeDuration:900,charDataLoader:function(ch){return fetch('../assets/kana-data/'+encodeURIComponent(ch)+'.json').then(function(r){if(!r.ok)throw new Error('Kana data unavailable');return r.json();});}});
+    var status=document.createElement('div'); status.className='writer-status'; status.textContent='Draw the first stroke. Watch order will show you how.';
+    stage.appendChild(host); box.appendChild(stage); box.appendChild(status); box.appendChild(actions); area.appendChild(box);
+    var writer=HanziWriter.create(host,q.kana,{width:300,height:300,padding:18,showOutline:true,showCharacter:false,strokeColor:'#f1f4fb',outlineColor:'#374154',drawingColor:'#d64a86',highlightColor:'#f2b94b',drawingWidth:26,drawingFadeDuration:900,charDataLoader:function(ch){return fetch('../assets/kana-data/'+encodeURIComponent(ch)+'.json').then(function(r){if(!r.ok)throw new Error('Kana data unavailable');return r.json();});}});
     var started=false, expectedStroke=0, memoryMode=localStorage.getItem('crowstudies:japanese:memory-writing')==='1';
     var promptHeading=area.querySelector('.qhead');
-    function setMemoryMode(on){ memoryMode=on; memoryInput.checked=on; memoryState.textContent=on?'On':'Off'; localStorage.setItem('crowstudies:japanese:memory-writing',on?'1':'0'); if(promptHeading) promptHeading.hidden=on; if(on) writer.hideOutline({duration:0}); else writer.showOutline({duration:0}); }
-    function setState(active){ stage.classList.toggle('locked',!active); stage.classList.toggle('ready',active); stage.classList.remove('watching'); host.setAttribute('aria-disabled',active?'false':'true'); hint.disabled=!active; memoryInput.disabled=active; }
-    function start(){ if(started)return; started=true; expectedStroke=0; setState(true); status.textContent=memoryMode?'Memory mode: the character and outline are hidden. Draw the first stroke.':'Drawing is active. Draw the first stroke; the guide appears after one miss.'; writer.quiz({leniency:1.1,showHintAfterMisses:1,onMistake:function(){status.textContent='That is not the next stroke. Try again, or use Show next stroke.';},onCorrectStroke:function(info){expectedStroke=info.strokeNum+1;status.textContent='Stroke '+info.strokeNum+' is in. Keep going.';},onComplete:function(){status.textContent='Complete.';api.finish(true);}}); }
+    var promptOriginal=promptHeading?promptHeading.innerHTML:'';
+    function kanaScript(ch){ var code=(ch||'').charCodeAt(0); if(code>=0x30A0&&code<=0x30FF)return 'katakana'; if(code>=0x3041&&code<=0x309F)return 'hiragana'; return ''; }
+    /* Hiding the heading takes away the character, which is the point, but it
+       also took away the only thing saying which of the two alphabets to write
+       it in: the reading underneath is the same for へ and ヘ. */
+    function setPrompt(hide){
+      if(!promptHeading)return;
+      var script=hide?kanaScript(q.kana):'';
+      if(script){ promptHeading.hidden=false; promptHeading.textContent='Write this in '+script+'.'; }
+      else if(hide){ promptHeading.hidden=true; }
+      else { promptHeading.hidden=false; promptHeading.innerHTML=promptOriginal; }
+    }
+    function setMemoryMode(on){ memoryMode=on; memoryInput.checked=on; memoryState.textContent=on?'On':'Off'; localStorage.setItem('crowstudies:japanese:memory-writing',on?'1':'0'); setPrompt(on); if(on) writer.hideOutline({duration:0}); else writer.showOutline({duration:0}); }
+    function setState(active){ stage.classList.toggle('locked',!active); stage.classList.toggle('ready',active); stage.classList.remove('watching'); host.setAttribute('aria-disabled',active?'false':'true'); }
+    function start(){ if(started)return; started=true; expectedStroke=0; setState(true); status.textContent=memoryMode?'Memory mode: the character and outline are hidden. Draw the first stroke.':'Draw the first stroke. The guide appears after one miss.'; writer.quiz({leniency:1.1,showHintAfterMisses:memoryMode?999:1,onMistake:function(){status.textContent='That is not the next stroke. Try again, or use Show next stroke.';},onCorrectStroke:function(info){expectedStroke=info.strokeNum+1;window.CrowStroke.clearHint(host);status.textContent='Stroke '+info.strokeNum+' is in. Keep going.';},onComplete:function(){status.textContent='Complete.';stage.classList.add('done');api.finish(true);}}); }
     var watch=document.createElement('button'); watch.className='btn ghost'; watch.textContent='Watch order';
     var hint=document.createElement('button'); hint.className='btn ghost'; hint.textContent='Show next stroke';
     var memoryToggle=document.createElement('label'); memoryToggle.className='memory-switch'; memoryToggle.innerHTML='<span class="memory-label">Practice from memory <small id="memory-state">Off</small></span><input type="checkbox" role="switch" aria-label="Practice from memory"><i aria-hidden="true"></i>';
     var memoryInput=memoryToggle.querySelector('input'), memoryState=memoryToggle.querySelector('#memory-state');
-    watch.onclick=function(){writer.cancelQuiz();started=false;setState(false);stage.classList.add('watching');status.textContent='Watching the sequence. Drawing resumes when it finishes.';writer.animateCharacter({strokeAnimationSpeed:1.2,delayBetweenStrokes:220}).then(start);};
-    hint.onclick=function(){if(!started)return;writer.highlightStroke(expectedStroke);status.textContent='The highlighted stroke is next.';};
-    memoryInput.onchange=function(){if(started)return;setMemoryMode(memoryInput.checked);status.textContent=memoryMode?'Memory mode is on. Only the pinyin and meaning remain visible.':'Guided mode is on. The reference outline is visible.';};
-    actions.appendChild(watch);actions.appendChild(hint);box.insertBefore(memoryToggle,stage);
+    watch.onclick=function(){writer.cancelQuiz();started=false;setState(false);stage.classList.add('watching');status.textContent='Watch the order. You can write again as soon as it finishes.';writer.animateCharacter({strokeAnimationSpeed:1.2,delayBetweenStrokes:220,onComplete:function(){start();}});};
+
+    hint.onclick=function(){ if(!started) start(); status.textContent='This is the next stroke, drawn in its own direction.'; window.CrowStroke.showStroke(host,'../assets/kana-data/'+encodeURIComponent(q.kana)+'.json',expectedStroke).then(function(shown){ if(!shown) status.textContent='There is no stroke left to show.'; }); };
+    memoryInput.onchange=function(){ /* The quiz begins as soon as the card is drawn, so turning the switch away once it had started meant turning it away always: the box moved and nothing else did, and the choice was never written down. Switching restarts the character under the mode you asked for. */ var running=started; if(running){ writer.cancelQuiz(); started=false; } setMemoryMode(memoryInput.checked); if(running) start(); if(memoryMode) writer.hideOutline({duration:0}); else writer.showOutline({duration:0}); status.textContent=memoryMode?'Memory mode is on. Only the reading and meaning remain visible.':'Guided mode is on. The reference outline is visible.'; };
+    actions.appendChild(watch);actions.appendChild(hint);var top=document.createElement('div'); top.className='writer-top'; top.appendChild(memoryToggle); box.insertBefore(top,stage);
     setMemoryMode(memoryMode);
-    start();
+    setState(false);
+    setTimeout(function(){ window.CrowStroke.fit(host,300); start(); },0);
   }
 
   /* look-alikes */
