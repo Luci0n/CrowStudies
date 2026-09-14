@@ -337,6 +337,7 @@ function CrowQuiz(config){
     var due=dueCards(), available=reviewableCards();
     dom.reviewDue.disabled=!available.length;
     dom.reviewDue.textContent=due.length ? 'Review '+due.length+' due' : 'Review cards';
+    dom.reviewDue.title=available.length ? 'Practice previously seen cards; due cards appear first.' : 'Answer practice questions first to create review cards.';
 
     var visibleUnits = HOME_TABS
       ? UNITS.filter(function(u){ return (u.homeTab || HOME_TABS[0].id) === activeHomeTab; })
@@ -360,8 +361,9 @@ function CrowQuiz(config){
     visibleUnits.forEach(function(u, i){
       var rec = save.units[u.id] || { done:0, best:0, total:0 };
       var unitDue=dueCards(u.id);
-      var btn = el('button', 'unit' + (rec.done>0 ? ' done' : (i===next ? ' next' : '')));
-      btn.style.setProperty('--u', u.color);
+      var row = el('div', 'unitrow');
+      var card = el('article', 'unit' + (rec.done>0 ? ' done' : (i===next ? ' next' : '')));
+      card.style.setProperty('--u', u.color);
 
       var disc = el('span', 'disc');
       disc.innerHTML = rec.done>0
@@ -384,11 +386,14 @@ function CrowQuiz(config){
         txt.appendChild(meter);
       }
 
-      btn.appendChild(disc);
-      btn.appendChild(txt);
-      btn.appendChild(el('span', 'chev', '›'));
-      btn.onclick = function(){ startSession(u.id); };
-      dom.path.appendChild(btn);
+      var practice = el('button', 'btn sm unit-practice', 'Practice');
+      practice.type = 'button';
+      practice.onclick = function(){ startSession(u.id); };
+      card.appendChild(disc);
+      card.appendChild(txt);
+      card.appendChild(practice);
+      row.appendChild(card);
+      dom.path.appendChild(row);
     });
   }
 
