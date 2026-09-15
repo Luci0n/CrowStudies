@@ -45,6 +45,16 @@
     }catch(e){}
   }
   window.CrowSpeak = function(text, lang, rate){
+    var local = window.CrowLocalAudio && window.CrowLocalAudio[lang];
+    var source = typeof local === 'function' ? local(text) : (local && local[text]);
+    if(source){
+      try{
+        var recording = new Audio(source);
+        recording.addEventListener('error', function(){ fallbackAudio(text, lang); }, {once:true});
+        recording.play().catch(function(){ fallbackAudio(text, lang); });
+        return true;
+      }catch(e){ fallbackAudio(text, lang); return false; }
+    }
     if (!synth || !('SpeechSynthesisUtterance' in window)){ fallbackAudio(text, lang); return false; }
     var request = ++pending;
     clearTimeout(timer);
