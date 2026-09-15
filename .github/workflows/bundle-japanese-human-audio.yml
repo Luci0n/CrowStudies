@@ -1,0 +1,49 @@
+name: Bundle Japanese human kana recordings
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/bundle-japanese-human-audio.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and bundle public-domain kana recordings
+        shell: bash
+        run: |
+          set -euo pipefail
+          declare -A files=(
+            [3042]='Ja-A.oga' [3044]='Japanese I.ogg' [3046]='Japanese U.ogg' [3048]='Ja-E.oga' [304A]='Japanese O.ogg'
+            [304B]='Japanese ka.ogg' [304D]='Japanese ki.ogg' [304F]='Japanese ku.ogg' [3051]='Japanese ke.ogg' [3053]='Japanese ko.ogg'
+            [3055]='Japanese sa.ogg' [3057]='Japanese shi.ogg' [3059]='Japanese su.ogg' [305B]='Japanese se.ogg' [305D]='Japanese so.ogg'
+            [305F]='Japanese ta.ogg' [3061]='Japanese ti.ogg' [3064]='Japanese tsu.ogg' [3066]='Japanese te.ogg' [3068]='Japanese to.ogg'
+            [306A]='Japanese na.ogg' [306B]='Japanese ni.ogg' [306C]='Japanese nu.ogg' [306D]='Japanese ne.ogg' [306E]='Japanese no.ogg'
+            [306F]='Japanese ha.ogg' [3072]='Japanese hi.ogg' [3075]='Japanese hu.ogg' [3078]='Japanese he.ogg' [307B]='Japanese ho.ogg'
+            [307E]='Japanese ma.ogg' [307F]='Japanese mi.ogg' [3080]='Japanese mu.ogg' [3081]='Japanese me.ogg' [3082]='Japanese mo.ogg'
+            [3084]='Japanese ya.ogg' [3086]='Japanese yu.ogg' [3088]='Japanese yo.ogg'
+            [3089]='Japanese ra.ogg' [308A]='Japanese ri.ogg' [308B]='Japanese ru.ogg' [308C]='Japanese re.ogg' [308D]='Japanese ro.ogg'
+            [308F]='Japanese wa.ogg' [3092]='Japanese wo.ogg' [3093]='Japanese N.ogg'
+          )
+          mkdir -p /tmp/kana
+          for code in "${!files[@]}"; do
+            name="${files[$code]}"
+            curl --fail --location --retry 4 --retry-delay 3 --user-agent 'CrowStudies educational audio bundler' \
+              --output "/tmp/kana/U${code}.ogg" \
+              "https://en.wikipedia.org/wiki/Special:Redirect/file/${name// /%20}"
+            ffmpeg -y -v error -i "/tmp/kana/U${code}.ogg" \
+              -af 'silenceremove=start_periods=1:start_duration=0.05:start_threshold=-45dB:stop_periods=1:stop_duration=0.18:stop_threshold=-45dB,loudnorm=I=-18:TP=-1.5:LRA=7' \
+              -codec:a libmp3lame -q:a 4 "assets/pronunciation/japanese/U${code}.mp3"
+          done
+      - name: Commit bundled recordings
+        run: |
+          git config user.name 'CrowStudies audio builder'
+          git config user.email 'actions@github.com'
+          git add assets/pronunciation/japanese
+          git diff --cached --quiet || git commit -m 'Bundle public-domain human Japanese kana audio'
+          git push
