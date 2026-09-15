@@ -32,7 +32,7 @@
    queue as well as the new letter. Waiting one event turn makes the cancel
    reliable and selecting a voice after voiceschanged covers late-loading voices. */
 (function(){
-  var synth = window.speechSynthesis, pending = 0, timer = null, voices = [];
+  var synth = window.speechSynthesis, pending = 0, timer = null, voices = [], localRecording = null;
   function refreshVoices(){ voices = synth && synth.getVoices ? synth.getVoices() : []; }
   if (synth){ refreshVoices(); synth.onvoiceschanged = refreshVoices; }
   function fallbackAudio(text, lang){
@@ -49,9 +49,12 @@
     var source = typeof local === 'function' ? local(text) : (local && local[text]);
     if(source){
       try{
-        var recording = new Audio(source);
-        recording.addEventListener('error', function(){ fallbackAudio(text, lang); }, {once:true});
-        recording.play().catch(function(){ fallbackAudio(text, lang); });
+        if (localRecording) { localRecording.pause(); localRecording.currentTime = 0; }
+        localRecording = new Audio(source);
+        localRecording.preload = 'auto';
+        localRecording.volume = 1;
+        localRecording.addEventListener('error', function(){ fallbackAudio(text, lang); }, {once:true});
+        localRecording.play().catch(function(){ fallbackAudio(text, lang); });
         return true;
       }catch(e){ fallbackAudio(text, lang); return false; }
     }
