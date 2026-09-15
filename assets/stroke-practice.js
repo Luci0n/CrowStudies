@@ -12,39 +12,15 @@ window.CrowStroke = (function(){
   var SVG = 'http://www.w3.org/2000/svg';
   var pending = {};
 
-  /* Kana is deliberately kept in two separate source folders. A character
-     such as り must never silently resolve to its katakana counterpart リ. */
+  /* Japanese kana data is bundled per exact Unicode character. */
   function kanaDataPath(character){
-    var code = (character || '').charCodeAt(0);
-    var script = code >= 0x3041 && code <= 0x3096 ? 'hiragana' :
-      code >= 0x30A1 && code <= 0x30FA ? 'katakana' : null;
-    if (!script) throw new Error('Unsupported kana character');
-    return '../assets/kana-stroke-data/' + script + '/' + encodeURIComponent(character) + '.json';
+    return '../assets/kana-data/' + encodeURIComponent(character) + '.json';
   }
 
-  /* kana-svg-data stores normal SVG coordinates (Y grows downward), while
-     HanziWriter's character space grows upward. Convert the source once so
-     the guide is never vertically reversed and the hit-test medians match it. */
-  function flipKanaPath(path){
-    return path.replace(/([MCQ])([^MCQZ]+)/g, function(_, command, coordinates){
-      var values = coordinates.match(/-?\d+(?:\.\d+)?/g) || [];
-      return command + values.map(function(value, index){
-        return index % 2 ? String(1024 - Number(value)) : value;
-      }).join(' ');
-    });
-  }
-
-  /* kana-svg-data stores stroke paths as { value: ... }. HanziWriter and the
-     hint renderer both use the compact arrays below, so normalize once here. */
+  /* Kept for source compatibility: the bundled Japanese records already use
+     HanziWriter's {strokes, medians} format and preserve real pen strokes. */
   function normalizeKanaData(data){
-    if (!data || !Array.isArray(data.strokes) || !data.strokes.length ||
-        typeof data.strokes[0] === 'string') return data;
-    return {
-      strokes: data.strokes.map(function(stroke){ return flipKanaPath(stroke.value); }),
-      medians: (data.medians || []).map(function(median){
-        return median.value.map(function(point){ return [point[0], 1024 - point[1]]; });
-      })
-    };
+    return data;
   }
 
   function characterData(url){
