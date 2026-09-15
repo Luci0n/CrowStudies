@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: ['.github/workflows/bundle-japanese-human-audio.yml']
+  schedule:
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -33,14 +35,23 @@ jobs:
             [308F]='Japanese wa.ogg' [3092]='Japanese wo.ogg' [3093]='Japanese N.ogg'
           )
           mkdir -p /tmp/kana
+          marker='assets/pronunciation/japanese/.human-recordings'
+          touch "$marker"
+          downloaded=0
           for code in "${!files[@]}"; do
+            grep -qx "$code" "$marker" && continue
             name="${files[$code]}"
-            curl --fail --location --retry 4 --retry-delay 3 --user-agent 'CrowStudies educational audio bundler' \
+            if ! curl --fail --location --retry 1 --connect-timeout 10 --max-time 30 --user-agent 'CrowStudies educational audio bundler' \
               --output "/tmp/kana/U${code}.ogg" \
-              "https://en.wikipedia.org/wiki/Special:Redirect/file/${name// /%20}"
+              "https://en.wikipedia.org/wiki/Special:Redirect/file/${name// /%20}"; then
+              break
+            fi
             ffmpeg -y -v error -i "/tmp/kana/U${code}.ogg" \
               -af 'silenceremove=start_periods=1:start_duration=0.05:start_threshold=-45dB:stop_periods=1:stop_duration=0.18:stop_threshold=-45dB,loudnorm=I=-18:TP=-1.5:LRA=7' \
               -codec:a libmp3lame -q:a 4 "assets/pronunciation/japanese/U${code}.mp3"
+            echo "$code" >> "$marker"
+            downloaded=$((downloaded + 1))
+            [ "$downloaded" -ge 8 ] && break
           done
       - name: Commit bundled recordings
         run: |
