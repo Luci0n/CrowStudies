@@ -57,16 +57,18 @@
   window.CrowSpeak = function(text, lang, rate){
     var local = window.CrowLocalAudio && window.CrowLocalAudio[lang];
     var source = typeof local === 'function' ? local(text) : (local && local[text]);
-    if(source){
+    var strictLocal = source && typeof source === 'object' && source.strict;
+    var localUrl = source && typeof source === 'object' ? source.src : source;
+    if(localUrl){
       try{
         window.CrowStopSpeak();
-        localRecording = new Audio(source);
+        localRecording = new Audio(localUrl);
         localRecording.preload = 'auto';
         localRecording.volume = 1;
-        localRecording.addEventListener('error', function(){ fallbackAudio(text, lang); }, {once:true});
-        localRecording.play().catch(function(){ fallbackAudio(text, lang); });
+        localRecording.addEventListener('error', function(){ if (!strictLocal) fallbackAudio(text, lang); }, {once:true});
+        localRecording.play().catch(function(){ if (!strictLocal) fallbackAudio(text, lang); });
         return true;
-      }catch(e){ fallbackAudio(text, lang); return false; }
+      }catch(e){ if (!strictLocal) fallbackAudio(text, lang); return false; }
     }
     if (!synth || !('SpeechSynthesisUtterance' in window)){ fallbackAudio(text, lang); return false; }
     var request = ++pending;
