@@ -32,24 +32,34 @@
    queue as well as the new letter. Waiting one event turn makes the cancel
    reliable and selecting a voice after voiceschanged covers late-loading voices. */
 (function(){
-  var synth = window.speechSynthesis, pending = 0, timer = null, voices = [], localRecording = null;
+  var synth = window.speechSynthesis, pending = 0, timer = null, voices = [], localRecording = null, fallbackRecording = null;
   function refreshVoices(){ voices = synth && synth.getVoices ? synth.getVoices() : []; }
   if (synth){ refreshVoices(); synth.onvoiceschanged = refreshVoices; }
   function fallbackAudio(text, lang){
     /* Speech voices are supplied by the operating system. This fallback keeps
        Russian and Japanese playable in browsers where that voice is absent. */
     try{
-      var audio = new Audio('https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl='
+      if (fallbackRecording) { fallbackRecording.pause(); fallbackRecording.currentTime = 0; }
+      fallbackRecording = new Audio('https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl='
         + encodeURIComponent(String(lang || '').split('-')[0]) + '&q=' + encodeURIComponent(text));
-      audio.play().catch(function(){});
+      fallbackRecording.play().catch(function(){});
     }catch(e){}
   }
+  window.CrowStopSpeak = function(){
+    pending++;
+    clearTimeout(timer);
+    if (localRecording) { localRecording.pause(); localRecording.currentTime = 0; localRecording = null; }
+    if (fallbackRecording) { fallbackRecording.pause(); fallbackRecording.currentTime = 0; fallbackRecording = null; }
+    if (synth) synth.cancel();
+  };
+  window.addEventListener('pagehide', window.CrowStopSpeak);
+  document.addEventListener('visibilitychange', function(){ if (document.hidden) window.CrowStopSpeak(); });
   window.CrowSpeak = function(text, lang, rate){
     var local = window.CrowLocalAudio && window.CrowLocalAudio[lang];
     var source = typeof local === 'function' ? local(text) : (local && local[text]);
     if(source){
       try{
-        if (localRecording) { localRecording.pause(); localRecording.currentTime = 0; }
+        window.CrowStopSpeak();
         localRecording = new Audio(source);
         localRecording.preload = 'auto';
         localRecording.volume = 1;
@@ -542,6 +552,7 @@ function CrowQuiz(config){
   }
 
   function startSession(unitId, reviewCards, lessonMode){
+    if (window.CrowStopSpeak) window.CrowStopSpeak();
     var queue = buildQueue(unitById(unitId), reviewCards, lessonMode);
     state.session = {
       unit:unitId, queue:queue, review:!!reviewCards, lesson:!!lessonMode, index:0,
@@ -753,6 +764,7 @@ function CrowQuiz(config){
   }
 
   function advance(){
+    if (window.CrowStopSpeak) window.CrowStopSpeak();
     var s = state.session;
     s.index++;
     if (s.hearts <= 0 || s.index >= s.queue.length){ endSession(); return; }
