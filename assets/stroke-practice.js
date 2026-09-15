@@ -22,14 +22,28 @@ window.CrowStroke = (function(){
     return '../assets/kana-stroke-data/' + script + '/' + encodeURIComponent(character) + '.json';
   }
 
+  /* kana-svg-data stores normal SVG coordinates (Y grows downward), while
+     HanziWriter's character space grows upward. Convert the source once so
+     the guide is never vertically reversed and the hit-test medians match it. */
+  function flipKanaPath(path){
+    return path.replace(/([MCQ])([^MCQZ]+)/g, function(_, command, coordinates){
+      var values = coordinates.match(/-?\d+(?:\.\d+)?/g) || [];
+      return command + values.map(function(value, index){
+        return index % 2 ? String(1024 - Number(value)) : value;
+      }).join(' ');
+    });
+  }
+
   /* kana-svg-data stores stroke paths as { value: ... }. HanziWriter and the
      hint renderer both use the compact arrays below, so normalize once here. */
   function normalizeKanaData(data){
     if (!data || !Array.isArray(data.strokes) || !data.strokes.length ||
         typeof data.strokes[0] === 'string') return data;
     return {
-      strokes: data.strokes.map(function(stroke){ return stroke.value; }),
-      medians: (data.medians || []).map(function(median){ return median.value; })
+      strokes: data.strokes.map(function(stroke){ return flipKanaPath(stroke.value); }),
+      medians: (data.medians || []).map(function(median){
+        return median.value.map(function(point){ return [point[0], 1024 - point[1]]; });
+      })
     };
   }
 
