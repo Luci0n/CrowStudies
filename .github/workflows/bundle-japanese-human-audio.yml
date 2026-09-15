@@ -53,6 +53,7 @@ jobs:
             downloaded=$((downloaded + 1))
             [ "$downloaded" -ge 8 ] && break
           done
+          true
       - name: Commit bundled recordings
         run: |
           git config user.name 'CrowStudies audio builder'
