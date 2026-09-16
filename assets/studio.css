@@ -957,10 +957,10 @@ body.is-sizing .studio-block{ transition:none; }
 .code-wrap{ --code-height:360px; }
 .code-body{ height:var(--code-height); max-height:none; }
 .studio-block.code-expanded .code-body{ height:min(70vh,760px); max-height:none; }
-.code-language,.code-height{ display:inline-flex; align-items:center; gap:5px; color:var(--ink-3); font:750 10px/1 inherit; letter-spacing:.05em; text-transform:uppercase; }
-.code-language select{ max-width:118px; border:1px solid var(--glass-edge); border-radius:7px; background:var(--card); color:var(--ink-2); padding:5px 7px; font:700 11px/1 inherit; }
+.code-language,.code-height{ display:inline-flex; align-items:center; gap:5px; color:var(--ink-3); font-family:inherit; font-weight:750; font-size:10px; line-height:1; letter-spacing:.05em; text-transform:uppercase; }
+.code-language select{ max-width:118px; border:1px solid var(--glass-edge); border-radius:7px; background:var(--card); color:var(--ink-2); padding:5px 7px; font-family:inherit; font-weight:700; font-size:11px; line-height:1; }
 .code-height input{ width:78px; accent-color:var(--brand); }
-.code-wrap-toggle{ border:1px solid var(--glass-edge); border-radius:7px; background:transparent; color:var(--ink-3); padding:5px 8px; font:750 11px/1 inherit; }
+.code-wrap-toggle{ border:1px solid var(--glass-edge); border-radius:7px; background:transparent; color:var(--ink-3); padding:5px 8px; font-family:inherit; font-weight:750; font-size:11px; line-height:1; }
 .code-wrap-toggle[aria-pressed="true"]{ border-color:var(--brand); color:var(--brand); background:var(--brand-soft); }
 .code-wrap.is-wrapped .block-code{ white-space:pre-wrap; overflow-x:visible; overflow-wrap:anywhere; }
 .code-wrap.is-wrapped .code-lines{ display:none; }
@@ -1009,29 +1009,49 @@ body.is-sizing .studio-block{ transition:none; }
    buttons. They are one set of controls, so they are one size, one radius and
    one weight, and the copy button holds the far end rather than appearing
    from nothing under the pointer. */
-.code-tools{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; justify-content:flex-start; margin-bottom:6px; padding:0; }
-.code-tools .code-copy{ margin-left:auto; }
-.code-language,.code-height,.code-wrap-toggle,.code-size,.code-copy{
-  box-sizing:border-box; height:26px; border-radius:8px;
-  font:750 11px/1 inherit; letter-spacing:0; text-transform:none;
+/* What the code is, on the left. How it is shown, on the right, as one
+   control rather than three that happen to be adjacent. The height rail sits
+   just before them, quiet, because it is an adjustment and not a command.
+   Every one of them takes the same type: a select and a button do not inherit
+   font from the page, and stating it in the shorthand as `… inherit` drops
+   the whole declaration, which is how they came to be three different sizes
+   in two different families. */
+.code-tools{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-start; margin-bottom:7px; padding:0; }
+.code-language,.code-height,.code-actions,.code-wrap-toggle,.code-size,.code-copy,.code-language select{
+  box-sizing:border-box; font-family:inherit; font-weight:700; font-size:11px; line-height:1;
+  letter-spacing:0; text-transform:none;
 }
-.code-wrap-toggle,.code-size,.code-copy,.code-language select{
+.code-language select,.code-actions{ height:26px; border-radius:8px; border:1px solid var(--glass-edge); background:color-mix(in srgb,var(--card) 86%,transparent); }
+.code-language select{
+  display:inline-flex; align-items:center; color:var(--ink-2); cursor:pointer;
+  padding:0 26px 0 10px; min-width:98px; max-width:132px;
+  -webkit-appearance:none; -moz-appearance:none; appearance:none;
+  transition:color .18s ease, border-color .18s ease;
+}
+/* The rail is an adjustment, so it keeps to the far side beside the commands
+   rather than sitting among them. */
+.code-height{ margin-left:auto; }
+.code-language select:hover{ color:var(--ink); border-color:color-mix(in srgb,var(--brand) 55%,var(--glass-edge)); }
+
+/* One object with three positions, divided by a hairline instead of a gap. */
+.code-actions{ display:inline-flex; align-items:stretch; overflow:hidden; }
+.code-actions > button{
   display:inline-flex; align-items:center; justify-content:center; gap:5px;
-  padding:0 9px; border:1px solid var(--glass-edge);
-  background:color-mix(in srgb,var(--card) 86%,transparent); color:var(--ink-3);
-  font:750 11px/1 inherit; cursor:pointer;
-  transition:color .18s ease, border-color .18s ease, background .18s ease, transform .12s ease;
+  height:100%; padding:0 10px; border:0; border-radius:0; background:transparent;
+  color:var(--ink-3); font-family:inherit; font-weight:700; font-size:11px; line-height:1; cursor:pointer;
+  transition:color .18s ease, background .18s ease;
 }
-.code-wrap-toggle:hover,.code-size:hover,.code-copy:hover,.code-language select:hover{ color:var(--ink); border-color:color-mix(in srgb,var(--brand) 55%,var(--glass-edge)); }
-.code-wrap-toggle:active,.code-size:active,.code-copy:active{ transform:scale(.96); }
-.code-wrap-toggle:focus-visible,.code-size:focus-visible,.code-copy:focus-visible,.code-language select:focus-visible{ outline:2px solid var(--brand); outline-offset:2px; }
+.code-actions > button + button{ box-shadow:inset 1px 0 0 var(--glass-edge); }
+.code-actions > button:hover{ color:var(--ink); background:var(--glass-lift); }
+.code-actions > button:active{ background:color-mix(in srgb,var(--brand) 14%,transparent); }
+.code-actions > button:focus-visible{ outline:2px solid var(--brand); outline-offset:-2px; }
+.code-language select:focus-visible{ outline:2px solid var(--brand); outline-offset:2px; }
+/* In view mode the two editing positions are gone, so the one that remains
+   must not keep the divider that separated it from them. */
+.read-only .code-actions > .code-copy{ box-shadow:none; }
 
 /* The language sits behind our own chevron rather than the platform's. */
 .code-language{ position:relative; display:inline-flex; gap:0; }
-.code-language select{
-  height:26px; width:auto; min-width:96px; max-width:132px; padding:0 26px 0 9px;
-  -webkit-appearance:none; -moz-appearance:none; appearance:none;
-}
 .code-language::after{
   content:''; position:absolute; right:9px; top:50%; width:7px; height:7px;
   margin-top:-5px; border-right:1.6px solid currentColor; border-bottom:1.6px solid currentColor;
@@ -1040,9 +1060,15 @@ body.is-sizing .studio-block{ transition:none; }
 }
 .code-language:hover::after{ color:var(--ink); }
 
-/* On means the lines fold, so the control reads as held down, not as a button
-   that was clicked once. */
-.code-wrap-toggle[aria-pressed="true"]{ border-color:var(--brand); color:var(--brand); background:var(--brand-soft); }
+/* On means the lines fold, so the position reads as held down rather than as
+   a button somebody pressed once. Inside the group it is filled, not outlined:
+   there is no border of its own left to colour. */
+.code-actions > .code-wrap-toggle[aria-pressed="true"]{
+  color:var(--brand); background:color-mix(in srgb,var(--brand) 20%,transparent);
+}
+.code-actions > .code-wrap-toggle[aria-pressed="true"]:hover{
+  color:var(--brand); background:color-mix(in srgb,var(--brand) 28%,transparent);
+}
 
 /* A rail and a handle, at the weight of everything beside it. */
 .code-height{ display:inline-flex; align-items:center; padding:0 4px; }
@@ -1070,7 +1096,7 @@ body.is-sizing .studio-block{ transition:none; }
 
 /* Copy was invisible until the pointer found it, which read as a control that
    had failed to load. It is quiet instead of absent. */
-.code-copy{ opacity:.62; transition:opacity .18s ease, color .18s ease, border-color .18s ease, transform .12s ease; }
+.code-copy{ opacity:.7; transition:opacity .18s ease, color .18s ease, background .18s ease; }
 .studio-block:hover .code-copy,.studio-block:focus-within .code-copy,.code-copy:hover,.code-copy:focus-visible{ opacity:1; }
 .code-copy.is-done{ opacity:1; color:var(--good); border-color:currentColor; }
 @media (hover:none){ .code-copy{ opacity:.8; } }
@@ -1134,7 +1160,7 @@ body.is-sizing .studio-block{ transition:none; }
   display:inline-flex; align-items:center; gap:8px;
   padding:5px 11px 5px 6px; border:1px solid var(--glass-edge); border-radius:999px;
   background:var(--glass); color:var(--ink-2);
-  font:800 12px/1 inherit; white-space:nowrap; cursor:pointer;
+  font-family:inherit; font-weight:800; font-size:12px; line-height:1; white-space:nowrap; cursor:pointer;
   transition:border-color .18s ease, color .18s ease, background .18s ease;
 }
 .mode-switch:hover{ color:var(--ink); border-color:color-mix(in srgb,var(--brand) 55%,var(--glass-edge)); }
@@ -1163,13 +1189,13 @@ body.is-sizing .studio-block{ transition:none; }
 .add-row-start{ margin:0 0 10px; min-height:24px; }
 .add-row-start .add-open{ opacity:.72; }
 .add-row-start:hover .add-open,.add-row-start .add-open:focus-visible{ opacity:1; }
-.add-open{ border:0; border-radius:6px; background:transparent; color:var(--ink-3); padding:6px 8px; font:750 12px/1.1 inherit; cursor:pointer; transition:color .18s ease, background .18s ease, opacity .18s ease; }
+.add-open{ border:0; border-radius:6px; background:transparent; color:var(--ink-3); padding:6px 8px; font-family:inherit; font-weight:750; font-size:12px; line-height:1.1; cursor:pointer; transition:color .18s ease, background .18s ease, opacity .18s ease; }
 .add-open:hover,.add-open:focus-visible{ color:var(--brand); background:var(--glass-lift); outline:none; }
 
 /* The command picker belongs at the caret. It closes when that context moves,
    which is calmer than leaving a detached panel on a scrolled page. */
 .upgrade-slash{ width:min(212px,calc(100vw - 24px)); padding:5px; display:grid; gap:2px; border:1px solid var(--glass-edge); border-radius:9px; background:color-mix(in srgb,var(--card) 94%,transparent); box-shadow:0 14px 34px #0008; backdrop-filter:blur(12px); }
-.upgrade-slash button{ width:100%; border:0; border-radius:6px; background:transparent; color:var(--ink-2); padding:8px 9px; text-align:left; font:700 12px/1.2 inherit; cursor:pointer; }
+.upgrade-slash button{ width:100%; border:0; border-radius:6px; background:transparent; color:var(--ink-2); padding:8px 9px; text-align:left; font-family:inherit; font-weight:700; font-size:12px; line-height:1.2; cursor:pointer; }
 .upgrade-slash button:hover,.upgrade-slash button:focus-visible{ background:var(--glass-lift); color:var(--ink); outline:none; }
 @media (max-width:620px){ .mode-indicator{ padding:6px 8px; font-size:11px; }.project-actions{ gap:6px; } }
 
