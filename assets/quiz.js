@@ -293,6 +293,15 @@ function CrowQuiz(config){
     if (interval < HOUR) return Math.max(1,Math.round(interval/MINUTE))+'m';
     return interval < DAY ? Math.round(interval/HOUR)+'h' : Math.max(1,Math.round(interval/DAY))+'d';
   }
+  /* How long until a card comes back, in the largest unit that still says
+     something useful. */
+  function whenDue(at){
+    var ms=Math.max(0,(at||0)-Date.now());
+    if (!ms) return 'now';
+    if (ms < HOUR) return 'in '+Math.max(1,Math.round(ms/MINUTE))+'m';
+    if (ms < DAY) return 'in '+Math.round(ms/HOUR)+'h';
+    return 'in '+Math.max(1,Math.round(ms/DAY))+'d';
+  }
   function dueLabel(card){
     var ms=Math.max(0,(card.due||0)-Date.now());
     if (!ms) return 'Review due';
@@ -486,8 +495,19 @@ function CrowQuiz(config){
     dom.sessions.textContent = save.sessions;
     var due=dueCards(), available=reviewableCards();
     dom.reviewDue.disabled=!available.length;
-    dom.reviewDue.textContent=due.length ? 'Review '+due.length+' due' : (available.length ? 'Review '+available.length+' cards' : 'Review cards');
-    dom.reviewDue.title=available.length ? 'Practice previously seen cards; due cards appear first.' : 'Answer practice questions first to create review cards.';
+    /* Two different things used to be counted the same way. Cards due now are
+       a backlog and go down as they are answered; cards seen at any point are
+       a pool to practise from and never go down at all. Both said "Review N",
+       so clearing a backlog of six swapped "Review 6 due" for "Review 6
+       cards" and looked as though the review had not counted. Only the
+       backlog carries a number. */
+    var soonest=available.length ? Math.min.apply(null, available.map(function(card){ return card.due||0; })) : 0;
+    dom.reviewDue.textContent=due.length ? 'Review '+due.length+' due' : (available.length ? 'Practice seen cards' : 'Review cards');
+    dom.reviewDue.title=due.length
+      ? (due.length===1?'One card is':due.length+' cards are')+' ready to review now.'
+      : (available.length
+        ? 'Nothing due — next '+whenDue(soonest)+'. Practise cards you have already seen.'
+        : 'Answer practice questions first to create review cards.');
 
     var visibleUnits = HOME_TABS
       ? UNITS.filter(function(u){ return (u.homeTab || HOME_TABS[0].id) === activeHomeTab; })
