@@ -612,17 +612,27 @@ function CrowQuiz(config){
     hideSheet();
     renderProgress();
     var item = state.session.queue[state.session.index];
-    dom.hint.parentNode.hidden = (item.kind === 'teach');
     state.locked = false;
     if (item.kind === 'teach'){
       state.question = null;
+      dom.hint.parentNode.hidden = true;
       renderTeach(item.step);
       return;
     }
     state.question = item.question;
     state.questionUnit = item.unit || state.session.unit;
     state.hinted = false;
+    /* Nothing to offer, nothing to offer it with. */
+    dom.hint.parentNode.hidden = !hintForQuestion();
     renderQuestion();
+  }
+  /* A hint is meant to help with the question in front of you. A question that
+     carries its own is the one that answers; a unit hint is what a course says
+     when its questions are all of a kind and one sentence covers them. */
+  function hintForQuestion(){
+    if (state.question && state.question.hint) return state.question.hint;
+    var unit = unitById(state.questionUnit || (state.session && state.session.unit));
+    return (unit && unit.hint) || '';
   }
 
   /* Retriggers the entrance on an element whose contents were replaced. */
@@ -855,8 +865,10 @@ function CrowQuiz(config){
     dom.extraBack.onclick = function(){ renderHome(); showScreen('home'); };
     dom.hint.onclick = function(){
       if (state.locked || !state.question) return;
+      var said = hintForQuestion();
+      if (!said) return;
       state.hinted = true;
-      dom.modalText.textContent = unitById(state.session.unit).hint;
+      dom.modalText.textContent = said;
       dom.modal.hidden = false;
     };
     dom.modalClose.onclick = function(){ dom.modal.hidden = true; };

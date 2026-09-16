@@ -1106,11 +1106,11 @@
   var LESSON_KINDS=[{value:'explain',label:'Teach only'},{value:'choice',label:'Multiple choice'},{value:'free',label:'Free response'}];
   var LESSON_DEFAULT_COLOR='#7657f7';
   function normalizeStep(step){
-    var copy=Object.assign({kind:'explain',title:'',body:'',practice:'',prompt:'',answer:'',options:[]},step||{});
+    var copy=Object.assign({kind:'explain',title:'',body:'',practice:'',prompt:'',answer:'',hint:'',options:[]},step||{});
     if(!LESSON_KINDS.some(function(kind){return kind.value===copy.kind;}))copy.kind='explain';
     if(!Array.isArray(copy.options))copy.options=[];
     copy.options=copy.options.map(function(option){return String(option);});
-    ['title','body','practice','prompt','answer'].forEach(function(key){ if(typeof copy[key]!=='string')copy[key]=''; });
+    ['title','body','practice','prompt','answer','hint'].forEach(function(key){ if(typeof copy[key]!=='string')copy[key]=''; });
     delete copy.questions;
     /* Earlier Studio lessons kept the teaching text in `prompt`. */
     if(copy.kind==='explain'&&copy.prompt&&!copy.body){ copy.body=copy.prompt; copy.prompt=''; }
@@ -1199,7 +1199,11 @@
       +'<label class="lesson-field"><span>Summary</span><input data-lesson-blurb value="'+esc(meta.blurb)+'" placeholder="e.g. the pairs everyone mixes up"'+disabled+'></label>'
       +'<label class="lesson-field tiny"><span>Icon</span><input data-lesson-icon value="'+esc(meta.icon)+'" maxlength="4"'+disabled+'></label>'
       +'<label class="lesson-field tiny"><span>Color</span><input type="color" data-lesson-color value="'+esc(meta.color)+'"'+disabled+'></label>'
-      +'<label class="lesson-field wide"><span>Hint</span><textarea data-lesson-hint placeholder="What the hint button should reveal during practice."'+disabled+'>'+esc(meta.hint)+'</textarea></label>'
+      /* A hint helps with the question in front of the learner, so it is asked
+         for beside each question. This one is what any question without its own
+         falls back to, and saying so keeps a lesson-wide sentence from being
+         mistaken for help with one step. */
+      +'<label class="lesson-field wide"><span>Fallback hint</span><textarea data-lesson-hint placeholder="Shown only for steps that have no hint of their own."'+disabled+'>'+esc(meta.hint)+'</textarea></label>'
       +'</div></div>';
   }
   function stepEditorHTML(block, step, index, total, disabled){
@@ -1228,6 +1232,8 @@
       +(asks
         ? '<textarea data-step-prompt="'+index+'" placeholder="The question learners will see"'+disabled+'>'+esc(step.prompt)+'</textarea>'
           +(step.kind==='choice'?choices:'<input data-step-answer="'+index+'" value="'+esc(step.answer)+'" placeholder="Correct answer"'+disabled+'>')
+          /* A hint belongs to the question it helps with, beside it. */
+          +'<input data-step-hint="'+index+'" value="'+esc(step.hint)+'" placeholder="Hint for this question (optional)"'+disabled+'>'
           +teachingFoldHTML(block,step,index,disabled)
         : '')
       +'</section>';
@@ -3086,13 +3092,15 @@
           var choices=shuffled(picks);
           return { type:'mcq', tag:step.title||'Practice', headline:step.prompt||'Choose an answer', sub:'Choose the best answer.',
             choices:choices, correctIndex:Math.max(0,choices.indexOf(step.answer)),
+            hint:step.hint||'',
             explain:step.answer?'Correct answer: '+step.answer:'' };
         }];
       }
       if(step.kind==='free'&&(step.prompt||step.answer)){
         gens=[function(){
           return { type:'type', tag:step.title||'Practice', headline:step.prompt||'Write your answer', sub:'Answer from memory.',
-            answer:step.answer||'', alts:[step.answer||''], explain:step.answer?'Correct answer: '+step.answer:'' };
+            answer:step.answer||'', alts:[step.answer||''], hint:step.hint||'',
+            explain:step.answer?'Correct answer: '+step.answer:'' };
         }];
       }
       var teaches=!!(step.title||step.body);
@@ -3183,6 +3191,7 @@
     bindStep('practice','practice');
     bindStep('prompt','prompt');
     bindStep('answer','answer');
+    bindStep('hint','hint');
     card.querySelectorAll('[data-choice-text]').forEach(function(input){
       input.oninput=function(e){
         var step=block.steps[+e.target.getAttribute('data-choice-text')], slot=+e.target.getAttribute('data-choice-slot');
