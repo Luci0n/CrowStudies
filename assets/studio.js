@@ -1186,7 +1186,7 @@
   function lessonDetailsHTML(block, meta, disabled){
     var unfolded=!!openDetails[block.id];
     var peek=[meta.section,meta.blurb].filter(Boolean).join(' · ')||'Add a section and summary';
-    var head='<div class="lesson-details" data-lesson-details-region>'
+    var head='<div class="lesson-details'+(unfolded?' is-open':'')+'" data-lesson-details-region>'
       +'<button class="lesson-details-toggle" data-lesson-details aria-expanded="'+(unfolded?'true':'false')+'">'
       +'<span class="chev" aria-hidden="true">'+(unfolded?'▾':'▸')+'</span>'
       +'<b>Lesson details</b>'
@@ -1203,7 +1203,7 @@
          for beside each question. This one is what any question without its own
          falls back to, and saying so keeps a lesson-wide sentence from being
          mistaken for help with one step. */
-      +'<label class="lesson-field wide"><span>Fallback hint</span><textarea data-lesson-hint placeholder="Shown only for steps that have no hint of their own."'+disabled+'>'+esc(meta.hint)+'</textarea></label>'
+      +'<label class="lesson-field wide"><span>Fallback hint</span><input data-lesson-hint value="'+esc(meta.hint)+'" placeholder="Used only where a step has no hint"'+disabled+'></label>'
       +'</div></div>';
   }
   function stepEditorHTML(block, step, index, total, disabled){

@@ -1301,3 +1301,38 @@ body.is-sizing .studio-block{ transition:none; }
   background-color:color-mix(in srgb,var(--ink-3) 70%,transparent);
 }
 .db-board::-webkit-scrollbar-corner,.db-scroll::-webkit-scrollbar-corner{ background:transparent; }
+
+/* ---------- lesson details ----------
+   Two bordered boxes stacked on each other, a row where two narrow fields sat
+   in wide cells leaving holes beside them, and the platform's own colour input
+   as a broad slab of pure blue. One panel, columns that fit what they hold,
+   and a swatch the size of a swatch. */
+.lesson-details.is-open .lesson-details-toggle{
+  margin-bottom:0; border-bottom-color:transparent;
+  border-bottom-left-radius:0; border-bottom-right-radius:0;
+}
+.lesson-details.is-open .lesson-meta{
+  margin-top:0; border-top:0; border-top-left-radius:0; border-top-right-radius:0;
+}
+.lesson-meta{
+  grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto auto;
+  gap:9px 10px; padding:12px; align-items:end;
+}
+.lesson-field.tiny{ max-width:none; width:auto; }
+.lesson-field.tiny input{ width:auto; }
+.lesson-field input[data-lesson-icon]{ width:52px; text-align:center; }
+/* A colour well, not a filled rectangle the width of a text field. */
+.lesson-field input[type="color"]{
+  width:38px; height:34px; padding:0; border:1px solid var(--line); border-radius:7px;
+  background:var(--well); cursor:pointer; -webkit-appearance:none; -moz-appearance:none; appearance:none;
+}
+.lesson-field input[type="color"]::-webkit-color-swatch-wrapper{ padding:3px; }
+.lesson-field input[type="color"]::-webkit-color-swatch{ border:0; border-radius:5px; }
+.lesson-field input[type="color"]::-moz-color-swatch{ border:0; border-radius:5px; }
+.lesson-field>span{ font-size:10px; letter-spacing:.08em; }
+.lesson-field{ gap:4px; }
+.lesson-field input,.lesson-field textarea{ padding:7px 8px; font-size:12.5px; }
+@media(max-width:620px){
+  .lesson-meta{ grid-template-columns:minmax(0,1fr) auto auto; }
+  .lesson-field.wide{ grid-column:1/-1; }
+}
