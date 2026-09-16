@@ -355,9 +355,12 @@ function CrowQuiz(config){
       /* What the review button used to explain in a tooltip is written under
          the heading instead. A tooltip needs a pointer to hover, which a phone
          does not have, so on a phone it said nothing at all. */
-      +     '<div class="pathhead"><div class="pathhead-said"><h2>Practice</h2>'
-      +       '<p class="review-note" data-f="reviewNote"></p></div>'
-      +       '<button class="btn ghost sm" data-f="reviewDue">Review cards</button></div>'
+      /* The sentence belongs to the review button, so it is kept with it. Set
+         under the Practice heading it looked like a caption for the list of
+         lessons below, which is what that heading introduces. */
+      +     '<div class="pathhead"><h2>Practice</h2>'
+      +       '<div class="review-cue"><button class="btn ghost sm" data-f="reviewDue">Review cards</button>'
+      +       '<p class="review-note" data-f="reviewNote"></p></div></div>'
       +     '<div class="home-tabs" data-f="homeTabs"></div>'
       +     '<div class="path" data-f="path"></div>'
       +   '</section>'
