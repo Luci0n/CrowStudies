@@ -209,6 +209,13 @@ function CrowQuiz(config){
     for (var i=0;i<UNITS.length;i++){ if (UNITS[i].id===id) return UNITS[i]; }
     return UNITS[0];
   }
+  /* unitById answers with the first unit rather than nothing, which is right
+     when a caller needs a unit to carry on with and wrong when the question is
+     whether the unit is still here at all. */
+  function findUnit(id){
+    for (var i=0;i<UNITS.length;i++){ if (UNITS[i].id===id) return UNITS[i]; }
+    return null;
+  }
   function unitGens(u){
     return u.steps.reduce(function(a,s){ return a.concat(s.gens); }, []);
   }
@@ -291,6 +298,31 @@ function CrowQuiz(config){
     if (!ms) return 'Review due';
     if (ms < DAY) return 'Review later today';
     return 'Review in '+Math.ceil(ms/DAY)+'d';
+  }
+
+  /* A card points at a question by the words in it. Edit those words and the
+     card points at nothing: it can never be asked, so it can never be
+     answered, and it sits due for ever with the count beside it never coming
+     down. Such a card has to go — but a generator picks at random, and a run
+     of bad luck looks exactly like a question that no longer exists. So a card
+     that cannot be found is given a strike rather than thrown away, and only
+     leaves after three reviews in a row have failed to reach it. Being reached
+     once wipes the slate. */
+  var REVIEW_STRIKES = 3;
+  function forgetCard(card){
+    var cards = save.cards || {};
+    var id = card.id || cardId(card.unit, card.key);
+    if (cards[id]) delete cards[id];
+    return false;
+  }
+  function noteReviewReach(card, reached){
+    var cards = save.cards || {};
+    var live = cards[card.id || cardId(card.unit, card.key)];
+    if (!live) return reached;
+    if (reached){ if (live.misses) delete live.misses; return true; }
+    live.misses = (live.misses || 0) + 1;
+    if (live.misses >= REVIEW_STRIKES) forgetCard(live);
+    return false;
   }
 
   var state = { session:null, question:null, locked:false, hinted:false, lastQuestionKey:'' };
@@ -554,12 +586,20 @@ function CrowQuiz(config){
           candidate = q; key = qKey; lastGen = gen; break;
         }
       }
-      if (!candidate) return;
+      if (!candidate) return false;
       seenQuestionKeys[key] = true;
       queue.push({ kind:'q', question:candidate, unit:sourceUnit || u.id, cardKey:key });
+      return true;
     }
     if (reviewCards){
-      reviewCards.forEach(function(card){ addQuestion(unitGens(unitById(card.unit)), card.key, card.unit); });
+      reviewCards.forEach(function(card){
+        var home = findUnit(card.unit);
+        /* The unit this card was made in is gone, so nothing can ever ask it
+           again. Nothing random about that: it goes now. */
+        if (!home) return forgetCard(card);
+        noteReviewReach(card, addQuestion(unitGens(home), card.key, card.unit));
+      });
+      persist();
       return queue;
     }
     if (UNIT_PRACTICE && !lessonMode){
@@ -590,6 +630,10 @@ function CrowQuiz(config){
   function startSession(unitId, reviewCards, lessonMode){
     if (window.CrowStopSpeak) window.CrowStopSpeak();
     var queue = buildQueue(unitById(unitId), reviewCards, lessonMode);
+    /* Every card on offer turned out to point at a question that is no longer
+       there. They have just been cleared away, so there is nothing to sit
+       through: go back to a home that now counts what is really left. */
+    if (!queue.length){ renderHome(); showScreen('home'); return; }
     state.session = {
       unit:unitId, queue:queue, review:!!reviewCards, lesson:!!lessonMode, index:0,
       totalQ: queue.filter(function(it){ return it.kind==='q'; }).length,
