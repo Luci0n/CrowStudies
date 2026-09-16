@@ -57,7 +57,11 @@
   function id(){ return (crypto.randomUUID && crypto.randomUUID()) || ('block-'+Date.now()+'-'+Math.random().toString(16).slice(2)); }
   function cleanHTML(html){
     var template=document.createElement('template'); template.innerHTML=html||'';
-    template.content.querySelectorAll('script,style,iframe,object,embed').forEach(function(node){ node.remove(); });
+    /* A picture is not text, and a text block has nowhere to keep one: the
+       saved copy has never held a src, so an image dropped into a note showed
+       until the page was next loaded and then was simply gone. Media comes out
+       here so that what is on screen is what was kept. */
+    template.content.querySelectorAll('script,style,iframe,object,embed,img,picture,source,video,audio,canvas,svg').forEach(function(node){ node.remove(); });
     template.content.querySelectorAll('*').forEach(function(node){
       Array.from(node.attributes).forEach(function(attr){
         var name=attr.name.toLowerCase();
@@ -74,6 +78,44 @@
     });
     tidyHeadings(template.content);
     return template.innerHTML;
+  }
+  /* Refusing a picture where it lands says so plainly. Letting it in and
+     dropping it on the next load looks like losing someone's work. */
+  function transferHasMedia(transfer){
+    if(!transfer)return false;
+    var types=Array.prototype.slice.call(transfer.types||[]);
+    if(types.indexOf('Files')>=0)return true;
+    var items=transfer.items||[];
+    for(var i=0;i<items.length;i++)if(/^image\//.test(items[i].type||''))return true;
+    var html='';
+    try{ html=transfer.getData('text/html')||''; }catch(error){}
+    return /<img\b/i.test(html);
+  }
+  function guardRichBody(body){
+    if(!body||body.dataset.mediaGuarded)return;
+    body.dataset.mediaGuarded='true';
+    body.addEventListener('dragover',function(event){
+      if(!transferHasMedia(event.dataTransfer))return;
+      event.preventDefault();
+      try{ event.dataTransfer.dropEffect='none'; }catch(error){}
+    });
+    body.addEventListener('drop',function(event){
+      if(!transferHasMedia(event.dataTransfer))return;
+      event.preventDefault(); event.stopPropagation();
+    });
+    /* Everything pasted arrives through the same cleaning the save uses, so
+       the block cannot show something the save would quietly drop. */
+    body.addEventListener('paste',function(event){
+      var data=event.clipboardData; if(!data)return;
+      if(transferHasMedia(data)){ event.preventDefault(); return; }
+      var html='', text='';
+      try{ html=data.getData('text/html')||''; text=data.getData('text/plain')||''; }catch(error){}
+      if(!html)return;
+      event.preventDefault();
+      var safe=cleanHTML(html);
+      if(safe.replace(/<[^>]*>/g,'').trim()==='' && text) document.execCommand('insertText',false,text);
+      else document.execCommand('insertHTML',false,safe);
+    });
   }
   var HEADINGS='h1,h2,h3,h4,h5,h6';
   var BLOCK_LEVEL=/^(P|H[1-6]|LI|UL|OL|TABLE|THEAD|TBODY|TR|TD|TH|BLOCKQUOTE|DIV|PRE)$/;
@@ -1353,7 +1395,7 @@
      making of a block lives in one place instead of inside a handler. */
   function addBlockOfType(type){
     if(!type||!activeProject)return;
-    var block={id:id(),type:type,title:'',body:'',sectionId:activeSection==='all'?'':activeSection,pageId:activePage==='all'?'':activePage,order:Date.now(),done:false,due:'',pending:true,items:type==='tasks'?[{text:'',done:false}]:[],steps:type==='lesson'?[normalizeStep({kind:'explain',title:'What to know'}),normalizeStep({kind:'free'})]:[],lessonSection:type==='lesson'?sectionName(activeSection==='all'?'':activeSection):'',lessonBlurb:'',lessonIcon:type==='lesson'?'✦':'',lessonColor:type==='lesson'?LESSON_DEFAULT_COLOR:'',lessonHint:''};blocks.push(block);render();var card=root.querySelector('[data-block="'+block.id+'"]'), field=card&&card.querySelector('[data-title]');if(field)field.focus();cloud().saveBlock(activeProject.id,block.id,block).then(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current)current.classList.remove('is-pending');var dot=current&&current.querySelector('.save-dot');if(dot)dot.remove();}).catch(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current){current.classList.remove('is-pending');current.classList.add('save-failed');}});
+    var block={id:id(),type:type,title:'',body:'',sectionId:activeSection==='all'?'':activeSection,pageId:activePage==='all'?'':activePage,order:Date.now(),done:false,due:'',pending:true,items:type==='tasks'?[{text:'',done:false}]:[],steps:type==='lesson'?[normalizeStep({kind:'choice'})]:[],lessonSection:type==='lesson'?sectionName(activeSection==='all'?'':activeSection):'',lessonBlurb:'',lessonIcon:type==='lesson'?'✦':'',lessonColor:type==='lesson'?LESSON_DEFAULT_COLOR:'',lessonHint:''};blocks.push(block);render();var card=root.querySelector('[data-block="'+block.id+'"]'), field=card&&card.querySelector('[data-title]');if(field)field.focus();cloud().saveBlock(activeProject.id,block.id,block).then(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current)current.classList.remove('is-pending');var dot=current&&current.querySelector('.save-dot');if(dot)dot.remove();}).catch(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current){current.classList.remove('is-pending');current.classList.add('save-failed');}});
   }
   var ADD_GROUPS=[
     { name:'Text', types:['note','quote','callout','code'] },
@@ -1518,7 +1560,10 @@
   var DB_KINDS=[['text','Text'],['longtext','Long text'],['number','Number'],['check','Tick box'],
     ['select','Select'],['multi','Multi-select'],['date','Date'],['url','Link'],['email','Email'],['phone','Phone']];
   var CHIP_TONES=6;
-  var dbRows={}, dbWatch={};
+  var dbRows={}, dbWatch={}, shownRows={};
+  function dbRowsSignature(list){
+    return (list||[]).map(function(row){ return stableJSON({ id:row.id, order:row.order, values:row.values||{} }); }).join(' ');
+  }
   function isDatabase(block){ return !!block&&block.type==='database'; }
   function dbProps(block){
     return (Array.isArray(block.props)&&block.props.length) ? block.props : [{ id:'name', name:'Name', type:'text' }];
@@ -1535,13 +1580,21 @@
     Object.keys(dbWatch).forEach(function(blockId){
       if(wanted[blockId])return;
       try{ dbWatch[blockId](); }catch(error){}
-      delete dbWatch[blockId]; delete dbRows[blockId];
+      delete dbWatch[blockId]; delete dbRows[blockId]; delete shownRows[blockId];
     });
     Object.keys(wanted).forEach(function(blockId){
       if(dbWatch[blockId])return;
       dbWatch[blockId]=cloud().watchRows(activeProject.id,blockId,function(list){
         dbRows[blockId]=list;
-        /* One database's rows arrived, so one card is drawn again. */
+        /* Firestore reports this browser's own write back to it. The cell was
+           already written here before it was sent, so that report says nothing
+           new — and redrawing the table on it tore down the inputs between a
+           click's press and its release, which is why moving to a second cell
+           took more than one click. Draw again only when the rows really did
+           change. */
+        var mark=dbRowsSignature(list);
+        if(shownRows[blockId]===mark)return;
+        shownRows[blockId]=mark;
         var card=root.querySelector('[data-block="'+blockId+'"]');
         var block=liveBlock(blockId);
         if(card&&block)paintDatabase(card,block);
@@ -1550,7 +1603,7 @@
   }
   function dropDatabases(){
     Object.keys(dbWatch).forEach(function(blockId){ try{ dbWatch[blockId](); }catch(error){} });
-    dbWatch={}; dbRows={};
+    dbWatch={}; dbRows={}; shownRows={};
   }
   function dbValue(row, prop){
     var held=(row.values||{})[prop.id];
@@ -1725,9 +1778,29 @@
         +'</div></section>';
     }).join('')+'</div>';
   }
+  /* Somebody else's edit to another row is no reason to take the cell out of
+     your hands, so the table remembers which one was being typed in and where
+     the caret stood, and gives it back once it has been drawn again. */
+  function dbHeldCell(holder){
+    var live=document.activeElement;
+    if(!live||!holder.contains(live))return null;
+    var line=live.closest&&live.closest('[data-db-row]');
+    if(!line||!live.dataset||!live.dataset.dbCell)return null;
+    var held={ row:line.dataset.dbRow, cell:live.dataset.dbCell, start:null, end:null };
+    try{ held.start=live.selectionStart; held.end=live.selectionEnd; }catch(error){}
+    return held;
+  }
+  function dbRestoreCell(holder, held){
+    if(!held)return;
+    var back=holder.querySelector('[data-db-row="'+held.row+'"] [data-db-cell="'+held.cell+'"]');
+    if(!back)return;
+    back.focus({ preventScroll:true });
+    if(held.start!=null&&back.setSelectionRange){ try{ back.setSelectionRange(held.start,held.end); }catch(error){} }
+  }
   function paintDatabase(card, block){
     var holder=card.querySelector('[data-db-table]');
     if(!holder)return;
+    var held=dbHeldCell(holder);
     var frozen=readOnly||!canEdit()||sectionLocked(block.sectionId)||previewing();
     var props=dbProps(block), view=dbView(block), rows=dbShownRows(block,view);
     var all=dbRowsOf(block.id).length;
@@ -1737,6 +1810,7 @@
         +'<span class="db-count">'+dbCountText(rows.length,all)+'</span></div>';
       bindViewBar(card,block);
       if(!frozen)bindDatabase(card,block);
+      dbRestoreCell(holder,held);
       return;
     }
     holder.innerHTML=dbViewBarHTML(block,view,frozen)+'<div class="db-scroll"><table class="db-grid"><thead><tr>'
@@ -1756,6 +1830,7 @@
       +'<span class="db-count">'+dbCountText(rows.length,all)+'</span></div>';
     bindViewBar(card,block);
     if(!frozen)bindDatabase(card,block);
+    dbRestoreCell(holder,held);
   }
   function recastColumn(block, prop, change){
     dbRowsOf(block.id).forEach(function(row){
@@ -1874,6 +1949,8 @@
     var open=document.querySelector('.db-choices');
     if(open&&open.parentNode)open.parentNode.removeChild(open);
     document.removeEventListener('click',awayFromChoiceMenu);
+    window.removeEventListener('scroll',closeChoiceMenu,true);
+    window.removeEventListener('resize',closeChoiceMenu);
   }
   function awayFromChoiceMenu(event){
     if(event.target.closest('.db-choices')||event.target.closest('.db-tags'))return;
@@ -1912,6 +1989,9 @@
     var clear=menu.querySelector('[data-choice-clear]');
     if(clear)clear.onclick=function(event){ event.stopPropagation(); settle([]); };
     setTimeout(function(){ document.addEventListener('click',awayFromChoiceMenu); },0);
+    /* Placed against its cell once, so it goes when the cell moves. */
+    window.addEventListener('scroll',closeChoiceMenu,true);
+    window.addEventListener('resize',closeChoiceMenu);
   }
   /* Under whatever opened it, and never off the edge of the window. */
   function placePanel(panel, button){
@@ -1926,10 +2006,19 @@
   function closeViewSetup(){
     var open=document.querySelector('.db-setup-panel');
     if(open&&open.parentNode)open.parentNode.removeChild(open);
-    document.removeEventListener('click',awayFromViewSetup);
+    document.removeEventListener('pointerdown',awayFromViewSetup,true);
+    window.removeEventListener('scroll',closeViewSetup,true);
+    window.removeEventListener('resize',closeViewSetup);
   }
+  /* Judged as the press happens, not as the click finishes. Changing a rule
+     redraws the panel's insides, so by the time a click had finished the
+     button that was pressed no longer had the panel above it — it no longer
+     had anything above it — and the panel read that as a press on the page and
+     closed itself. */
   function awayFromViewSetup(event){
-    if(event.target.closest('.db-setup-panel')||event.target.closest('[data-db-view-setup]'))return;
+    var panel=document.querySelector('.db-setup-panel');
+    if(panel&&panel.contains(event.target))return;
+    if(event.target.closest&&event.target.closest('[data-db-view-setup]'))return;
     closeViewSetup();
   }
   function propChoiceHTML(block, chosenId, blank){
@@ -2032,7 +2121,12 @@
        down with it after every single change. */
     document.body.appendChild(panel);
     placePanel(panel,button);
-    setTimeout(function(){ document.addEventListener('click',awayFromViewSetup); },0);
+    setTimeout(function(){ document.addEventListener('pointerdown',awayFromViewSetup,true); },0);
+    /* It is placed against the button once. Once the page moves under it, a
+       fixed panel is no longer pointing at anything, so it leaves rather than
+       hanging in the corner of a scrolled page. */
+    window.addEventListener('scroll',closeViewSetup,true);
+    window.addEventListener('resize',closeViewSetup);
   }
   /* Moving a card from one lane to another is the one thing a board does that a
      table cannot: it writes the property the lanes are made of. */
@@ -3473,7 +3567,7 @@
     root.querySelectorAll('[data-add-open]').forEach(function(addOpen){
       addOpen.onclick=function(event){ event.stopPropagation(); openAddPalette(addOpen); };
     });
-    root.querySelectorAll('[data-block]').forEach(function(card){var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0], body=card.querySelector('[data-body]'), titleField=card.querySelector('[data-title]');if(titleField)titleField.oninput=function(e){block.title=e.target.value;queuedSave(block,false,{title:block.title});};if(body)body.oninput=function(e){block.body=cleanHTML(e.target.innerHTML);queuedSave(block,false,{body:block.body});};var practice=card.querySelector('[data-practice]');if(practice)practice.oninput=function(e){block.practice=e.target.value;queuedSave(block,false,{practice:block.practice});};var answer=card.querySelector('[data-answer]');if(answer)answer.oninput=function(e){block.answer=e.target.value;queuedSave(block,false,{answer:block.answer});};var image=card.querySelector('[data-image-url]');if(image)image.onchange=function(e){block.imageUrl=e.target.value.trim();queuedSave(block,true);render();};var imageUpload=card.querySelector('[data-image-upload]');if(imageUpload)imageUpload.onchange=function(e){var file=e.target.files&&e.target.files[0];if(file)takeImage(block,file,imageUpload);e.target.value='';};
+    root.querySelectorAll('[data-block]').forEach(function(card){var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0], body=card.querySelector('[data-body]'), titleField=card.querySelector('[data-title]');if(titleField)titleField.oninput=function(e){block.title=e.target.value;queuedSave(block,false,{title:block.title});};if(body){guardRichBody(body);body.oninput=function(e){block.body=cleanHTML(e.target.innerHTML);queuedSave(block,false,{body:block.body});};}var practice=card.querySelector('[data-practice]');if(practice)practice.oninput=function(e){block.practice=e.target.value;queuedSave(block,false,{practice:block.practice});};var answer=card.querySelector('[data-answer]');if(answer)answer.oninput=function(e){block.answer=e.target.value;queuedSave(block,false,{answer:block.answer});};var image=card.querySelector('[data-image-url]');if(image)image.onchange=function(e){block.imageUrl=e.target.value.trim();queuedSave(block,true);render();};var imageUpload=card.querySelector('[data-image-upload]');if(imageUpload)imageUpload.onchange=function(e){var file=e.target.files&&e.target.files[0];if(file)takeImage(block,file,imageUpload);e.target.value='';};
       var drop=card.querySelector('[data-image-drop]');
       if(drop)bindImageDrop(drop,block);
       var clear=card.querySelector('[data-image-clear]');
