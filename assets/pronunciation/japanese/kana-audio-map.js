@@ -18,7 +18,7 @@
   window.CrowLocalAudio['ja-JP'] = function(text){
     var romaji = kanaToRomaji[String(text || '').charAt(0)];
     return romaji ? {
-      src: '../assets/pronunciation/japanese/kana/' + romaji + '.mp3?v=hakatanoshio117117-20260915',
+      src: '../assets/pronunciation/japanese/kana/' + romaji + '.mp3?v=hakatanoshio117117-single-20260915',
       strict: true
     } : '';
   };
