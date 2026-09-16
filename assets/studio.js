@@ -1013,7 +1013,7 @@
     var settled=readOnly||!canEdit();
     var mode=(previewing()||!canEdit())
       ? '<span class="mode-indicator '+(settled?'is-viewing':'is-editing')+'" aria-live="polite"><i aria-hidden="true"></i>'+ (settled?'View mode':'Edit mode') +'</span>'
-      : '<button type="button" class="mode-switch" role="switch" data-toggle-view data-viewing="'+(readOnly?'true':'false')+'" aria-checked="'+(readOnly?'false':'true')+'" title="'+(readOnly?'Turn on to edit this project':'Turn off to read without editing')+'"><span class="mode-switch-track" aria-hidden="true"><span class="mode-switch-knob"></span></span><span class="mode-switch-label">Edit mode</span></button>';
+      : '<button type="button" class="mode-switch" role="switch" data-toggle-view data-viewing="'+(readOnly?'true':'false')+'" aria-checked="'+(readOnly?'false':'true')+'" title="'+(readOnly?'Turn on to edit this project':'Turn off to read without editing')+'"><span class="mode-switch-track" aria-hidden="true"><span class="mode-switch-knob"></span></span><span class="mode-switch-label">'+ (readOnly?'View mode':'Edit mode') +'</span></button>';
     return previewBarHTML()+'<div class="project-top"><div class="project-heading"><h1 class="project-title">'+esc(activeProject.title)+'</h1><div class="project-meta"><span class="'+(shared?'shared':'private')+'">'+esc(access)+'</span><span>'+esc(overview)+'</span></div><div class="project-presence" hidden><span>Viewing now</span><div class="collab-people" data-collab-people aria-label="People viewing this project"></div></div></div><div class="project-actions">'+mode+'<div class="project-action-buttons">'+actions+'</div></div></div><div class="section-bar"><button class="section-filter '+(activeSection==='all'?'active':'')+'" data-section="all">All</button><button class="section-filter '+(activeSection===''?'active':'')+'" data-section="">Unsorted</button>'+sectionButtons+'</div>'+pageBar+(locked?'<p class="section-lock-note">This section is locked. Unlock it from its cog menu to edit.</p>':'')+'<div class="add-row add-row-start '+(locked?'is-locked':'')+'">'+(locked?'':'<button type="button" class="add-open" data-add-open>+ Add block</button>')+'</div><div class="block-grid">'+rowsFrom(shown).map(rowHTML).join('')+'</div><div class="add-row '+(locked?'is-locked':'')+'">'+(locked?'<span>This section is locked</span>':'<button type="button" class="add-open" data-add-open>+ Add block</button>')+'</div>';
   }
   function personName(uid){
@@ -3459,7 +3459,9 @@
     var newSection=root.querySelector('[data-new-section]');
     if(newSection)newSection.onclick=async function(){var title=await askName('New section','e.g. Week one','Add section');if(!title||!title.trim())return;var section={id:id(),title:title.trim(),pages:[],locked:false};activeProject.sections=(activeProject.sections||[]).concat(section);activeSection=section.id;activePage='all';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};
     var toggle=root.querySelector('[data-toggle-view]');
-    if(toggle)toggle.onclick=function(){readOnly=!readOnly;render();};
+    /* Changing mode rewrites the whole document around the reader, so it
+       arrives the way the settings page does rather than blinking into place. */
+    if(toggle)toggle.onclick=function(){readOnly=!readOnly;renderSwitch();};
     root.querySelectorAll('[data-exit-preview]').forEach(function(button){ button.onclick=exitPreview; });
     var restore=root.querySelector('[data-restore-preview]');
     if(restore)restore.onclick=function(){ if(window.CrowStudioHistory)window.CrowStudioHistory.confirmRestore(); };

@@ -373,7 +373,10 @@ function decorate(){
   syncCommentBadges();
   const actions=root.querySelector('.project-action-buttons')||root.querySelector('.project-actions');
   if(actions&&!actions.querySelector('[data-upgrade-tasks]')){
-    [['Tasks',showTasks,'data-upgrade-tasks'],['History',showHistory,'data-upgrade-history']].forEach(([label,fn,attr])=>{const b=document.createElement('button');b.className='btn ghost sm';b.textContent=label;b.setAttribute(attr,'');b.onclick=fn;actions.insertBefore(b,actions.firstChild);});
+    /* These two are always here, so they go last in a row packed to the right
+       and never move. Add section, which leaves in view mode, sits to their
+       left where its absence costs nobody their place. */
+    [['History',showHistory,'data-upgrade-history'],['Tasks',showTasks,'data-upgrade-tasks']].forEach(([label,fn,attr])=>{const b=document.createElement('button');b.className='btn ghost sm';b.textContent=label;b.setAttribute(attr,'');b.onclick=fn;actions.appendChild(b);});
   }
   root.querySelectorAll('[data-block]').forEach(card=>{bindComment(card);});
   bindSlash();
