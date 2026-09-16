@@ -533,8 +533,16 @@ function CrowQuiz(config){
     var seenQuestionKeys = {};
     function addQuestion(pool, targetKey, sourceUnit){
       if (!pool || !pool.length) return;
-      var choices = pool.filter(function(gen){ return gen !== lastGen; });
-      var gens = choices.length ? choices : pool;
+      /* Practice asks for any question, so the generator that made the last one
+         stands aside to keep a run from repeating itself. A review is not a
+         free choice: it has to reproduce one exact card, and the only thing
+         that can make it may well be the generator that just made the card
+         before. Standing it aside meant a due card whose neighbour came from
+         the same generator could never be produced, so it was dropped from the
+         queue without a word and stayed due — the cards came back untouched
+         however many times they were reviewed. */
+      var varied = targetKey ? [] : pool.filter(function(gen){ return gen !== lastGen; });
+      var gens = varied.length ? varied : pool;
       var candidate = null, key = '';
       /* A generator may choose randomly from a small pool. Generate first,
          then keep only a prompt the learner has not already seen this run. */
