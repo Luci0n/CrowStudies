@@ -2912,7 +2912,7 @@
       var codeHeight=Math.max(180,Math.min(720,Number(block.codeHeight)||360));
       var languages=[['plain','Plain text'],['javascript','JavaScript'],['typescript','TypeScript'],['html','HTML'],['css','CSS'],['json','JSON'],['python','Python'],['sql','SQL'],['bash','Shell']];
       var languageOptions=languages.map(function(option){ return '<option value="'+option[0]+'"'+(language===option[0]?' selected':'')+'>'+option[1]+'</option>'; }).join('');
-      body='<div class="code-wrap'+(block.codeWrap?' is-wrapped':'')+'" style="--code-height:'+codeHeight+'px"><div class="code-tools"><label class="code-language" title="Language"><span>Language</span><select data-code-language'+disabled+'>'+languageOptions+'</select></label><button type="button" class="code-wrap-toggle" data-code-wrap aria-pressed="'+(block.codeWrap?'true':'false')+'">Wrap</button><label class="code-height" title="Editor height"><span>Height</span><input type="range" data-code-height min="180" max="720" step="20" value="'+codeHeight+'"'+disabled+'></label><button type="button" class="code-size" data-code-size aria-expanded="false">Expand</button><button type="button" class="code-copy" data-code-copy title="Copy this code">'
+      body='<div class="code-wrap'+(block.codeWrap?' is-wrapped':'')+'" style="--code-height:'+codeHeight+'px"><div class="code-tools"><label class="code-language" title="Language"><span>Language</span><select data-code-language'+disabled+'>'+languageOptions+'</select></label><button type="button" class="code-wrap-toggle" data-code-wrap aria-pressed="'+(block.codeWrap?'true':'false')+'">Wrap</button><label class="code-height" title="Editor height"><span>Height</span><input type="range" data-code-height min="180" max="720" step="20" value="'+codeHeight+'"'+disabled+'></label><button type="button" class="code-size" data-code-size aria-expanded="false"><span data-size-word>Expand</span><span class="code-size-mark" aria-hidden="true"></span></button><button type="button" class="code-copy" data-code-copy title="Copy this code">'
         +'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="9" height="9" rx="1.6"></rect><path d="M10.5 3.5v-1a1 1 0 0 0-1-1h-7a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h1"></path></svg>'
         +'<span data-copy-word>Copy</span></button></div>'
         +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div><div class="code-editor"><pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+syntaxCodeHTML(written,language)+'</pre></div></div></div>';
@@ -3622,9 +3622,19 @@
       };
       var codeWrap=card.querySelector('.code-wrap');
       var wrapToggle=card.querySelector('[data-code-wrap]');
+      var reflowTimer=null;
       if(wrapToggle)wrapToggle.onclick=function(){
         block.codeWrap=!block.codeWrap;
-        if(codeWrap)codeWrap.classList.toggle('is-wrapped',block.codeWrap);
+        if(codeWrap){
+          codeWrap.classList.toggle('is-wrapped',block.codeWrap);
+          /* Every line finds a new place at once. The settle has to start from
+             nothing each time, so the class is taken off and put back. */
+          codeWrap.classList.remove('is-reflowing');
+          void codeWrap.offsetWidth;
+          codeWrap.classList.add('is-reflowing');
+          clearTimeout(reflowTimer);
+          reflowTimer=setTimeout(function(){ codeWrap.classList.remove('is-reflowing'); },300);
+        }
         wrapToggle.setAttribute('aria-pressed',block.codeWrap?'true':'false');
         queuedSave(block,true,{codeWrap:block.codeWrap});
       };
@@ -3634,18 +3644,28 @@
         paintCode();
         queuedSave(block,true,{codeLanguage:block.codeLanguage});
       };
-      var heightControl=card.querySelector('[data-code-height]');
+      var heightControl=card.querySelector('[data-code-height]'), sizingTimer=null;
       if(heightControl)heightControl.oninput=function(){
         var next=Math.max(180,Math.min(720,Number(heightControl.value)||360));
         block.codeHeight=next;
-        if(codeWrap)codeWrap.style.setProperty('--code-height',next+'px');
+        if(codeWrap){
+          /* The frame follows the handle while it is held, so the easing that
+             makes Expand worth watching is dropped until the drag stops. */
+          codeWrap.classList.add('is-sizing');
+          clearTimeout(sizingTimer);
+          sizingTimer=setTimeout(function(){ codeWrap.classList.remove('is-sizing'); },180);
+          codeWrap.style.setProperty('--code-height',next+'px');
+        }
         queuedSave(block,false,{codeHeight:next});
       };
       var size=card.querySelector('[data-code-size]');
       if(size)size.onclick=function(){
         var expanded=card.classList.toggle('code-expanded');
         size.setAttribute('aria-expanded',expanded?'true':'false');
-        size.textContent=expanded?'Collapse':'Expand';
+        /* Only the word changes: replacing the button's contents would throw
+           away the mark that turns to show which way it goes. */
+        var word=size.querySelector('[data-size-word]');
+        if(word)word.textContent=expanded?'Collapse':'Expand';
       };
       var copy=card.querySelector('[data-code-copy]');
       if(copy)copy.onclick=async function(){
