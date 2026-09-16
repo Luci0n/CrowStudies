@@ -304,45 +304,38 @@ a.subject:active{ transform:translateY(3px); border-bottom-width:2px; margin-bot
 
 .pathhead{ display:flex; align-items:center; justify-content:space-between; gap:10px 12px; flex-wrap:wrap; margin:0 4px 12px; }
 .pathhead h2{ font-size:22px; }
-/* ---------- the review panel ----------
-   What spaced repetition is waiting for, in a panel of its own. It used to be
-   a grey line under a quiet button, which is not the weight of the one thing
-   on this screen that decides whether any of it is remembered. */
+/* ---------- the review row ----------
+   The same row as a lesson: one disc, a title beside a quiet line, an action
+   at the end. It earns its place with the colour it carries — the brand while
+   cards wait, and the good colour once they do not — rather than by being
+   shaped unlike everything around it. */
 .reviewbar{
-  display:flex; align-items:center; gap:12px;
-  margin:0 4px 14px; padding:13px 14px;
-  border:1px solid var(--line); border-radius:14px; background:var(--card);
+  --u:var(--line-strong);
+  display:flex; align-items:center; gap:11px; width:100%; min-height:60px;
+  /* Lines up with the lesson rows it belongs beside, not with the heading. */
+  margin:0 0 12px; padding:9px 11px;
+  background:var(--card); border:1px solid var(--line); border-left:3px solid var(--u);
+  border-radius:7px; text-align:left;
   transition:border-color .2s ease, background .2s ease;
 }
-.reviewbar-mark{
-  display:grid; place-items:center; flex:none; width:36px; height:36px;
-  border-radius:11px; background:var(--well); color:var(--ink-3);
-  font-size:17px; line-height:1;
-}
-.reviewbar-said{ display:flex; flex-direction:column; gap:2px; min-width:0; flex:1 1 auto; }
-.reviewbar-said b{ color:var(--ink); font-size:15.5px; font-weight:800; line-height:1.25; }
-.review-note{ margin:0; color:var(--ink-3); font-size:12.5px; font-weight:700; line-height:1.35; }
+.reviewbar .disc{ font-size:18px; line-height:1; }
+.reviewbar .utext{ gap:8px; }
+.review-note{ margin:0; }
 .review-note:empty{ display:none; }
 .reviewbar .btn{ flex:none; }
 
-/* Cards are waiting: the panel carries the brand and the button is the solid
-   one on the screen. */
-.reviewbar.is-due{
-  border-color:color-mix(in srgb,var(--brand) 58%,var(--line));
-  background:color-mix(in srgb,var(--brand) 10%,var(--card));
-}
-.reviewbar.is-due .reviewbar-mark{
-  background:color-mix(in srgb,var(--brand) 22%,transparent); color:var(--brand);
-}
-/* Nothing to do: it stays, so the schedule is never invisible, but it stops
+/* Cards are waiting. */
+.reviewbar.is-due{ --u:var(--brand); background:color-mix(in srgb,var(--brand) 8%,var(--card)); }
+.reviewbar.is-due .disc{ background:var(--u); border-color:var(--u); color:#fff; }
+/* Nothing to answer: it stays, so the schedule is never invisible, and stops
    asking for anything. */
-.reviewbar.is-clear .reviewbar-mark{ color:var(--good); }
-.reviewbar.is-clear .reviewbar-said b{ color:var(--ink-2); }
-.reviewbar.is-empty .reviewbar-said b{ color:var(--ink-2); }
+.reviewbar.is-clear{ --u:var(--good); }
+.reviewbar.is-clear .utext b{ color:var(--ink-2); }
+.reviewbar.is-empty .utext b{ color:var(--ink-2); }
 
 @media(max-width:560px){
-  .reviewbar{ flex-wrap:wrap; gap:10px 12px; padding:12px; }
-  .reviewbar-said{ flex:1 1 calc(100% - 48px); }
+  .reviewbar{ flex-wrap:wrap; }
+  .reviewbar .utext{ flex:1 1 calc(100% - 51px); }
   .reviewbar .btn{ flex:1 1 100%; width:100%; }
 }
 

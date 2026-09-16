@@ -359,11 +359,15 @@ function CrowQuiz(config){
          panel says so in the brand colour and the button is the solid one on
          the screen; when there is nothing to do it goes quiet and says when
          the next card is coming back. */
+      /* Built from the same parts as the lesson rows below it — the same disc,
+         the same title beside the same quiet line — so it reads as another row
+         of this page rather than a panel borrowed from somewhere else. What
+         makes it matter is the colour it carries, not a shape of its own. */
       +     '<div class="reviewbar" data-f="reviewBar">'
-      +       '<span class="reviewbar-mark" data-f="reviewMark" aria-hidden="true"></span>'
-      +       '<span class="reviewbar-said"><b data-f="reviewHead"></b>'
-      +       '<small class="review-note" data-f="reviewNote"></small></span>'
-      +       '<button class="btn sm" data-f="reviewDue">Review cards</button>'
+      +       '<span class="disc" data-f="reviewMark" aria-hidden="true"></span>'
+      +       '<span class="utext"><b data-f="reviewHead"></b>'
+      +       '<span class="review-note" data-f="reviewNote"></span></span>'
+      +       '<button class="btn ghost sm" data-f="reviewDue">Review cards</button>'
       +     '</div>'
       +     '<div class="pathhead"><h2>Practice</h2></div>'
       +     '<div class="home-tabs" data-f="homeTabs"></div>'
@@ -519,7 +523,10 @@ function CrowQuiz(config){
        cards" and looked as though the review had not counted. Only the
        backlog carries a number. */
     var soonest=available.length ? Math.min.apply(null, available.map(function(card){ return card.due||0; })) : 0;
-    var rotation=available.length+' card'+(available.length===1?'':'s')+' in rotation';
+    /* The line shares a row with the title and a button and is cut with an
+       ellipsis when it runs out of room, exactly as the lesson rows are, so it
+       says the same thing in fewer words. */
+    var rotation=available.length+' in rotation';
     dom.reviewBar.className='reviewbar '+(due.length ? 'is-due' : (available.length ? 'is-clear' : 'is-empty'));
     dom.reviewMark.textContent=due.length ? '↻' : (available.length ? '✓' : '✦');
     dom.reviewHead.textContent=due.length
@@ -531,7 +538,6 @@ function CrowQuiz(config){
         ? 'Next card '+whenDue(soonest)+' · '+rotation
         : 'Questions you answer in a lesson come back here on a schedule.');
     dom.reviewDue.textContent=due.length ? 'Review now' : 'Practice seen cards';
-    dom.reviewDue.className='btn sm'+(due.length ? '' : ' ghost');
     dom.reviewDue.hidden=!available.length;
     dom.reviewDue.disabled=!available.length;
     /* It is written on the page, so the button is described by what is there
