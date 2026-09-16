@@ -2391,7 +2391,12 @@
     });
   }
   function codeLinesHTML(text){
-    var count=Math.max(1,String(text||'').split('\n').length);
+    /* A final newline is what makes the last line exist on screen rather than
+       a line of its own: a pre needs one to render an empty last line, and
+       pressing Enter at the end writes two so the new line has somewhere to
+       sit. Counting that character gave the gutter one number more than the
+       code had, until the next keystroke used it up. */
+    var count=Math.max(1,String(text==null?'':text).replace(/\n$/,'').split('\n').length);
     var rows=[];
     for(var line=1;line<=count;line++)rows.push('<span>'+line+'</span>');
     return rows.join('');
