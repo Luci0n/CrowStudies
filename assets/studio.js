@@ -3389,8 +3389,9 @@
       view='settings';
       if(narrow())sideOpen=false;
       /* Settings for a project you are not in still has to open that project,
-         because that is what the page is describing. */
-      if(wanted&&(!activeProject||activeProject.id!==wanted))loadProject(wanted);
+         because that is what the page is describing. It is still the settings
+         page arriving, so it arrives the same way. */
+      if(wanted&&(!activeProject||activeProject.id!==wanted))loadProject(wanted,true);
       else renderSwitch();
     };});
     root.querySelectorAll('[data-import-project]').forEach(function(button){button.onclick=async function(){button.disabled=true;try{ await importProjectFile(); }finally{ button.disabled=false; }};});
@@ -4069,12 +4070,17 @@
   }
   /* Switching projects shows the new project's frame straight away with
      placeholder cards, then the live blocks arrive. */
-  async function loadProject(projectId){
+  /* Opening a project is a move to somewhere else and arrives plainly. Asking
+     for its settings is the same arrival as switching pages inside a project
+     already open, so callers that are really doing that pass `animate` and get
+     the crossfade either way — the page should not depend on which project the
+     settings happen to belong to. */
+  async function loadProject(projectId, animate){
     try{
       activeProject=(window.__crowProjects||[]).filter(function(p){return p.id===projectId;})[0]||null;
       activeSection='all';activePage='all';blocks=[];studioError='';
       loadingProject=!!activeProject;
-      render();
+      if(animate)renderSwitch(); else render();
       watchActiveProject();
     }catch(error){
       loadingProject=false;

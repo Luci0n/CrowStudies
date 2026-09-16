@@ -144,18 +144,41 @@ function CrowQuiz(config){
     });
     return merged;
   }
+  /* Firebase takes a second or two to say who is signed in, and the course
+     used to spend that time showing a blank one: no XP, no best run, no cards
+     due. The account that was last signed in on this device is known before
+     any of that, and its progress is already cached here, so the first paint
+     uses it. Auth then confirms it, replaces it if a different account
+     answers, or clears it for a guest. */
+  function lastAccount(){
+    try{ return localStorage.getItem('crowstudies:last-account') || ''; }catch(e){ return ''; }
+  }
+  var assumedUid = lastAccount();
+  /* Until auth answers, work belongs to the account we are drawing, never to
+     the guest store — otherwise a question answered in the first seconds
+     would file an account's progress under anonymous. */
+  function saveStore(){
+    var user=window.CrowCloud&&window.CrowCloud.user;
+    if(user) return accountStore(user.uid);
+    return assumedUid ? accountStore(assumedUid) : GUEST_STORE;
+  }
   function persist(){
     var user=window.CrowCloud&&window.CrowCloud.user;
-    try{ localStorage.setItem(user ? accountStore(user.uid) : GUEST_STORE, JSON.stringify(save)); }catch(e){}
+    try{ localStorage.setItem(saveStore(), JSON.stringify(save)); }catch(e){}
     if(user) window.CrowCloud.saveCourse(config.course, save).catch(function(){});
   }
-  var save = loadSave(GUEST_STORE);
+  var save = assumedUid ? loadSave(accountStore(assumedUid), true) : loadSave(GUEST_STORE);
   var cloudLoadedFor = null;
   function loadCloudProgress(){
     if (!window.CrowCloud || !window.CrowCloud.user || cloudLoadedFor === window.CrowCloud.user.uid) return;
     var user=window.CrowCloud.user;
     cloudLoadedFor = user.uid;
     var local=loadSave(accountStore(user.uid), true);
+    /* Somebody else signed in since this device last remembered an account.
+       Their cached work is on screen, so correct it now rather than leaving it
+       up for the length of a Firestore round trip. */
+    if (assumedUid && assumedUid !== user.uid){ save = local; if (dom.path) renderHome(); }
+    assumedUid = user.uid;
     window.CrowCloud.loadCourse(config.course).then(function(remote){
       save = remote ? mergeSave(local, remote) : local;
       persist();
@@ -167,6 +190,9 @@ function CrowQuiz(config){
   }
   function loadGuestProgress(){
     cloudLoadedFor=null;
+    /* Auth has answered that nobody is signed in, so the account we drew on
+       faith is not ours to show. */
+    assumedUid='';
     save=loadSave(GUEST_STORE);
     if(dom.path)renderHome();
   }

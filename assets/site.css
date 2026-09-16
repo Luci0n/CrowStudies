@@ -556,8 +556,11 @@ a.subject:active{ transform:translateY(3px); border-bottom-width:2px; margin-bot
 .resgrid{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:28px; }
 
 /* ---------- overlay ---------- */
-.backdrop{ position:fixed; inset:0; background:rgba(14,17,28,.55); z-index:60; display:grid; place-items:center; padding:20px; }
-.modal{ background:var(--card); border-radius:24px; padding:26px; max-width:460px; width:100%; border:2px solid var(--line); }
+/* The hint and review-mode overlays arrive the same way the account dialogs
+   do: the scrim fades up, the panel lifts in behind it. Anyone who has asked
+   for less motion gets both at once, from the global rule further down. */
+.backdrop{ position:fixed; inset:0; background:rgba(14,17,28,.55); z-index:60; display:grid; place-items:center; padding:20px; animation:overlay-in .2s ease both; }
+.modal{ background:var(--card); border-radius:24px; padding:26px; max-width:460px; width:100%; border:2px solid var(--line); animation:pop-in .28s cubic-bezier(.22,1,.36,1) both; }
 .modal h3{ font-size:24px; margin-bottom:10px; }
 .modal p{ font-size:16.5px; color:var(--ink-2); margin:0 0 20px; }
 .app-overlay{ position:fixed; z-index:50; inset:0; display:grid; place-items:center; padding:18px; background:rgba(4,6,12,.7); backdrop-filter:blur(6px); animation:overlay-in .2s ease both; }

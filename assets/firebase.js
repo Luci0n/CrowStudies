@@ -173,6 +173,15 @@ function writeAuthHint(user){
     if(user)sessionStorage.setItem('crowstudies:auth-hint',JSON.stringify({displayName:user.displayName||'',email:user.email||'',username:(cloud.profile&&cloud.profile.username)||'',avatarUrl:(cloud.profile&&cloud.profile.avatarUrl)||''}));
     else sessionStorage.removeItem('crowstudies:auth-hint');
   }catch(error){}
+  /* The hint above is per-tab, so a course opened in a fresh tab cannot use
+     it. Which account was last signed in here is worth keeping for longer: a
+     lesson page reads it to show that account's cached progress on the first
+     paint, instead of a blank course until Firebase answers. Signing out
+     removes it, so the next visitor never sees the last one's work. */
+  try{
+    if(user)localStorage.setItem('crowstudies:last-account',user.uid);
+    else localStorage.removeItem('crowstudies:last-account');
+  }catch(error){}
 }
 function updateAuthControls(user){
   document.querySelectorAll('[data-firebase-auth]').forEach(function(button){
