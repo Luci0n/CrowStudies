@@ -3142,14 +3142,18 @@
       units:[lesson.unit],
       perStep:1, reviewQs:0, mixedCount:Math.max(1,lesson.questions), hearts:3
     }).start('#'+rootId);
-    /* Studio practice opens straight into the one lesson, so the course home
-       behind it is a dead end. Every way out of the session leaves the overlay
-       instead, and says where it goes. */
+    /* The button says practice, so it opens the drill: the lesson's questions
+       in a shuffled order, with no teaching in front of them. It used to aim
+       at `.unit`, which is the card itself and has no handler of its own — the
+       click did nothing, the home screen stayed up, and Learn sat to the left
+       of Practice, replaying the lesson in its authored order every time. */
     var leave=function(){ shade.remove(); };
     var quit=host.querySelector('[data-f="quit"]');if(quit)quit.onclick=leave;
+    /* Leaving the drill lands on this lesson's own home, where Learn plays it
+       through as a learner meets it. The overlay's own × is the way out. */
     var back=host.querySelector('[data-f="home"]');
-    if(back){ back.textContent='Back to project'; back.onclick=leave; }
-    var unitButton=host.querySelector('.unit');if(unitButton)unitButton.click();
+    if(back)back.textContent='Lesson home';
+    var drill=host.querySelector('.unit-practice');if(drill)drill.click();
   }
   function bindLessonCard(card, block){
     block.steps=lessonSteps(block);
