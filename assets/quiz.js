@@ -352,15 +352,20 @@ function CrowQuiz(config){
       +       '<div class="stat streak"><b data-f="run">0</b><span>Best run</span></div>'
       +       '<div class="stat acc"><b data-f="sessions">0</b><span>Sessions</span></div>'
       +     '</div>'
-      /* What the review button used to explain in a tooltip is written under
-         the heading instead. A tooltip needs a pointer to hover, which a phone
-         does not have, so on a phone it said nothing at all. */
-      /* The sentence belongs to the review button, so it is kept with it. Set
-         under the Practice heading it looked like a caption for the list of
-         lessons below, which is what that heading introduces. */
-      +     '<div class="pathhead"><h2>Practice</h2>'
-      +       '<div class="review-cue"><button class="btn ghost sm" data-f="reviewDue">Review cards</button>'
-      +       '<p class="review-note" data-f="reviewNote"></p></div></div>'
+      /* Spaced repetition is the part of this that decides whether anything is
+         remembered, so what it is waiting for is stated in its own panel and
+         not in a tooltip a phone cannot open, nor in grey text under a quiet
+         button where it was easy to miss entirely. When cards are ready the
+         panel says so in the brand colour and the button is the solid one on
+         the screen; when there is nothing to do it goes quiet and says when
+         the next card is coming back. */
+      +     '<div class="reviewbar" data-f="reviewBar">'
+      +       '<span class="reviewbar-mark" data-f="reviewMark" aria-hidden="true"></span>'
+      +       '<span class="reviewbar-said"><b data-f="reviewHead"></b>'
+      +       '<small class="review-note" data-f="reviewNote"></small></span>'
+      +       '<button class="btn sm" data-f="reviewDue">Review cards</button>'
+      +     '</div>'
+      +     '<div class="pathhead"><h2>Practice</h2></div>'
       +     '<div class="home-tabs" data-f="homeTabs"></div>'
       +     '<div class="path" data-f="path"></div>'
       +   '</section>'
@@ -514,15 +519,23 @@ function CrowQuiz(config){
        cards" and looked as though the review had not counted. Only the
        backlog carries a number. */
     var soonest=available.length ? Math.min.apply(null, available.map(function(card){ return card.due||0; })) : 0;
-    dom.reviewDue.textContent=due.length ? 'Review '+due.length+' due' : (available.length ? 'Practice seen cards' : 'Review cards');
-    var note=due.length
-      ? (due.length===1?'1 card ready now':due.length+' cards ready now')+' · '+available.length+' in rotation'
+    var rotation=available.length+' card'+(available.length===1?'':'s')+' in rotation';
+    dom.reviewBar.className='reviewbar '+(due.length ? 'is-due' : (available.length ? 'is-clear' : 'is-empty'));
+    dom.reviewMark.textContent=due.length ? '↻' : (available.length ? '✓' : '✦');
+    dom.reviewHead.textContent=due.length
+      ? (due.length===1 ? '1 card ready to review' : due.length+' cards ready to review')
+      : (available.length ? 'All caught up' : 'No review cards yet');
+    dom.reviewNote.textContent=due.length
+      ? rotation
       : (available.length
-        ? 'All caught up · next card '+whenDue(soonest)+' · '+available.length+' in rotation'
-        : 'Practice a lesson and the questions you answer become review cards.');
-    dom.reviewNote.textContent=note;
-    /* The sentence is on the page now, so it is what the button is described
-       by rather than something only a pointer can uncover. */
+        ? 'Next card '+whenDue(soonest)+' · '+rotation
+        : 'Questions you answer in a lesson come back here on a schedule.');
+    dom.reviewDue.textContent=due.length ? 'Review now' : 'Practice seen cards';
+    dom.reviewDue.className='btn sm'+(due.length ? '' : ' ghost');
+    dom.reviewDue.hidden=!available.length;
+    dom.reviewDue.disabled=!available.length;
+    /* It is written on the page, so the button is described by what is there
+       rather than by something only a pointer could uncover. */
     dom.reviewDue.removeAttribute('title');
     dom.reviewDue.setAttribute('aria-describedby', dom.reviewNote.id);
 
