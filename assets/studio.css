@@ -1028,27 +1028,52 @@ body.is-sizing .studio-block{ transition:none; }
   -webkit-appearance:none; -moz-appearance:none; appearance:none;
   transition:color .18s ease, border-color .18s ease;
 }
-/* The rail is an adjustment, so it keeps to the far side beside the commands
-   rather than sitting among them. */
-.code-height{ margin-left:auto; }
+/* The rail is a setting, so it stays with the language on the near side.
+   Pushing it to the far side left it stranded in the middle of a line of its
+   own as soon as the row wrapped. The commands take the far side instead. */
+.code-height{ margin-left:0; }
 .code-language select:hover{ color:var(--ink); border-color:color-mix(in srgb,var(--brand) 55%,var(--glass-edge)); }
 
-/* One object with three positions, divided by a hairline instead of a gap. */
-.code-actions{ display:inline-flex; align-items:stretch; overflow:hidden; }
+/* A code card can be half a row wide while the page is wide, so what these
+   controls have to fit inside is the block, not the window. */
+.code-wrap{ container-type:inline-size; }
+
+/* One object with three positions, divided by a hairline instead of a gap.
+   The corners are drawn on the end positions rather than clipped by the
+   group: clipping is what cut the last label in half when the row ran short,
+   instead of letting the group give way. */
+.code-actions{ display:inline-flex; align-items:stretch; overflow:visible; max-width:100%; }
 .code-actions > button{
   display:inline-flex; align-items:center; justify-content:center; gap:5px;
+  flex:0 1 auto; min-width:0; white-space:nowrap;
   height:100%; padding:0 10px; border:0; border-radius:0; background:transparent;
   color:var(--ink-3); font-family:inherit; font-weight:700; font-size:11px; line-height:1; cursor:pointer;
   transition:color .18s ease, background .18s ease;
 }
+.code-actions > button:first-child{ border-radius:7px 0 0 7px; }
+.code-actions > button:last-child{ border-radius:0 7px 7px 0; }
 .code-actions > button + button{ box-shadow:inset 1px 0 0 var(--glass-edge); }
 .code-actions > button:hover{ color:var(--ink); background:var(--glass-lift); }
 .code-actions > button:active{ background:color-mix(in srgb,var(--brand) 14%,transparent); }
 .code-actions > button:focus-visible{ outline:2px solid var(--brand); outline-offset:-2px; }
 .code-language select:focus-visible{ outline:2px solid var(--brand); outline-offset:2px; }
+.code-actions{ margin-left:auto; }
 /* In view mode the two editing positions are gone, so the one that remains
-   must not keep the divider that separated it from them. */
-.read-only .code-actions > .code-copy{ box-shadow:none; }
+   keeps neither the divider that separated it from them nor their corners. */
+.read-only .code-actions > .code-copy{ box-shadow:none; border-radius:7px; }
+
+/* Narrow blocks give up the word before they give up the control. */
+@container (max-width:260px){
+  .code-copy [data-copy-word]{ display:none; }
+  .code-actions > button{ padding:0 8px; }
+}
+@container (max-width:330px){
+  /* Nothing left to share a line with: the rail takes its own, full width and
+     starting where everything else starts. */
+  .code-height{ width:100%; padding:0; }
+  .code-height input[type="range"]{ width:100%; }
+  .code-actions{ margin-left:0; }
+}
 
 /* The language sits behind our own chevron rather than the platform's. */
 .code-language{ position:relative; display:inline-flex; gap:0; }
