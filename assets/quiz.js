@@ -352,7 +352,12 @@ function CrowQuiz(config){
       +       '<div class="stat streak"><b data-f="run">0</b><span>Best run</span></div>'
       +       '<div class="stat acc"><b data-f="sessions">0</b><span>Sessions</span></div>'
       +     '</div>'
-      +     '<div class="pathhead"><h2>Practice</h2><button class="btn ghost sm" data-f="reviewDue">Review cards</button></div>'
+      /* What the review button used to explain in a tooltip is written under
+         the heading instead. A tooltip needs a pointer to hover, which a phone
+         does not have, so on a phone it said nothing at all. */
+      +     '<div class="pathhead"><div class="pathhead-said"><h2>Practice</h2>'
+      +       '<p class="review-note" data-f="reviewNote"></p></div>'
+      +       '<button class="btn ghost sm" data-f="reviewDue">Review cards</button></div>'
       +     '<div class="home-tabs" data-f="homeTabs"></div>'
       +     '<div class="path" data-f="path"></div>'
       +   '</section>'
@@ -422,6 +427,10 @@ function CrowQuiz(config){
 
     root.querySelectorAll('[data-f]').forEach(function(n){ dom[n.dataset.f] = n; });
     root.querySelectorAll('[data-screen]').forEach(function(n){ dom['screen_'+n.dataset.screen] = n; });
+    /* A Studio lesson opens its own course over the top of a page that may
+       already have one, so anything named has to be named for this course
+       alone. */
+    dom.reviewNote.id = 'review-note-' + String(config.course || 'course').replace(/[^a-z0-9_-]/gi,'-');
 
     root.querySelector('.coursehero h1').textContent = config.title || '';
     root.querySelector('.coursehero p').textContent = config.tagline || '';
@@ -503,11 +512,16 @@ function CrowQuiz(config){
        backlog carries a number. */
     var soonest=available.length ? Math.min.apply(null, available.map(function(card){ return card.due||0; })) : 0;
     dom.reviewDue.textContent=due.length ? 'Review '+due.length+' due' : (available.length ? 'Practice seen cards' : 'Review cards');
-    dom.reviewDue.title=due.length
-      ? (due.length===1?'One card is':due.length+' cards are')+' ready to review now.'
+    var note=due.length
+      ? (due.length===1?'1 card ready now':due.length+' cards ready now')+' · '+available.length+' in rotation'
       : (available.length
-        ? 'Nothing due — next '+whenDue(soonest)+'. Practise cards you have already seen.'
-        : 'Answer practice questions first to create review cards.');
+        ? 'All caught up · next card '+whenDue(soonest)+' · '+available.length+' in rotation'
+        : 'Practice a lesson and the questions you answer become review cards.');
+    dom.reviewNote.textContent=note;
+    /* The sentence is on the page now, so it is what the button is described
+       by rather than something only a pointer can uncover. */
+    dom.reviewDue.removeAttribute('title');
+    dom.reviewDue.setAttribute('aria-describedby', dom.reviewNote.id);
 
     var visibleUnits = HOME_TABS
       ? UNITS.filter(function(u){ return (u.homeTab || HOME_TABS[0].id) === activeHomeTab; })

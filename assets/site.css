@@ -302,8 +302,20 @@ a.subject:active{ transform:translateY(3px); border-bottom-width:2px; margin-bot
 .stat.streak b{ color:var(--gold); }
 .stat.acc b{ color:var(--good); }
 
-.pathhead{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 4px 12px; }
+.pathhead{ display:flex; align-items:center; justify-content:space-between; gap:10px 12px; flex-wrap:wrap; margin:0 4px 12px; }
 .pathhead h2{ font-size:22px; }
+.pathhead-said{ min-width:0; flex:1 1 auto; }
+/* What the review button is offering, said on the page rather than held in a
+   tooltip that a phone can never open. */
+.review-note{ margin:2px 0 0; color:var(--ink-3); font-size:12.5px; font-weight:700; line-height:1.35; }
+.review-note:empty{ display:none; }
+.pathhead .btn{ flex:0 0 auto; }
+@media(max-width:560px){
+  .pathhead{ align-items:flex-start; }
+  .pathhead-said{ flex:1 1 100%; order:1; }
+  .pathhead .btn{ order:2; width:100%; }
+  .review-note{ font-size:12px; }
+}
 
 .path{ position:relative; display:flex; flex-direction:column; gap:6px; }
 /* Short staggered entrance for the compact lesson rows. */

@@ -26,7 +26,7 @@
   var style = document.createElement('link');
   style.rel = 'stylesheet';
   style.dataset.crowTopographyStyle = 'true';
-  style.href = source ? new URL('site.css?v=overlay-motion-20260915', source).href : 'assets/site.css?v=overlay-motion-20260915';
+  style.href = source ? new URL('site.css?v=review-note-20260916', source).href : 'assets/site.css?v=review-note-20260916';
   document.head.appendChild(style);
 }());
 
