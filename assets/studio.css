@@ -1336,3 +1336,23 @@ body.is-sizing .studio-block{ transition:none; }
   .lesson-meta{ grid-template-columns:minmax(0,1fr) auto auto; }
   .lesson-field.wide{ grid-column:1/-1; }
 }
+
+/* ---------- lesson builder in a narrow block ----------
+   The rail and the open step sat in two columns until the window was small,
+   but a lesson can be half a row wide while the window is wide, so the two
+   columns stayed and the step could not shrink to meet them: a 1fr track will
+   not go below the width its contents demand, and the step simply hung over
+   the edge of its own card. The block is what it has to fit inside, and the
+   step may shrink; below the width where two columns are worth having, the
+   rail lies along the top instead. */
+.studio-block.lesson{ container-type:inline-size; }
+.lesson-builder{ grid-template-columns:minmax(150px,204px) minmax(0,1fr); }
+@container (max-width:520px){
+  .lesson-builder{ grid-template-columns:minmax(0,1fr); }
+  .step-rail{ grid-auto-flow:column; grid-auto-columns:minmax(136px,1fr); max-height:none; overflow-x:auto; }
+}
+/* The step number keeps its line; the controls beside it take the next one
+   rather than squeezing it in half. */
+.lesson-step-head{ flex-wrap:wrap; }
+.lesson-step-head > span:first-child{ white-space:nowrap; }
+.lesson-step-head select{ min-width:0; }
