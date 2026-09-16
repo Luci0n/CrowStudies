@@ -1141,7 +1141,39 @@
      a twenty-step lesson is the same height as a two-step one. Which step is
      open, and whether the details panel is unfolded, are remembered per block
      so a re-render does not throw the person back to the top. */
-  var openStep={}, openDetails={};
+  var openStep={}, openDetails={}, openTeach={};
+  /* A step that asks something leads with what it asks. It may teach first as
+     well, but most do not, and laying the teaching fields out above every
+     question made a two-line multiple choice read as a six-field form. The
+     teaching fields fold away behind their own heading, already open for a
+     step that uses them. A teach-only step is nothing but those fields, so it
+     keeps them in the open. */
+  function teachKey(block, index){ return block.id+':'+index; }
+  function teachIsOpen(block, step, index){
+    var held=openTeach[teachKey(block,index)];
+    if(held!==undefined)return held;
+    return !!(step.title||step.body||step.practice);
+  }
+  function teachFieldsHTML(step, index, disabled){
+    return '<input data-step-title="'+index+'" value="'+esc(step.title)+'" placeholder="Section title, e.g. A whole step skips one key"'+disabled+'>'
+      +'<textarea data-step-body="'+index+'" placeholder="Teach the idea in a few clear lines."'+disabled+'>'+esc(step.body)+'</textarea>'
+      +'<input data-step-practice="'+index+'" value="'+esc(step.practice)+'" placeholder="What the next practice will ask"'+disabled+'>';
+  }
+  /* Above the question only when the step does not ask one. */
+  function teachingFieldsHTML(block, step, index, disabled, asks){
+    return asks?'':teachFieldsHTML(step,index,disabled);
+  }
+  function teachingFoldHTML(block, step, index, disabled){
+    var open=teachIsOpen(block,step,index), written=!!(step.title||step.body||step.practice);
+    return '<div class="step-teach'+(open?' is-open':'')+'">'
+      +'<button type="button" class="step-teach-toggle" data-step-teach="'+index+'" aria-expanded="'+(open?'true':'false')+'">'
+      +'<span class="step-teach-mark" aria-hidden="true"></span>Teach before asking'
+      /* Folded away is not the same as empty, and a step that does teach must
+         not look like one that does not. */
+      +(open?'':'<small>'+(written?'written':'optional')+'</small>')+'</button>'
+      +(open?'<div class="step-teach-fields">'+teachFieldsHTML(step,index,disabled)+'</div>':'')
+      +'</div>';
+  }
   function stepKindLabel(kind){
     var found=LESSON_KINDS.filter(function(entry){ return entry.value===kind; })[0];
     return found?found.label:'Teach only';
@@ -1192,12 +1224,11 @@
       +'<button class="step-move" data-move-step="'+index+'" data-move-to="'+(index-1)+'"'+(first?' disabled':disabled)+' aria-label="Move this step earlier" title="Move earlier">↑</button>'
       +'<button class="step-move" data-move-step="'+index+'" data-move-to="'+(index+1)+'"'+(last?' disabled':disabled)+' aria-label="Move this step later" title="Move later">↓</button>'
       +'<button data-remove-step="'+index+'"'+disabled+' aria-label="Remove lesson step">×</button></div>'
-      +'<input data-step-title="'+index+'" value="'+esc(step.title)+'" placeholder="Section title, e.g. A whole step skips one key"'+disabled+'>'
-      +'<textarea data-step-body="'+index+'" placeholder="Teach the idea in a few clear lines."'+disabled+'>'+esc(step.body)+'</textarea>'
+      +teachingFieldsHTML(block,step,index,disabled,asks)
       +(asks
-        ? '<input data-step-practice="'+index+'" value="'+esc(step.practice)+'" placeholder="What the next practice will ask"'+disabled+'>'
-          +'<textarea data-step-prompt="'+index+'" placeholder="The question learners will see"'+disabled+'>'+esc(step.prompt)+'</textarea>'
+        ? '<textarea data-step-prompt="'+index+'" placeholder="The question learners will see"'+disabled+'>'+esc(step.prompt)+'</textarea>'
           +(step.kind==='choice'?choices:'<input data-step-answer="'+index+'" value="'+esc(step.answer)+'" placeholder="Correct answer"'+disabled+'>')
+          +teachingFoldHTML(block,step,index,disabled)
         : '')
       +'</section>';
   }
@@ -1769,10 +1800,17 @@
         +'</header><div class="db-lane-rows">'
         +held.map(function(row){
           var title=first?dbAsText(first,row):'';
+          var tags=dbProps(block).slice(1).filter(function(item){ return item.id!==prop.id&&dbChosen(item,row).length&&(item.type==='select'||item.type==='multi'); })
+            .map(function(item){ return dbChosen(item,row).map(chipHTML).join(''); }).join('');
+          /* A card carrying one word is a card you cannot tell from the next.
+             Whatever else the row actually says comes with it, quietly. */
+          var said=dbProps(block).slice(1).filter(function(item){
+            return item.id!==prop.id&&item.type!=='select'&&item.type!=='multi'&&String(dbAsText(item,row)||'').trim();
+          }).slice(0,2).map(function(item){ return esc(dbAsText(item,row)); });
           return '<article class="db-card" data-db-card="'+row.id+'">'
             +'<b>'+(title?esc(title):'<span class="db-blankmark">Untitled</span>')+'</b>'
-            +dbProps(block).slice(1).filter(function(item){ return item.id!==prop.id&&dbChosen(item,row).length&&(item.type==='select'||item.type==='multi'); })
-              .map(function(item){ return dbChosen(item,row).map(chipHTML).join(''); }).join('')
+            +(said.length?'<span class="db-card-said">'+said.join(' · ')+'</span>':'')
+            +(tags?'<span class="db-card-tags">'+tags+'</span>':'')
             +'</article>';
         }).join('')
         +'</div></section>';
@@ -3172,6 +3210,13 @@
         if(step.answer===step.options[slot])step.answer='';
         step.options.splice(slot,1);
         refreshStepEditor(block); queuedSave(block,true);
+      };
+    });
+    card.querySelectorAll('[data-step-teach]').forEach(function(button){
+      button.onclick=function(){
+        var at=+button.dataset.stepTeach, step=block.steps[at];
+        openTeach[teachKey(block,at)]=!teachIsOpen(block,normalizeStep(step),at);
+        refreshStepEditor(block);
       };
     });
     card.querySelectorAll('[data-step-kind]').forEach(function(input){
