@@ -971,12 +971,12 @@ body.is-sizing .studio-block{ transition:none; }
 
 .block-row > .studio-block.code{ grid-column:auto!important; }
 .code-editor{ position:relative; flex:1 1 auto; min-width:0; }
-.code-highlight,.block-code{ box-sizing:border-box; margin:0; padding:11px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; line-height:1.5; white-space:pre; tab-size:2; }
-.code-highlight{ position:absolute; inset:0; pointer-events:none; color:var(--ink-2); overflow:hidden; }
-.block-code{ position:relative; min-height:100%; color:transparent!important; caret-color:var(--ink); }
-.block-code::selection{ color:transparent; background:color-mix(in srgb,var(--brand) 42%,transparent); }
+.block-code{ box-sizing:border-box; margin:0; padding:11px 12px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; line-height:1.5; white-space:pre; tab-size:2; }
+.block-code{ position:relative; min-height:100%; color:var(--ink-2); caret-color:var(--ink); }
+.block-code::selection{ background:color-mix(in srgb,var(--brand) 42%,transparent); }
+.block-code ::selection{ background:color-mix(in srgb,var(--brand) 42%,transparent); }
 .tok-keyword{ color:#b895ff; }.tok-string{ color:#8bdda8; }.tok-number{ color:#f7bc72; }.tok-comment{ color:var(--ink-3); font-style:italic; }.tok-tag{ color:#6db7f3; }
-.code-wrap.is-wrapped .code-highlight,.code-wrap.is-wrapped .block-code{ white-space:pre-wrap; overflow-wrap:anywhere; }
+.code-wrap.is-wrapped .block-code{ white-space:pre-wrap; overflow-wrap:anywhere; }
 
 /* A code card may share a row. Its controls therefore wrap within its own
    width rather than escaping across the neighbouring card. */
@@ -997,21 +997,16 @@ body.is-sizing .studio-block{ transition:none; }
 /* Marking view mode on the actual toggle makes this independent of how a
    project reached its read-only state. */
 .studio-main:has([data-toggle-view][data-viewing="true"]) .block-title.is-default-title{ display:none!important; }
-/* While editing, the source is the only visible text layer, so every source
-   line and its gutter share the exact same metrics. Colours return on blur. */
-.studio-block:focus-within .code-highlight{ display:none; }
-.studio-block:focus-within .block-code{ color:var(--ink)!important; }
 
 /* This class is written on the workspace itself whenever the View project
    action is active; it is not inferred from permissions or focus. */
 .studio-main.is-viewing .block-title.is-default-title{ display:none!important; }
-/* A single text layer is the reliable editor. Syntax colouring will return
-   with a real editor integration rather than an overlay that can drift. */
-.code-highlight{ display:none!important; }
-.block-code{ color:var(--ink)!important; caret-color:var(--ink); }
+/* Colour lives in the editable element itself, so there is one text layer
+   and nothing to keep aligned. Text the highlighter does not classify keeps
+   the element's own colour. */
 
 /* The gutter and source must have identical vertical metrics. */
-.code-lines,.block-code,.code-highlight{
+.code-lines,.block-code{
   font-size:13px!important;
   line-height:1.5!important;
   padding-top:11px!important;
@@ -1024,6 +1019,39 @@ body.is-sizing .studio-block{ transition:none; }
 .mode-indicator i{ width:7px; height:7px; border-radius:50%; background:var(--brand); box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 17%,transparent); }
 .mode-indicator.is-viewing{ color:var(--ink-3); }
 .mode-indicator.is-viewing i{ background:var(--good); box-shadow:0 0 0 3px color-mix(in srgb,var(--good) 17%,transparent); }
+
+/* Edit and view are the two positions of one state, so the state itself is
+   the control: the dot that reported the mode became the knob that sets it,
+   and the button that only restated the label is gone. */
+.mode-switch{
+  display:inline-flex; align-items:center; gap:8px; align-self:center;
+  padding:5px 11px 5px 6px; border:1px solid var(--glass-edge); border-radius:999px;
+  background:var(--glass); color:var(--ink-2);
+  font:800 12px/1 inherit; white-space:nowrap; cursor:pointer;
+  transition:border-color .18s ease, color .18s ease, background .18s ease;
+}
+.mode-switch:hover{ color:var(--ink); border-color:color-mix(in srgb,var(--brand) 55%,var(--glass-edge)); }
+.mode-switch:focus-visible{ outline:2px solid var(--brand); outline-offset:2px; }
+.mode-switch-track{
+  position:relative; flex:none; width:30px; height:17px; border-radius:999px;
+  background:color-mix(in srgb,var(--brand) 30%,transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--brand) 48%,transparent);
+  transition:background .2s ease, box-shadow .2s ease;
+}
+/* On is edit mode: the knob is thrown to the far end and lit. */
+.mode-switch-knob{
+  position:absolute; top:2px; left:2px; width:13px; height:13px; border-radius:50%;
+  background:var(--brand); box-shadow:0 1px 3px #0007; transform:translateX(13px);
+  transition:transform .2s cubic-bezier(.22,1,.36,1), background .2s ease;
+}
+/* Off is view mode: the knob sits back at the start and goes quiet. */
+.mode-switch[data-viewing="true"]{ color:var(--ink-3); }
+.mode-switch[data-viewing="true"] .mode-switch-track{
+  background:color-mix(in srgb,var(--ink-3) 24%,transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink-3) 40%,transparent);
+}
+.mode-switch[data-viewing="true"] .mode-switch-knob{ transform:none; background:var(--ink-3); }
+@media (max-width:620px){ .mode-switch{ padding:4px 9px 4px 5px; font-size:11px; } }
 .add-row{ display:flex; align-items:center; min-height:32px; margin-top:12px; }
 .add-row-start{ margin:0 0 10px; min-height:24px; }
 .add-row-start .add-open{ opacity:.72; }
@@ -1044,12 +1072,16 @@ body.is-sizing .studio-block{ transition:none; }
 .project-actions>.mode-indicator{ margin-bottom:1px; }
 @media (max-width:620px){ .project-actions{ width:100%; align-items:flex-start; }.project-action-buttons{ justify-content:flex-start; } }
 
-/* Keep the state label independent of the command strip on wide layouts. */
+/* The state and the command strip used to be lifted out of the flow and
+   pinned to the corner, which meant the row reserved no width for them and a
+   long project name ran underneath the buttons. They stay in the row instead:
+   the actions keep their own width, and the title is the part that gives. */
 @media (min-width:621px){
-  .project-top{ position:relative; }
-  .project-actions{ position:absolute; top:0; right:0; width:auto; }
-  .project-actions>.mode-indicator{ position:absolute; top:0; right:0; margin:0; }
-  .project-action-buttons{ padding-top:34px; }
+  .project-actions{ position:static; width:auto; flex:0 0 auto; }
+  .project-actions>.mode-indicator,.project-actions>.mode-switch{ position:static; margin:0 0 6px; }
+  .project-action-buttons{ padding-top:0; }
   .mode-indicator{ padding:5px 8px; font-size:11px; }
   .mode-indicator i{ width:6px; height:6px; }
 }
+.project-heading{ flex:1 1 auto; }
+.project-title{ overflow-wrap:anywhere; }
