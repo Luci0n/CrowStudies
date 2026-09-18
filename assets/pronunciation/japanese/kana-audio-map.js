@@ -13,12 +13,21 @@
     'ら':'ra','り':'ri','る':'ru','れ':'re','ろ':'ro',
     'わ':'wa','を':'wo','ん':'n'
   };
+  /* Katakana read exactly as their hiragana partners do, so they share the
+     recordings rather than doubling them. Each basic kana sits 0x60 above its
+     hiragana in Unicode - あ to ア, ん to ン - so the table is derived rather
+     than typed out a second time and left to drift. Without this the katakana
+     cards matched nothing here and fell through to the browser voice. */
+  Object.keys(kanaToRomaji).forEach(function(hira){
+    var kata = String.fromCharCode(hira.charCodeAt(0) + 0x60);
+    if (!kanaToRomaji[kata]) kanaToRomaji[kata] = kanaToRomaji[hira];
+  });
   window.CrowJapaneseKanaAudio = kanaToRomaji;
   window.CrowLocalAudio = window.CrowLocalAudio || {};
   window.CrowLocalAudio['ja-JP'] = function(text){
     var romaji = kanaToRomaji[String(text || '').charAt(0)];
     return romaji ? {
-      src: '../assets/pronunciation/japanese/kana/' + romaji + '.mp3?v=friend-reading-20260918',
+      src: '../assets/pronunciation/japanese/kana/' + romaji + '.mp3?v=friend-reading-katakana-20260918',
       strict: true
     } : '';
   };
