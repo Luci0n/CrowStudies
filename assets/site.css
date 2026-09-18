@@ -937,3 +937,18 @@ body > .upgrade-slash{ position:fixed !important; z-index:80 !important; }
   --terrain-major-a:43,198,214; --terrain-major-b:255,62,87; --terrain-major-c:247,201,77;
   --terrain-minor-a:70,163,183; --terrain-minor-b:255,62,87; --terrain-minor-c:43,198,214;
 }
+
+/* A unit says what it holds and how it stands, on two lines rather than one
+   replacing the other. */
+.utext .ustat{ grid-column:1/-1; margin-top:2px; font-size:12px; font-weight:750; color:var(--ink-3); }
+.utext .ustat.is-due{ color:var(--brand); }
+
+/* The review guide can be turned off from the dialog it appears in, and back
+   on from account settings. */
+.review-info-off{ display:block; width:100%; margin-top:9px; padding:8px; border:0; background:transparent; color:var(--ink-3); font:750 12.5px/1 "Space Grotesk",sans-serif; cursor:pointer; }
+.review-info-off:hover{ color:var(--ink-2); text-decoration:underline; text-underline-offset:3px; }
+.setting-check{ display:flex; align-items:flex-start; gap:12px; margin:14px 0; padding:13px; border:1px solid var(--line); border-radius:10px; background:var(--well); cursor:pointer; }
+.setting-check input{ width:18px; height:18px; margin-top:2px; accent-color:var(--brand); flex:none; }
+.setting-check b,.setting-check small{ display:block; }
+.setting-check b{ font:750 14px/1.2 "Space Grotesk",sans-serif; }
+.setting-check small{ margin-top:4px; color:var(--ink-3); font-size:12px; line-height:1.3; }

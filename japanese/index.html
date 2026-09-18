@@ -7,16 +7,27 @@
 <meta name="description" content="Learn all 46 hiragana and 46 katakana row by row, with mnemonics, practice, and help for look-alike characters.">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+JP:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <script src="../assets/theme.js?v=palette-families-20260912"></script>
-<link rel="stylesheet" href="../assets/site.css?v=reviewrow-20260916">
+<link rel="stylesheet" href="../assets/site.css?v=review-guide-20260918">
 <style>
   .jp{ font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif; }
   .disc{ font-family:"Noto Sans JP","Space Grotesk",sans-serif; font-weight:500; font-size:26px; }
 
   .kanagrid{ display:grid; grid-template-columns:repeat(var(--cols,5),1fr); gap:10px; }
+  /* The mnemonics run to different lengths, so a button placed after the
+     text lands at a different height on every card. The card is a column
+     with the button pushed to the bottom of it instead, which puts them all
+     on one line. */
   .kanacard{
     background:var(--card); border:2px solid var(--line); border-radius:16px;
     padding:12px 10px; text-align:center;
+    display:flex; flex-direction:column; align-items:center;
   }
+  /* The gap above the button belongs to the text, not to the button: a
+     margin here would beat the auto margin that does the pushing. */
+  .kanacard .speakbtn{ margin-top:auto; align-self:center; }
+  .kanacard .mnem{ margin-bottom:10px; }
+  .pairside{ display:flex; flex-direction:column; align-items:center; }
+  .pairside .speakbtn{ margin-top:auto; align-self:center; }
   .kanacard .glyph{
     font-family:"Noto Sans JP",sans-serif; font-weight:500; font-size:46px; line-height:1.1;
     color:var(--ink); display:block;
@@ -70,7 +81,7 @@
 
 <div id="app"></div>
 
-<script type="module" src="../assets/firebase.js?v=instant-progress-20260915"></script>
+<script type="module" src="../assets/firebase.js?v=review-guide-20260918"></script>
 <script>
 /**
  * Hanzi Writer v3.7.3 | https://chanind.github.io/hanzi-writer
@@ -83,7 +94,7 @@ var HanziWriter=function(){"use strict";var t,e,r;const i="undefined"==typeof wi
 <script src="../assets/stroke-practice.js?v=kana-kanjivg-20260912"></script>
 <script src="https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.umd.js"></script>
 <script src="../assets/pronunciation/japanese/kana-audio-map.js?v=friend-reading-20260918"></script>
-<script src="../assets/quiz.js?v=reviewrow-20260916"></script>
+<script src="../assets/quiz.js?v=review-guide-20260918"></script>
 <script>
 (function(){
   "use strict";

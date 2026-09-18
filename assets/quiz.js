@@ -434,7 +434,8 @@ function CrowQuiz(config){
       +   '<p>These cards return at the moment you are most likely to need them. Try to recall before looking at the answer, then rate the effort honestly.</p>'
       +   '<div class="review-info-ratings"><span><b>Again</b> I missed it</span><span><b>Hard</b> I got it, barely</span><span><b>Good</b> I recalled it</span><span><b>Easy</b> Instant recall</span></div>'
       +   '<p class="review-info-note">Your choice sets the next review time. The schedule adapts to your history and retention setting.</p>'
-      +   '<button class="btn wide" data-f="reviewInfoClose">Got it</button></div>'
+      +   '<button class="btn wide" data-f="reviewInfoClose">Got it</button>'
+      +   '<button class="review-info-off" type="button" data-f="reviewInfoOff">Do not show this again</button></div>'
       + '</div>';
 
     root.querySelectorAll('[data-f]').forEach(function(n){ dom[n.dataset.f] = n; });
@@ -579,11 +580,18 @@ function CrowQuiz(config){
       var txt = el('span', 'utext');
       txt.appendChild(el('b', null, u.title));
       var lessons = u.steps.filter(function(s){ return s.title; }).length;
-      txt.appendChild(el('span', null, unitDue.length
-        ? unitDue.length+' review '+(unitDue.length===1?'card':'cards')+' due'
-        : (rec.done>0
-        ? 'Best ' + rec.best + '/' + (rec.total||'?') + ' · ' + rec.done + (rec.done===1?' run':' runs')
-        : (lessons ? lessons + (lessons===1?' lesson · ':' lessons · ') + u.blurb : u.blurb))));
+      /* What the unit is about is the one thing that never changes, so it is
+         always on the row. Progress used to replace it, which left a unit you
+         had started unable to say what was in it. */
+      txt.appendChild(el('span', null,
+        lessons ? lessons + (lessons===1?' lesson · ':' lessons · ') + u.blurb : u.blurb));
+      var standing = [];
+      if (unitDue.length) standing.push(unitDue.length+' review '+(unitDue.length===1?'card':'cards')+' due');
+      if (rec.done>0) standing.push('Best ' + rec.best + '/' + (rec.total||'?') + ' · ' + rec.done + (rec.done===1?' run':' runs'));
+      if (standing.length){
+        var mark = el('span', 'ustat' + (unitDue.length ? ' is-due' : ''), standing.join(' · '));
+        txt.appendChild(mark);
+      }
       if (rec.done>0){
         var meter = el('span', 'meter');
         var fill = el('i');
@@ -697,11 +705,24 @@ function CrowQuiz(config){
     };
     state.lastQuestionKey = '';
     dom.reviewModeHelp.hidden=!reviewCards;
+    /* The explanation is the first thing a review needs, so it is offered
+       every time one starts - until somebody says they have read it, which
+       they can undo from account settings. */
+    if (reviewCards && wantsReviewGuide()) openReviewGuide();
     showScreen('session');
     renderHearts();
     nextItem();
   }
 
+  function wantsReviewGuide(){
+    if (window.CrowCloud && window.CrowCloud.reviewGuide) return window.CrowCloud.reviewGuide();
+    try{ return localStorage.getItem('crowstudies:review-guide') !== 'off'; }catch(error){ return true; }
+  }
+  function openReviewGuide(){
+    if (!dom.reviewInfo) return;
+    dom.reviewInfo.hidden=false;
+    dom.reviewInfoClose.focus({preventScroll:true});
+  }
   function renderHearts(){
     dom.hearts.innerHTML = '';
     for (var i=0;i<HEARTS;i++){
@@ -966,8 +987,12 @@ function CrowQuiz(config){
       } else startSession(state.session ? state.session.unit : UNITS[0].id);
     };
     dom.reviewDue.onclick = openReview;
-    dom.reviewInfoOpen.onclick = function(){ dom.reviewInfo.hidden=false; dom.reviewInfoClose.focus({preventScroll:true}); };
+    dom.reviewInfoOpen.onclick = function(){ openReviewGuide(); };
     dom.reviewInfoClose.onclick = function(){ dom.reviewInfo.hidden=true; };
+    dom.reviewInfoOff.onclick = function(){
+      dom.reviewInfo.hidden=true;
+      if (window.CrowCloud && window.CrowCloud.setReviewGuide) window.CrowCloud.setReviewGuide(false);
+    };
     dom.reviewInfo.onclick = function(e){ if(e.target===dom.reviewInfo) dom.reviewInfo.hidden=true; };
     dom['continue'].onclick = advance;
     dom.extraBack.onclick = function(){ renderHome(); showScreen('home'); };
