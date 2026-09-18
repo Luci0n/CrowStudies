@@ -1,16 +1,603 @@
 [
-  {"kana":"あ","romaji":"a","asset":"assets/pronunciation/japanese/kana/a.mp3","source":"https://commons.wikimedia.org/wiki/File:Ja-A.oga","originalFilename":"Ja-A.oga","author":"Hakatanoshio117117","license":"Public Domain / PD-self","vowel":true,"modifications":["isolated one utterance","silence trim","5 ms fades","loudness normalized"]},
-  {"kana":"い","romaji":"i","asset":"assets/pronunciation/japanese/kana/i.mp3","source":"https://commons.wikimedia.org/wiki/File:Japanese_I.ogg","originalFilename":"Japanese I.ogg","author":"Hakatanoshio117117","license":"Public Domain / PD-self","vowel":true,"modifications":["isolated one utterance","silence trim","5 ms fades","loudness normalized"]},
-  {"kana":"う","romaji":"u","asset":"assets/pronunciation/japanese/kana/u.mp3","source":"https://commons.wikimedia.org/wiki/File:Japanese_U.ogg","originalFilename":"Japanese U.ogg","author":"Hakatanoshio117117","license":"Public Domain / PD-self","vowel":true,"modifications":["isolated one utterance","silence trim","5 ms fades","loudness normalized"]},
-  {"kana":"え","romaji":"e","asset":"assets/pronunciation/japanese/kana/e.mp3","source":"https://commons.wikimedia.org/wiki/File:Ja-E.oga","originalFilename":"Ja-E.oga","author":"Hakatanoshio117117","license":"Public Domain / PD-self","vowel":true,"modifications":["isolated one utterance","silence trim","5 ms fades","loudness normalized"]},
-  {"kana":"お","romaji":"o","asset":"assets/pronunciation/japanese/kana/o.mp3","source":"https://commons.wikimedia.org/wiki/File:Japanese_O.ogg","originalFilename":"Japanese O.ogg","author":"Hakatanoshio117117","license":"Public Domain / PD-self","vowel":true,"modifications":["isolated one utterance","silence trim","5 ms fades","loudness normalized"]},
-  {"kana":"か","romaji":"ka","originalFilename":"Japanese ka.ogg"},{"kana":"き","romaji":"ki","originalFilename":"Japanese ki.ogg"},{"kana":"く","romaji":"ku","originalFilename":"Japanese ku.ogg"},{"kana":"け","romaji":"ke","originalFilename":"Japanese ke.ogg"},{"kana":"こ","romaji":"ko","originalFilename":"Japanese ko.ogg"},
-  {"kana":"さ","romaji":"sa","originalFilename":"Japanese sa.ogg"},{"kana":"し","romaji":"shi","originalFilename":"Japanese shi.ogg"},{"kana":"す","romaji":"su","originalFilename":"Japanese su.ogg"},{"kana":"せ","romaji":"se","originalFilename":"Japanese se.ogg"},{"kana":"そ","romaji":"so","originalFilename":"Japanese so.ogg"},
-  {"kana":"た","romaji":"ta","originalFilename":"Japanese ta.ogg"},{"kana":"ち","romaji":"chi","originalFilename":"Japanese ti.ogg"},{"kana":"つ","romaji":"tsu","originalFilename":"Japanese tsu.ogg"},{"kana":"て","romaji":"te","originalFilename":"Japanese te.ogg"},{"kana":"と","romaji":"to","originalFilename":"Japanese to.ogg"},
-  {"kana":"な","romaji":"na","originalFilename":"Japanese na.ogg"},{"kana":"に","romaji":"ni","originalFilename":"Japanese ni.ogg"},{"kana":"ぬ","romaji":"nu","originalFilename":"Japanese nu.ogg"},{"kana":"ね","romaji":"ne","originalFilename":"Japanese ne.ogg"},{"kana":"の","romaji":"no","originalFilename":"Japanese no.ogg"},
-  {"kana":"は","romaji":"ha","originalFilename":"Japanese ha.ogg"},{"kana":"ひ","romaji":"hi","originalFilename":"Japanese hi.ogg"},{"kana":"ふ","romaji":"fu","originalFilename":"Japanese hu.ogg"},{"kana":"へ","romaji":"he","originalFilename":"Japanese he.ogg"},{"kana":"ほ","romaji":"ho","originalFilename":"Japanese ho.ogg"},
-  {"kana":"ま","romaji":"ma","originalFilename":"Japanese ma.ogg"},{"kana":"み","romaji":"mi","originalFilename":"Japanese mi.ogg"},{"kana":"む","romaji":"mu","originalFilename":"Japanese mu.ogg"},{"kana":"め","romaji":"me","originalFilename":"Japanese me.ogg"},{"kana":"も","romaji":"mo","originalFilename":"Japanese mo.ogg"},
-  {"kana":"や","romaji":"ya","originalFilename":"Japanese ya.ogg"},{"kana":"ゆ","romaji":"yu","originalFilename":"Japanese yu.ogg"},{"kana":"よ","romaji":"yo","originalFilename":"Japanese yo.ogg"},
-  {"kana":"ら","romaji":"ra","originalFilename":"Japanese ra.ogg"},{"kana":"り","romaji":"ri","originalFilename":"Japanese ri.ogg"},{"kana":"る","romaji":"ru","originalFilename":"Japanese ru.ogg"},{"kana":"れ","romaji":"re","originalFilename":"Japanese re.ogg"},{"kana":"ろ","romaji":"ro","originalFilename":"Japanese ro.ogg"},
-  {"kana":"わ","romaji":"wa","originalFilename":"Japanese wa.ogg"},{"kana":"を","romaji":"wo","originalFilename":"Japanese wo.ogg"},{"kana":"ん","romaji":"n","originalFilename":"Japanese N.ogg"}
+  {
+    "kana": "あ",
+    "romaji": "a",
+    "asset": "assets/pronunciation/japanese/kana/a.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 50ms before and 60ms after each reading"
+    ],
+    "vowel": true
+  },
+  {
+    "kana": "い",
+    "romaji": "i",
+    "asset": "assets/pronunciation/japanese/kana/i.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 50ms before and 60ms after each reading"
+    ],
+    "vowel": true
+  },
+  {
+    "kana": "う",
+    "romaji": "u",
+    "asset": "assets/pronunciation/japanese/kana/u.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 50ms before and 60ms after each reading"
+    ],
+    "vowel": true
+  },
+  {
+    "kana": "え",
+    "romaji": "e",
+    "asset": "assets/pronunciation/japanese/kana/e.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 50ms before and 60ms after each reading"
+    ],
+    "vowel": true
+  },
+  {
+    "kana": "お",
+    "romaji": "o",
+    "asset": "assets/pronunciation/japanese/kana/o.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 50ms before and 60ms after each reading"
+    ],
+    "vowel": true
+  },
+  {
+    "kana": "か",
+    "romaji": "ka",
+    "asset": "assets/pronunciation/japanese/kana/ka.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "き",
+    "romaji": "ki",
+    "asset": "assets/pronunciation/japanese/kana/ki.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "く",
+    "romaji": "ku",
+    "asset": "assets/pronunciation/japanese/kana/ku.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "け",
+    "romaji": "ke",
+    "asset": "assets/pronunciation/japanese/kana/ke.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "こ",
+    "romaji": "ko",
+    "asset": "assets/pronunciation/japanese/kana/ko.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "recorded separately as its own take"
+    ]
+  },
+  {
+    "kana": "さ",
+    "romaji": "sa",
+    "asset": "assets/pronunciation/japanese/kana/sa.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "し",
+    "romaji": "shi",
+    "asset": "assets/pronunciation/japanese/kana/shi.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "す",
+    "romaji": "su",
+    "asset": "assets/pronunciation/japanese/kana/su.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "せ",
+    "romaji": "se",
+    "asset": "assets/pronunciation/japanese/kana/se.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "そ",
+    "romaji": "so",
+    "asset": "assets/pronunciation/japanese/kana/so.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "た",
+    "romaji": "ta",
+    "asset": "assets/pronunciation/japanese/kana/ta.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "ち",
+    "romaji": "chi",
+    "asset": "assets/pronunciation/japanese/kana/chi.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "つ",
+    "romaji": "tsu",
+    "asset": "assets/pronunciation/japanese/kana/tsu.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "て",
+    "romaji": "te",
+    "asset": "assets/pronunciation/japanese/kana/te.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "と",
+    "romaji": "to",
+    "asset": "assets/pronunciation/japanese/kana/to.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "な",
+    "romaji": "na",
+    "asset": "assets/pronunciation/japanese/kana/na.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "に",
+    "romaji": "ni",
+    "asset": "assets/pronunciation/japanese/kana/ni.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "ぬ",
+    "romaji": "nu",
+    "asset": "assets/pronunciation/japanese/kana/nu.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "ね",
+    "romaji": "ne",
+    "asset": "assets/pronunciation/japanese/kana/ne.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "の",
+    "romaji": "no",
+    "asset": "assets/pronunciation/japanese/kana/no.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "は",
+    "romaji": "ha",
+    "asset": "assets/pronunciation/japanese/kana/ha.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "ひ",
+    "romaji": "hi",
+    "asset": "assets/pronunciation/japanese/kana/hi.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "ふ",
+    "romaji": "fu",
+    "asset": "assets/pronunciation/japanese/kana/fu.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "へ",
+    "romaji": "he",
+    "asset": "assets/pronunciation/japanese/kana/he.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "ほ",
+    "romaji": "ho",
+    "asset": "assets/pronunciation/japanese/kana/ho.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "ま",
+    "romaji": "ma",
+    "asset": "assets/pronunciation/japanese/kana/ma.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "み",
+    "romaji": "mi",
+    "asset": "assets/pronunciation/japanese/kana/mi.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "む",
+    "romaji": "mu",
+    "asset": "assets/pronunciation/japanese/kana/mu.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "め",
+    "romaji": "me",
+    "asset": "assets/pronunciation/japanese/kana/me.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "も",
+    "romaji": "mo",
+    "asset": "assets/pronunciation/japanese/kana/mo.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "や",
+    "romaji": "ya",
+    "asset": "assets/pronunciation/japanese/kana/ya.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "ゆ",
+    "romaji": "yu",
+    "asset": "assets/pronunciation/japanese/kana/yu.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "よ",
+    "romaji": "yo",
+    "asset": "assets/pronunciation/japanese/kana/yo.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "ら",
+    "romaji": "ra",
+    "asset": "assets/pronunciation/japanese/kana/ra.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "り",
+    "romaji": "ri",
+    "asset": "assets/pronunciation/japanese/kana/ri.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "る",
+    "romaji": "ru",
+    "asset": "assets/pronunciation/japanese/kana/ru.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "れ",
+    "romaji": "re",
+    "asset": "assets/pronunciation/japanese/kana/re.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "ろ",
+    "romaji": "ro",
+    "asset": "assets/pronunciation/japanese/kana/ro.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "わ",
+    "romaji": "wa",
+    "asset": "assets/pronunciation/japanese/kana/wa.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "を",
+    "romaji": "wo",
+    "asset": "assets/pronunciation/japanese/kana/wo.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  },
+  {
+    "kana": "ん",
+    "romaji": "n",
+    "asset": "assets/pronunciation/japanese/kana/n.mp3",
+    "source": "recorded for CrowStudies",
+    "author": "CrowStudies contributor",
+    "license": "Used with permission",
+    "modifications": [
+      "split from one continuous reading of the 46 kana",
+      "cut on the 45 longest pauses",
+      "padded 80ms before and 120ms after each reading"
+    ]
+  }
 ]
