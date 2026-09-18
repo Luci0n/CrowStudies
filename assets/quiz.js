@@ -871,11 +871,19 @@ function CrowQuiz(config){
     var s = state.session;
     var counted = !state.hinted;
     s.answered++;
-    /* Practice creates a card from the observed answer. Review is different:
-       it waits for the learner's own recall rating before scheduling. */
+    /* Practice creates a card from the observed answer, but not yet: the run
+       has to be seen through first. Answering two questions and walking out
+       used to leave those two scheduled, so a unit nobody had finished still
+       announced cards due. They are held here and written when the run ends.
+       Review is different again: it waits for the learner's own recall rating,
+       and that rating is theirs the moment they give it. */
     if (!s.review){
-      scheduleCard(state.questionUnit || s.unit, state.question, success ? 'good' : 'again', state.hinted);
-      persist();
+      (s.pending = s.pending || []).push({
+        unit: state.questionUnit || s.unit,
+        question: state.question,
+        grade: success ? 'good' : 'again',
+        hinted: state.hinted
+      });
     }
 
     if (success){
@@ -944,6 +952,13 @@ function CrowQuiz(config){
     renderProgress();
     hideSheet();
 
+    /* The run is over - out of hearts counts, walking out does not - so the
+       answers it collected become cards now. */
+    (s.pending || []).forEach(function(mark){
+      scheduleCard(mark.unit, mark.question, mark.grade, mark.hinted);
+    });
+    s.pending = [];
+
     save.sessions++;
     save.bestRun = Math.max(save.bestRun, s.bestRun);
     var rec = save.units[s.unit] || { done:0, best:0, total:s.totalQ };
@@ -977,7 +992,12 @@ function CrowQuiz(config){
     var root = document.querySelector(rootSelector || '#app');
     buildSkeleton(root);
 
-    dom.quit.onclick = function(){ hideSheet(); renderHome(); showScreen('home'); };
+    dom.quit.onclick = function(){
+      /* Nothing answered in an abandoned run is scheduled. */
+      if (state.session) state.session.pending = [];
+      state.session = null;
+      hideSheet(); renderHome(); showScreen('home');
+    };
     dom.home.onclick = function(){ renderHome(); showScreen('home'); };
     dom.again.onclick = function(){
       if (state.session && state.session.review){
@@ -1008,7 +1028,9 @@ function CrowQuiz(config){
     dom.modal.onclick = function(e){ if (e.target === dom.modal) dom.modal.hidden = true; };
 
     document.addEventListener('keydown', function(e){
-      if (e.key === 'Enter' && state.locked && dom.sheet.classList.contains('up') && !state.session.review){
+      /* Leaving a session clears it, and a key pressed after that must not
+         reach in and ask what kind of session it was. */
+      if (e.key === 'Enter' && state.session && state.locked && dom.sheet.classList.contains('up') && !state.session.review){
         e.preventDefault(); advance();
       }
       if (e.key === 'Escape' && !dom.modal.hidden) dom.modal.hidden = true;
