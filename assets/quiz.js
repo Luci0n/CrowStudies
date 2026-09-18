@@ -365,7 +365,7 @@ function CrowQuiz(config){
          makes it matter is the colour it carries, not a shape of its own. */
       +     '<div class="reviewbar" data-f="reviewBar">'
       +       '<span class="disc" data-f="reviewMark" aria-hidden="true"></span>'
-      +       '<span class="utext"><b data-f="reviewHead"></b>'
+      +       '<span class="utext"><span class="review-kicker">Spaced repetition</span><b data-f="reviewHead"></b>'
       +       '<span class="review-note" data-f="reviewNote"></span></span>'
       +       '<button class="btn ghost sm" data-f="reviewDue">Review cards</button>'
       +     '</div>'
@@ -430,7 +430,7 @@ function CrowQuiz(config){
       +   '<button class="btn wide" data-f="modalClose">Got it</button></div>'
       + '</div>'
       + '<div class="backdrop" data-f="reviewInfo" hidden>'
-      +   '<div class="modal review-info"><div class="review-info-mark" aria-hidden="true">↻</div><h3>Review mode</h3>'
+      +   '<div class="modal review-info"><div class="review-info-mark" aria-hidden="true">↻</div><p class="review-info-kicker">Spaced repetition</p><h3>Review mode</h3>'
       +   '<p>These cards return at the moment you are most likely to need them. Try to recall before looking at the answer, then rate the effort honestly.</p>'
       +   '<div class="review-info-ratings"><span><b>Again</b> I missed it</span><span><b>Hard</b> I got it, barely</span><span><b>Good</b> I recalled it</span><span><b>Easy</b> Instant recall</span></div>'
       +   '<p class="review-info-note">Your choice sets the next review time. The schedule adapts to your history and retention setting.</p>'

@@ -952,3 +952,9 @@ body > .upgrade-slash{ position:fixed !important; z-index:80 !important; }
 .setting-check b,.setting-check small{ display:block; }
 .setting-check b{ font:750 14px/1.2 "Space Grotesk",sans-serif; }
 .setting-check small{ margin-top:4px; color:var(--ink-3); font-size:12px; line-height:1.3; }
+
+/* The review bar and its explanation name the method they are, because that
+   is the thing being offered - the count is only how much of it is waiting. */
+.reviewbar .review-kicker{ grid-column:1/-1; font:800 10.5px/1 "IBM Plex Mono",monospace; letter-spacing:.09em; text-transform:uppercase; color:var(--brand); }
+.reviewbar.is-clear .review-kicker,.reviewbar.is-empty .review-kicker{ color:var(--ink-3); }
+.review-info-kicker{ margin:0 0 4px !important; font:800 10.5px/1 "IBM Plex Mono",monospace !important; letter-spacing:.09em; text-transform:uppercase; color:var(--brand) !important; }

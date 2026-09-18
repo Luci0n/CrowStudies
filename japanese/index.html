@@ -7,7 +7,7 @@
 <meta name="description" content="Learn all 46 hiragana and 46 katakana row by row, with mnemonics, practice, and help for look-alike characters.">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+JP:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <script src="../assets/theme.js?v=palette-families-20260912"></script>
-<link rel="stylesheet" href="../assets/site.css?v=review-guide-20260918">
+<link rel="stylesheet" href="../assets/site.css?v=spaced-repetition-20260918">
 <style>
   .jp{ font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif; }
   .disc{ font-family:"Noto Sans JP","Space Grotesk",sans-serif; font-weight:500; font-size:26px; }
@@ -39,8 +39,11 @@
   .kanacard .mnem{ display:block; font-size:12.5px; color:var(--ink-3); margin-top:6px; line-height:1.35; }
 
   .stroke-examples-lead{ margin-top:14px !important; }
+  /* Four of them, so two by two at any width. Letting the row fit as many as
+     it could gave three across and one stranded underneath. */
   .stroke-examples{
-    display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:10px;
+    display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:10px;
+    max-width:460px;
   }
   .stroke-ex{
     display:flex; flex-direction:column; align-items:center; gap:8px;
@@ -111,7 +114,7 @@ var HanziWriter=function(){"use strict";var t,e,r;const i="undefined"==typeof wi
 <script src="../assets/stroke-practice.js?v=stroke-examples-20260918"></script>
 <script src="https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.umd.js"></script>
 <script src="../assets/pronunciation/japanese/kana-audio-map.js?v=friend-reading-katakana-20260918"></script>
-<script src="../assets/quiz.js?v=finish-to-schedule-20260918"></script>
+<script src="../assets/quiz.js?v=spaced-repetition-20260918"></script>
 <script>
 (function(){
   "use strict";
