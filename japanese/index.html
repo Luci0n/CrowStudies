@@ -38,6 +38,23 @@
   }
   .kanacard .mnem{ display:block; font-size:12.5px; color:var(--ink-3); margin-top:6px; line-height:1.35; }
 
+  .stroke-examples-lead{ margin-top:14px !important; }
+  .stroke-examples{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:10px;
+  }
+  .stroke-ex{
+    display:flex; flex-direction:column; align-items:center; gap:8px;
+    padding:12px 10px; border:1px solid var(--line); border-radius:14px;
+    background:var(--well); color:inherit; font:inherit; text-align:center; cursor:pointer;
+    transition:border-color .18s ease, transform .18s ease;
+  }
+  .stroke-ex:hover{ border-color:var(--brand); transform:translateY(-2px); }
+  .stroke-ex:focus-visible{ outline:3px solid color-mix(in srgb,var(--brand) 55%,transparent); outline-offset:3px; }
+  .stroke-ex-art{ display:block; width:104px; height:104px; }
+  .stroke-ex-art svg{ width:100%; height:100%; }
+  .stroke-ex-say b{ display:block; font:750 13px/1.2 "Space Grotesk",sans-serif; color:var(--ink); }
+  .stroke-ex-say small{ display:block; margin-top:3px; font-size:11.5px; line-height:1.35; color:var(--ink-3); }
+
   .bigkana{
     font-family:"Noto Sans JP",sans-serif; font-weight:500;
     font-size:110px; line-height:1; text-align:center;
@@ -91,7 +108,7 @@ var HanziWriter=function(){"use strict";var t,e,r;const i="undefined"==typeof wi
 //# sourceMappingURL=hanzi-writer.min.js.map
 
 </script>
-<script src="../assets/stroke-practice.js?v=kana-kanjivg-20260912"></script>
+<script src="../assets/stroke-practice.js?v=stroke-examples-20260918"></script>
 <script src="https://cdn.jsdelivr.net/npm/ts-fsrs@5.4.2/dist/index.umd.js"></script>
 <script src="../assets/pronunciation/japanese/kana-audio-map.js?v=friend-reading-20260918"></script>
 <script src="../assets/quiz.js?v=finish-to-schedule-20260918"></script>
@@ -304,6 +321,79 @@ var HanziWriter=function(){"use strict";var t,e,r;const i="undefined"==typeof wi
   function fullTypeGen(pool){ return cycle(pool, typeQuestion); }
 
   /* ================= TEACHING CARDS ================= */
+  /* A habit about stroke order is quicker to watch than to read. Each of
+     these draws one character at the speed it would be written, and the
+     characters are chosen because the bundled stroke data really does show
+     what the caption claims - top before bottom in \u3053, left before right in
+     \u3044, both bars of \u304d before the stroke through them, and \u30ed's box sealed by
+     its last stroke. */
+  var STROKE_EXAMPLES = [
+    ['\u3053', 'Top before bottom', 'The upper bar is written first.'],
+    ['\u3044', 'Left before right', 'The left stroke, then the right.'],
+    ['\u304d', 'Across, then through', 'Both bars go down before the stroke that crosses them.'],
+    ['\u30ed', 'The box closes last', 'The final stroke seals the shape.']
+  ];
+  function strokeExample(ch, title, note){
+    var tile = document.createElement('button');
+    tile.type = 'button';
+    tile.className = 'stroke-ex';
+    tile.setAttribute('aria-label', 'Watch ' + ch + ' being written: ' + title);
+    var art = document.createElement('span');
+    art.className = 'stroke-ex-art';
+    tile.appendChild(art);
+    var caption = document.createElement('span');
+    caption.className = 'stroke-ex-say';
+    caption.innerHTML = '<b>' + title + '</b><small>' + note + '</small>';
+    tile.appendChild(caption);
+
+    var writer = null, drawing = false;
+    function ready(){
+      if (writer) return writer;
+      writer = HanziWriter.create(art, ch, {
+        width:104, height:104, padding:6,
+        showOutline:true, showCharacter:false,
+        strokeColor:'#f1f4fb', outlineColor:'#374154', drawingColor:'#d64a86',
+        strokeAnimationSpeed:0.9, delayBetweenStrokes:320,
+        charDataLoader:function(character){
+          return fetch(window.CrowStroke.kanaDataPath(character))
+            .then(function(r){ if(!r.ok) throw new Error('Kana data unavailable'); return r.json(); })
+            .then(window.CrowStroke.normalizeKanaData);
+        }
+      });
+      return writer;
+    }
+    function play(){
+      if (drawing) return;
+      drawing = true;
+      ready().animateCharacter({ onComplete:function(){ drawing=false; } });
+    }
+    tile.onclick = play;
+    /* The outline is drawn straight away, so a tile is never a blank square
+       while it waits to be noticed. The animation then runs when the tile
+       comes into view - barely into view is enough, since a tile sitting at
+       the bottom edge of the screen never reached a stricter threshold and
+       so never played at all. */
+    ready();
+    if (window.IntersectionObserver){
+      var watch = new IntersectionObserver(function(entries){
+        entries.forEach(function(entry){
+          if (!entry.isIntersecting) return;
+          watch.disconnect();
+          setTimeout(play, 220);
+        });
+      }, { threshold:0.15 });
+      watch.observe(tile);
+    } else {
+      setTimeout(play, 400);
+    }
+    return tile;
+  }
+  function strokeExampleRow(){
+    var row = document.createElement('div');
+    row.className = 'stroke-examples';
+    STROKE_EXAMPLES.forEach(function(item){ row.appendChild(strokeExample(item[0], item[1], item[2])); });
+    return row;
+  }
   function hearKana(ch){ var b=document.createElement('button'); b.className='speakbtn'; b.type='button'; b.textContent='Hear'; b.setAttribute('aria-label','Hear '+ch.r); b.onclick=function(){ CrowSpeak(ch.k,'ja-JP',0.78); }; return b; }
   function kanaGrid(list){
     var wrap = document.createElement('div');
@@ -540,7 +630,12 @@ var HanziWriter=function(){"use strict";var t,e,r;const i="undefined"==typeof wi
     steps:[
       { title:'Writing is a sequence',
         body:'Kana are built from deliberate strokes in a conventional order. Learn that order before aiming for speed: it makes the character easier to remember and keeps its shape balanced.',
-        demo:function(){ var d=document.createElement('div'); d.className='demo'; d.innerHTML='<strong>Four useful habits</strong><p class="cap">Work from top to bottom and left to right. Draw horizontal strokes before crossing vertical ones. Close boxes and enclosures last. Keep a steady direction and leave breathing room between strokes.</p>'; return d; },
+        demo:function(){
+          var d=document.createElement('div'); d.className='demo';
+          d.innerHTML='<strong>Four useful habits</strong><p class="cap">Work from top to bottom and left to right. Draw horizontal strokes before crossing vertical ones. Close boxes and enclosures last. Keep a steady direction and leave breathing room between strokes.</p><p class="cap stroke-examples-lead">Watch the order. Press one to see it drawn again.</p>';
+          d.appendChild(strokeExampleRow());
+          return d;
+        },
         questions:0, gens:[] },
       { title:'Hiragana vowels', body:'Start with the five hiragana vowels. Focus on the order and direction of each stroke.', demo:function(){ return kanaGrid(HIRA.a); }, questions:3, gens:[function(){ return kanaWriteGen(HIRA.a); }] },
       { title:'Katakana vowels', body:'Then write the matching katakana vowels. Their straighter shapes make them a good contrast with hiragana.', demo:function(){ return kanaGrid(KATA.a); }, questions:3, gens:[function(){ return kanaWriteGen(KATA.a); }] }
