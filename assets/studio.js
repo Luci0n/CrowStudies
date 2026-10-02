@@ -424,8 +424,11 @@
     var byId={};
     blocks.forEach(function(block){ byId[block.id]=block; });
     var adopted=next.map(function(fresh){
-      var held=inFlight[fresh.id];
-      if(held)fresh=Object.assign({},fresh,held);
+      /* The same goes for an edit still waiting out its short save delay: it
+         has not even left yet, and a snapshot taken meanwhile would put the
+         old text back into the card being typed in. */
+      var held=inFlight[fresh.id], waiting=savePatches[fresh.id];
+      if(held||waiting)fresh=Object.assign({},fresh,held,waiting);
       var mine=byId[fresh.id];
       if(!mine)return fresh;
       Object.keys(mine).forEach(function(key){ if(!(key in fresh))delete mine[key]; });
@@ -4398,7 +4401,11 @@
     sendPresence(true);
     stopBlocks=cloud().watchBlocks(projectId,function(list,ours){
       if(!activeProject||activeProject.id!==projectId)return;
-      var before=blocks;
+      /* adoptBlocks folds the snapshot into the objects already on screen, so
+         holding on to those objects kept nothing of how they were: before and
+         next were the same blocks, every card compared equal, and a change
+         made by someone else was never drawn. Keep a copy of what is shown. */
+      var before=blocks.map(function(block){ return JSON.parse(JSON.stringify(block)); });
       var next=adoptBlocks(list.map(normalizeBlock));
       var mark=blocksSignature(next);
       var localEcho=ownBlockEcho(before,next,ours);
