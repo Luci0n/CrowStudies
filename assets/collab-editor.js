@@ -1,16 +1,26 @@
 /* CrowStudies rich collaborative editor. Loaded only when a WSS endpoint is configured. */
+/* Every module below is pinned to one shared set of dependencies. Without the
+   deps query esm.sh resolves each package's own version range separately, so
+   the page ended up with two copies of Yjs (the editor's document and the
+   provider's were not the same Y.Doc) and a second Tiptap core. Tiptap is on
+   its last 2.x release because StarterKit's own extensions already resolve
+   to it and need a matching core; collab-server installs the same through
+   its ^2 ranges. Keep the versions here in step with collab-server. */
 import * as Y from 'https://esm.sh/yjs@13.6.24';
-import { IndexeddbPersistence } from 'https://esm.sh/y-indexeddb@9.0.12';
-import { Editor } from 'https://esm.sh/@tiptap/core@2.11.5';
-import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.11.5';
-import Link from 'https://esm.sh/@tiptap/extension-link@2.11.5';
-import Table from 'https://esm.sh/@tiptap/extension-table@2.11.5';
-import TableRow from 'https://esm.sh/@tiptap/extension-table-row@2.11.5';
-import TableHeader from 'https://esm.sh/@tiptap/extension-table-header@2.11.5';
-import TableCell from 'https://esm.sh/@tiptap/extension-table-cell@2.11.5';
-import { Collaboration } from 'https://esm.sh/@tiptap/extension-collaboration@2.11.5';
-import { CollaborationCaret } from 'https://esm.sh/@tiptap/extension-collaboration-caret@2.11.5';
-import { HocuspocusProvider } from 'https://esm.sh/@hocuspocus/provider@3.2.3';
+import { IndexeddbPersistence } from 'https://esm.sh/y-indexeddb@9.0.12?deps=yjs@13.6.24,y-prosemirror@1.3.7,@tiptap/core@2.27.3,@tiptap/pm@2.27.3,@hocuspocus/common@3.2.3';
+import { Editor } from 'https://esm.sh/@tiptap/core@2.27.3?deps=yjs@13.6.24,y-prosemirror@1.3.7,@tiptap/core@2.27.3,@tiptap/pm@2.27.3,@hocuspocus/common@3.2.3';
+import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.27.3?deps=yjs@13.6.24,y-prosemirror@1.3.7,@tiptap/core@2.27.3,@tiptap/pm@2.27.3,@hocuspocus/common@3.2.3';
+import Link from 'https://esm.sh/@tiptap/extension-link@2.27.3?deps=yjs@13.6.24,y-prosemirror@1.3.7,@tiptap/core@2.27.3,@tiptap/pm@2.27.3,@hocuspocus/common@3.2.3';
+import Table from 'https://esm.sh/@tiptap/extension-table@2.27.3?deps=yjs@13.6.24,y-prosemirror@1.3.7,@tiptap/core@2.27.3,@tiptap/pm@2.27.3,@hocuspocus/common@3.2.3';
+import TableRow from 'https://esm.sh/@tiptap/extension-table-row@2.27.3?deps=yjs@13.6.24,y-prosemirror@1.3.7,@tiptap/core@2.27.3,@tiptap/pm@2.27.3,@hocuspocus/common@3.2.3';
+import TableHeader from 'https://esm.sh/@tiptap/extension-table-header@2.27.3?deps=yjs@13.6.24,y-prosemirror@1.3.7,@tiptap/core@2.27.3,@tiptap/pm@2.27.3,@hocuspocus/common@3.2.3';
+import TableCell from 'https://esm.sh/@tiptap/extension-table-cell@2.27.3?deps=yjs@13.6.24,y-prosemirror@1.3.7,@tiptap/core@2.27.3,@tiptap/pm@2.27.3,@hocuspocus/common@3.2.3';
+import { Collaboration } from 'https://esm.sh/@tiptap/extension-collaboration@2.27.3?deps=yjs@13.6.24,y-prosemirror@1.3.7,@tiptap/core@2.27.3,@tiptap/pm@2.27.3,@hocuspocus/common@3.2.3';
+/* Tiptap 2 calls the shared-caret extension CollaborationCursor; the
+   CollaborationCaret package only exists from Tiptap 3, so importing it at
+   2.11.5 failed and took the whole editor down with it. */
+import { CollaborationCursor } from 'https://esm.sh/@tiptap/extension-collaboration-cursor@2.27.3?deps=yjs@13.6.24,y-prosemirror@1.3.7,@tiptap/core@2.27.3,@tiptap/pm@2.27.3,@hocuspocus/common@3.2.3';
+import { HocuspocusProvider } from 'https://esm.sh/@hocuspocus/provider@3.2.3?deps=yjs@13.6.24,y-prosemirror@1.3.7,@tiptap/core@2.27.3,@tiptap/pm@2.27.3,@hocuspocus/common@3.2.3';
 
 const config = window.CrowStudiesCollabConfig || {};
 const live = new Map();
@@ -38,11 +48,7 @@ function adopt(entry, host, options){
   entry.parkedAt = 0;
   if(entry.host !== host){
     if(!host.isConnected) return entry;
-    /* The fresh card's own attributes say how it is drawn now (editable or
-       not, its placeholder); the kept element takes them over. */
-    ['contenteditable','data-placeholder'].forEach((name)=>{
-      if(host.hasAttribute(name)) entry.host.setAttribute(name, host.getAttribute(name));
-    });
+    if(host.hasAttribute('data-placeholder')) entry.host.setAttribute('data-placeholder', host.getAttribute('data-placeholder'));
     host.replaceWith(entry.host);
   }
   if(entry.host.parentNode && entry.controls.nextSibling !== entry.host){
@@ -75,6 +81,12 @@ async function mount(host, options){
 async function create(host, options){
   host.dataset.collabActive='true';
   host.oninput=null; // Never leave the old HTML/Firestore writer attached.
+  /* Studio draws a note body as its own contenteditable. Left on, a click
+     focused that outer box instead of the editor inside it: typing still
+     reached the editor, but it never knew it had focus, so your caret was
+     never shared with anyone else. Whether it can be edited is the editor's
+     to say now. */
+  host.removeAttribute('contenteditable');
   /* The note keeps the text it is already showing until the editor is ready to
      take over. Emptying it here collapsed every shared note to a single line
      for the length of a round trip, and the page jumped twice for it. */
@@ -100,7 +112,7 @@ async function create(host, options){
       Link.configure({openOnClick:false}),
       Table.configure({resizable:true}),TableRow,TableHeader,TableCell,
       Collaboration.configure({document:ydoc}),
-      CollaborationCaret.configure({provider,user}),
+      CollaborationCursor.configure({provider,user}),
     ],
     editorProps:{attributes:{class:'tiptap ProseMirror','aria-label':'Collaborative note'}},
   });
