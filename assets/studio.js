@@ -826,94 +826,91 @@
   }
   /* Switching section or page, or adding, renaming or moving a section,
      redraws the whole project, which used to make everything jump straight
-     to its new place. This redraws the same way, then plays the change back:
-     anything still on screen glides from where it was to where it is now,
-     a chip that changes state eases between its colours, and anything new
-     rises in. Anyone who has asked for less motion gets the plain redraw. */
-  var MOTION_PARTS='.section-bar>*,.page-bar,.page-bar>[data-page],.section-lock-note,.add-row,.block-grid [data-block],.section-settings>[data-section-row]';
-  function motionKey(el, index){
-    if(el.matches('.section-bar>*')){ var chip=el.matches('[data-section]')?el:el.querySelector('[data-section]'); return chip?'section:'+chip.dataset.section:''; }
-    if(el.matches('[data-page]'))return 'page:'+el.dataset.page;
-    if(el.matches('[data-block]'))return 'block:'+el.dataset.block;
-    if(el.matches('[data-section-row]'))return 'row:'+el.dataset.sectionRow;
-    if(el.matches('.add-row'))return 'add:'+(el.classList.contains('add-row-start')?'start':'end');
-    if(el.matches('.page-bar'))return 'pagebar';
-    if(el.matches('.section-lock-note'))return 'locknote';
-    return 'part:'+index;
-  }
-  function motionSnapshot(){
-    var shot={};
-    root.querySelectorAll(MOTION_PARTS).forEach(function(el, index){
-      var key=motionKey(el, index);
-      if(!key||shot[key])return;
-      var chip=el.matches('.section-filter,.page-filter')?el:el.querySelector(':scope>.section-filter');
-      var look=chip?getComputedStyle(chip):null;
-      shot[key]={ el:el, rect:el.getBoundingClientRect(), look:look?{ backgroundColor:look.backgroundColor, color:look.color, borderColor:look.borderColor }:null };
+     to its new place. This redraws the same way and then plays back only
+     what helps you follow the change, using nothing but transform and
+     opacity so the browser can run it off the main thread:
+     - a new section or page: the highlight slides from the old chip to the
+       new one, and the blocks fade in together as one layer;
+     - the section list itself changing: chips that stayed slide to their
+       new place, and new ones fade in.
+     Blocks are not flown around the page one by one; tall cards crossing
+     each other read as lag, not as motion. Anyone who has asked for less
+     motion gets the plain redraw. */
+  var MOTION_EASE='cubic-bezier(.2,.8,.2,1)';
+  function motionChips(){
+    var chips={};
+    root.querySelectorAll('.section-bar>*,.page-bar>[data-page],.section-settings>[data-section-row]').forEach(function(el){
+      var chip=el.matches('[data-section],[data-page]')?el:el.querySelector('[data-section]');
+      var key=el.dataset.sectionRow?'row:'+el.dataset.sectionRow:chip&&chip.dataset.page!==undefined?'page:'+chip.dataset.page:chip?'section:'+chip.dataset.section:'';
+      if(key)chips[key]={ el:el, rect:el.getBoundingClientRect() };
     });
-    return shot;
+    return chips;
+  }
+  function activeChip(selector){
+    var chip=root.querySelector(selector);
+    return chip?{ key:chip.dataset.section!==undefined?'section:'+chip.dataset.section:'page:'+chip.dataset.page, rect:chip.getBoundingClientRect() }:null;
+  }
+  function slideHighlight(from, chip){
+    /* One pill, laid under the chips, travels from the old choice to the new
+       one. The new chip keeps its own fill hidden until the pill arrives. */
+    var bar=chip.closest('.section-bar,.page-bar'), box=bar.getBoundingClientRect(), to=chip.getBoundingClientRect();
+    var pill=document.createElement('span');
+    pill.className='choice-pill '+(bar.classList.contains('page-bar')?'is-page':'is-section');
+    pill.setAttribute('aria-hidden','true');
+    pill.style.cssText='left:'+(to.left-box.left)+'px;top:'+(to.top-box.top)+'px;width:'+to.width+'px;height:'+to.height+'px;';
+    bar.insertBefore(pill,bar.firstChild);
+    chip.classList.add('pill-target');
+    var sx=from.width/to.width, sy=from.height/to.height;
+    var slide=pill.animate([
+      { transform:'translate('+(from.left-to.left)+'px,'+(from.top-to.top)+'px) scale('+sx+','+sy+')' },
+      { transform:'none' }
+    ],{ duration:240, easing:MOTION_EASE });
+    var done=function(){ chip.classList.remove('pill-target'); if(pill.parentNode)pill.parentNode.removeChild(pill); };
+    slide.onfinish=slide.oncancel=done;
   }
   function renderAnimated(){
     var still=false;
     try{ still=window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(error){}
     if(still||typeof Element.prototype.animate!=='function'){ render(); return; }
-    var before=motionSnapshot();
+    var chipsBefore=motionChips();
+    var sectionBefore=activeChip('.section-bar .section-filter.active'), pageBefore=activeChip('.page-bar .page-filter.active');
+    var hadPageBar=!!root.querySelector('.page-bar'), hadLockNote=!!root.querySelector('.section-lock-note');
     render();
-    var ease='cubic-bezier(.16,1,.3,1)', parts=Array.prototype.slice.call(root.querySelectorAll(MOTION_PARTS)), kept={};
-    /* Every block card rises in from the stylesheet whenever it is drawn.
-       Here that would bounce cards that never left, and offset them while
-       they are measured, so it is stopped and replaced with the motion below. */
-    parts.forEach(function(el, index){
-      el.getAnimations().forEach(function(motion){ if(motion.animationName==='studio-new')motion.cancel(); });
-      el.__motionKey=motionKey(el, index);
-      if(el.__motionKey)kept[el.__motionKey]=true;
+    var sectionAfter=activeChip('.section-bar .section-filter.active'), pageAfter=activeChip('.page-bar .page-filter.active');
+    var switched=!!sectionBefore&&!!sectionAfter&&(sectionBefore.key!==sectionAfter.key||(!!pageBefore&&!!pageAfter&&pageBefore.key!==pageAfter.key));
+    /* Every block card rises in from the stylesheet whenever it is drawn,
+       each on its own. Here the blocks either did not change or arrive as one
+       layer below, so the per-card rise is stopped. */
+    root.querySelectorAll('.block-grid [data-block]').forEach(function(card){
+      card.getAnimations().forEach(function(motion){ if(motion.animationName==='studio-new')motion.cancel(); });
     });
-    /* What left the page is already gone from it, so a copy is laid where it
-       stood and faded out over the top, instead of it simply blinking away.
-       Whatever stays waits for that fade to clear before moving into the
-       space, so the two are never read on top of each other. */
-    var wait=0;
-    Object.keys(before).forEach(function(key){
-      var was=before[key];
-      if(kept[key]||!was.rect.width||!was.rect.height)return;
-      if(was.rect.bottom<0||was.rect.top>window.innerHeight)return;
-      var ghost=was.el.cloneNode(true);
-      /* A copy, not the thing: nothing that looks a block or a section up by
-         its data attributes may find it. */
-      [ghost].concat(Array.prototype.slice.call(ghost.querySelectorAll('*'))).forEach(function(node){
-        Array.prototype.slice.call(node.attributes).forEach(function(attr){ if(attr.name==='id'||attr.name.indexOf('data-')===0)node.removeAttribute(attr.name); });
+    if(switched){
+      if(sectionBefore.key!==sectionAfter.key){
+        var newSection=root.querySelector('.section-bar .section-filter.active');
+        if(newSection&&chipsBefore[sectionBefore.key])slideHighlight(sectionBefore.rect,newSection);
+      }else{
+        var newPage=root.querySelector('.page-bar .page-filter.active');
+        if(newPage)slideHighlight(pageBefore.rect,newPage);
+      }
+      root.querySelectorAll('.block-grid,.add-row').forEach(function(part){
+        part.animate([{ opacity:0, transform:'translateY(6px)' },{ opacity:1, transform:'none' }],{ duration:200, easing:MOTION_EASE });
       });
-      ghost.setAttribute('aria-hidden','true');
-      ghost.inert=true;
-      ghost.classList.add('motion-ghost');
-      ghost.style.cssText+=';position:fixed;margin:0;left:'+was.rect.left+'px;top:'+was.rect.top+'px;width:'+was.rect.width+'px;height:'+was.rect.height+'px;pointer-events:none;z-index:2;animation:none;';
-      document.body.appendChild(ghost);
-      var fade=ghost.animate([{ opacity:1, transform:'none' },{ opacity:0, transform:'scale(.98)' }],{ duration:110, easing:'ease-in', fill:'forwards' });
-      fade.onfinish=fade.oncancel=function(){ if(ghost.parentNode)ghost.parentNode.removeChild(ghost); };
-      wait=90;
-    });
-    var arriving=0;
-    parts.forEach(function(el){
-      var key=el.__motionKey, was=key&&before[key];
-      delete el.__motionKey;
-      if(!key)return;
+    }
+    var bar=root.querySelector('.page-bar');
+    if(bar&&!hadPageBar)bar.animate([{ opacity:0, transform:'translateY(-4px)' },{ opacity:1, transform:'none' }],{ duration:200, easing:MOTION_EASE });
+    var note=root.querySelector('.section-lock-note');
+    if(note&&!hadLockNote)note.animate([{ opacity:0 },{ opacity:1 }],{ duration:180, easing:'ease-out' });
+    /* The chips themselves are small and sit in one row, so moving them
+       is cheap and shows exactly what was reordered. */
+    var chipsAfter=motionChips();
+    Object.keys(chipsAfter).forEach(function(key){
+      var now=chipsAfter[key], was=chipsBefore[key];
       if(!was){
-        /* Rows of new blocks follow each other in, but only briefly, so a
-           long section is never still filling in after you start reading. */
-        var delay=wait+(el.matches('[data-block]')?Math.min(arriving++,6)*28:0);
-        el.animate([{ opacity:0, transform:'translateY(8px)' },{ opacity:1, transform:'none' }],{ duration:260, delay:delay, easing:ease, fill:'backwards' });
+        if(Object.keys(chipsBefore).length&&!(key.indexOf('page:')===0&&!hadPageBar))now.el.animate([{ opacity:0, transform:'scale(.92)' },{ opacity:1, transform:'none' }],{ duration:200, easing:MOTION_EASE });
         return;
       }
-      var now=el.getBoundingClientRect(), dx=was.rect.left-now.left, dy=was.rect.top-now.top;
-      if(Math.abs(dx)>.5||Math.abs(dy)>.5){
-        el.animate([{ transform:'translate('+dx+'px,'+dy+'px)' },{ transform:'none' }],{ duration:300, delay:wait, easing:ease, fill:'backwards' });
-      }
-      var chip=el.matches('.section-filter,.page-filter')?el:el.querySelector(':scope>.section-filter');
-      if(chip&&was.look){
-        var look=getComputedStyle(chip), to={ backgroundColor:look.backgroundColor, color:look.color, borderColor:look.borderColor };
-        if(to.backgroundColor!==was.look.backgroundColor||to.color!==was.look.color||to.borderColor!==was.look.borderColor){
-          chip.animate([was.look,to],{ duration:220, easing:'ease-out' });
-        }
-      }
+      var dx=was.rect.left-now.rect.left, dy=was.rect.top-now.rect.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)now.el.animate([{ transform:'translate('+dx+'px,'+dy+'px)' },{ transform:'none' }],{ duration:240, easing:MOTION_EASE });
     });
   }
   function render(){
