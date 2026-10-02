@@ -549,9 +549,9 @@
       left:Math.min(picked.from.column,picked.to.column), right:Math.max(picked.from.column,picked.to.column)
     };
   }
-  async function askName(title, placeholder, action){
-    if (window.CrowUI) return window.CrowUI.prompt({title:title,body:'Choose a clear name. You can edit it later.',placeholder:placeholder,confirmLabel:action});
-    return prompt(title);
+  async function askName(title, placeholder, action, value){
+    if (window.CrowUI) return window.CrowUI.prompt({title:title,body:'Choose a clear name. You can edit it later.',placeholder:placeholder,confirmLabel:action,value:value||''});
+    return prompt(title, value||'');
   }
   async function askConfirm(title, body, action){
     if (window.CrowUI) return window.CrowUI.confirm({title:title,body:body,confirmLabel:action,danger:true});
@@ -561,6 +561,26 @@
   function findSection(sectionId){ return (activeProject.sections||[]).filter(function(s){return s.id===sectionId;})[0]||null; }
   function sectionPages(sectionId){ var section=findSection(sectionId); return section&&Array.isArray(section.pages)?section.pages:[]; }
   function sectionLocked(sectionId){ var section=findSection(sectionId); return !!(section&&section.locked); }
+  /* Renaming and moving a section only touch the project's section list:
+     blocks point at a section by id, so they follow it without a save. */
+  async function renameSection(sectionId){
+    var section=findSection(sectionId);
+    if(!section)return false;
+    var title=await askName('Rename section','e.g. Week one','Rename',section.title);
+    if(!title||!title.trim()||title.trim()===section.title)return false;
+    section.title=title.trim();
+    await cloud().saveProject(activeProject.id,{sections:activeProject.sections});
+    return true;
+  }
+  async function moveSection(sectionId, step){
+    var sections=activeProject.sections||[], from=sections.findIndex(function(s){return s.id===sectionId;}), to=from+step;
+    if(from<0||to<0||to>=sections.length)return false;
+    var moved=sections.splice(from,1)[0];
+    sections.splice(to,0,moved);
+    activeProject.sections=sections;
+    await cloud().saveProject(activeProject.id,{sections:sections});
+    return true;
+  }
   function normalizeBlock(block){
     var copy=Object.assign({},block), supported=['note','tasks','status','milestone','schedule','idea','lesson','table','image','quote','callout','code','database'];
     if(copy.type==='task')copy.type='tasks';
@@ -872,7 +892,11 @@
     });
   }
   function sectionMenuHTML(section){
-    return '<div class="section-popover"><button data-add-page="'+section.id+'">Add page</button>'
+    var sections=activeProject.sections||[], at=sections.indexOf(section);
+    return '<div class="section-popover"><button data-rename-section="'+section.id+'">Rename section</button>'
+      +(at>0?'<button data-move-section="'+section.id+'" data-step="-1">Move left</button>':'')
+      +(at>-1&&at<sections.length-1?'<button data-move-section="'+section.id+'" data-step="1">Move right</button>':'')
+      +'<button data-add-page="'+section.id+'">Add page</button>'
       +'<button data-lock-section="'+section.id+'">'+(section.locked?'Unlock section':'Lock section')+'</button>'
       +'<button class="danger" data-remove-section="'+section.id+'">Delete section</button></div>';
   }
@@ -1096,7 +1120,7 @@
   }
   function settingsHTML(){
     var sections=activeProject.sections||[];
-    return '<div class="settings-top"><button class="btn ghost sm" data-settings-back>← Back to project</button><h1>Project settings</h1><p>Change the project details and organize its sections.</p></div><section class="settings-card"><h2>Project name</h2><div class="settings-inline"><input class="dialog-input" data-project-name value="'+esc(activeProject.title)+'"><button class="btn sm" data-save-project-name>Save</button></div></section><section class="settings-card"><h2>Sections</h2><p>Deleting a section keeps its blocks and moves them to Unsorted.</p><div class="section-settings">'+(sections.length?sections.map(function(s){return '<div><span>'+esc(s.title)+'</span><button class="btn ghost sm danger-action" data-delete-section="'+s.id+'">Delete</button></div>';}).join(''):'<p>No custom sections yet.</p>')+'</div></section>'+shareCardHTML()+'<section class="settings-card"><h2>Import and export</h2><p>Export writes this project, its sections, and every block to one .json file. Importing always creates a new project, so nothing here is overwritten.</p><div class="settings-inline"><button class="btn sm" data-export-project>Export project</button><button class="btn ghost sm" data-import-project>Import a project</button></div></section>'+(myRole()==='owner'
+    return '<div class="settings-top"><button class="btn ghost sm" data-settings-back>← Back to project</button><h1>Project settings</h1><p>Change the project details and organize its sections.</p></div><section class="settings-card"><h2>Project name</h2><div class="settings-inline"><input class="dialog-input" data-project-name value="'+esc(activeProject.title)+'"><button class="btn sm" data-save-project-name>Save</button></div></section><section class="settings-card"><h2>Sections</h2><p>Rename sections or change their order here. Deleting a section keeps its blocks and moves them to Unsorted.</p><div class="section-settings">'+(sections.length?sections.map(function(s,i){return '<div><span>'+esc(s.title)+'</span><span class="section-settings-actions"><button class="btn ghost sm" data-move-section="'+s.id+'" data-step="-1" aria-label="Move '+esc(s.title)+' up"'+(i===0?' disabled':'')+'>↑</button><button class="btn ghost sm" data-move-section="'+s.id+'" data-step="1" aria-label="Move '+esc(s.title)+' down"'+(i===sections.length-1?' disabled':'')+'>↓</button><button class="btn ghost sm" data-rename-section="'+s.id+'">Rename</button><button class="btn ghost sm danger-action" data-delete-section="'+s.id+'">Delete</button></span></div>';}).join(''):'<p>No custom sections yet.</p>')+'</div></section>'+shareCardHTML()+'<section class="settings-card"><h2>Import and export</h2><p>Export writes this project, its sections, and every block to one .json file. Importing always creates a new project, so nothing here is overwritten.</p><div class="settings-inline"><button class="btn sm" data-export-project>Export project</button><button class="btn ghost sm" data-import-project>Import a project</button></div></section>'+(myRole()==='owner'
       ?'<section class="settings-card settings-danger"><h2>Danger zone</h2><p>Delete this project and every block inside it, for everyone it is shared with.</p><button class="btn bad sm" data-delete-project>Delete project</button></section>'
       :'<section class="settings-card"><h2>Leave this project</h2><p>It stays as it is for everyone else.</p><button class="btn ghost sm danger-action" data-leave-project>Leave project</button></section>')+'';
   }
@@ -3536,6 +3560,8 @@
     layout();
   }
   function bindSectionMenu(scope){
+    scope.querySelectorAll('[data-rename-section]').forEach(function(button){button.onclick=async function(){openSectionMenu='';closeSectionMenu();if(await renameSection(button.dataset.renameSection))render();};});
+    scope.querySelectorAll('[data-move-section]').forEach(function(button){button.onclick=async function(){openSectionMenu='';if(await moveSection(button.dataset.moveSection,Number(button.dataset.step)))render();else closeSectionMenu();};});
     scope.querySelectorAll('[data-add-page]').forEach(function(button){button.onclick=async function(){var title=await askName('New page','e.g. Basics','Add page');if(!title||!title.trim())return;var section=findSection(button.dataset.addPage);section.pages=(section.pages||[]).concat({id:id(),title:title.trim()});activeSection=section.id;activePage=section.pages[section.pages.length-1].id;openSectionMenu='';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};});
     scope.querySelectorAll('[data-lock-section]').forEach(function(button){button.onclick=async function(){var section=findSection(button.dataset.lockSection);section.locked=!section.locked;openSectionMenu='';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};});
     scope.querySelectorAll('[data-remove-section]').forEach(function(button){button.onclick=async function(){var section=findSection(button.dataset.removeSection);if(!await askConfirm('Delete section?', 'Its blocks will stay in the project under Unsorted.', 'Delete section'))return;blocks.forEach(function(block){if(block.sectionId===section.id){block.sectionId='';block.pageId='';cloud().saveBlock(activeProject.id,block.id,block).catch(function(){});}});activeProject.sections=activeProject.sections.filter(function(item){return item.id!==section.id;});activeSection='all';activePage='all';openSectionMenu='';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};});
@@ -3565,6 +3591,8 @@
     if(view==='settings'){
       root.querySelector('[data-settings-back]').onclick=function(){view='project';renderSwitch();};
       root.querySelector('[data-save-project-name]').onclick=async function(){var input=root.querySelector('[data-project-name]'), title=input.value.trim();if(!title)return;activeProject.title=title;await cloud().saveProject(activeProject.id,{title:title,sections:activeProject.sections||[]});await loadProjects(activeProject.id);view='settings';render();};
+      root.querySelectorAll('[data-rename-section]').forEach(function(button){button.onclick=async function(){if(await renameSection(button.dataset.renameSection))render();};});
+      root.querySelectorAll('[data-move-section]').forEach(function(button){button.onclick=async function(){button.disabled=true;if(await moveSection(button.dataset.moveSection,Number(button.dataset.step)))render();else button.disabled=false;};});
       root.querySelectorAll('[data-delete-section]').forEach(function(button){button.onclick=async function(){var sectionId=button.dataset.deleteSection, section=(activeProject.sections||[]).filter(function(s){return s.id===sectionId;})[0];if(!await askConfirm('Delete section?', '“'+(section?section.title:'This section')+'” will be removed. Its blocks will stay in the project under Unsorted.', 'Delete section'))return;blocks.forEach(function(block){if(block.sectionId===sectionId){block.sectionId='';cloud().saveBlock(activeProject.id,block.id,block).catch(function(){});}});activeProject.sections=(activeProject.sections||[]).filter(function(s){return s.id!==sectionId;});if(activeSection===sectionId)activeSection='all';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};});
       var inviteButton=root.querySelector('[data-send-invite]');
       if(inviteButton)inviteButton.onclick=async function(){
