@@ -214,6 +214,10 @@
 .section-settings{ display:grid; gap:7px; margin-top:12px; }
 .section-settings>div{ display:flex; align-items:center; justify-content:space-between; gap:10px; border-top:1px solid var(--line); padding-top:8px; }
 .section-settings .btn{ width:auto; padding:8px 11px; }
+.section-settings>div{ flex-wrap:wrap; }
+.section-settings>div>span:first-child{ flex:1 1 140px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.section-settings-actions{ display:flex; justify-content:flex-end; gap:6px; margin-left:auto; }
+.section-settings-actions .btn:disabled{ opacity:.4; cursor:default; }
 .share-list{ display:grid; gap:7px; margin:11px 0; }
 .share-row{ display:flex; align-items:center; gap:10px; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--card); }
 .share-row.pending{ border-style:dashed; }
