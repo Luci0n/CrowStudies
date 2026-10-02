@@ -677,7 +677,9 @@
       changed=true;
     });
     if(blocked)return false;
-    if(changed){ dressRowTracks(); pruneViewOnlyChrome(root); bind(); paintPresence(); }
+    /* A patched note card is drawn with the stored text; hand it back its
+       live editor, the same way a full redraw does. */
+    if(changed){ dressRowTracks(); pruneViewOnlyChrome(root); bind(); paintPresence(); mountCollaborativeEditors(); }
     return true;
   }
   /* A share that changed elsewhere lives on the row, not on the card, so a
@@ -914,9 +916,17 @@
     });
   }
   function render(){
-    /* A structural redraw closes open document providers. Normal remote note
-       edits are transported by Yjs and never redraw Studio or rewrite HTML. */
-    if(window.CrowCollab&&window.CrowCollab.destroyAll)window.CrowCollab.destroyAll();
+    /* Shared notes keep their live editors through a redraw of the same
+       project: mountCollaborativeEditors hands each one to the card drawn for
+       its note, so changing section, page or mode neither reconnects them nor
+       flashes the stored text. Anything else (another project, an old version
+       on screen) closes them. Normal remote note edits are transported by Yjs
+       and never redraw Studio or rewrite HTML. */
+    if(window.CrowCollab){
+      var keep=activeProject&&!previewing()?'project:'+activeProject.id+':':'';
+      if(window.CrowCollab.keepOnly)window.CrowCollab.keepOnly(keep);
+      else if(window.CrowCollab.destroyAll)window.CrowCollab.destroyAll();
+    }
     shownBlocks=blocksSignature(blocks);
     shownProject=projectSignature(activeProject);
     shownList=listSignature(window.__crowProjects||[]);
