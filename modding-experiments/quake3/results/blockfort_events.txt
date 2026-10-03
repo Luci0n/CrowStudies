@@ -1,0 +1,91 @@
+3000 fort built at -179 912 0 (803 cells inside map geometry)
+33200 blast at 221 1008 21 mod 5 broke 7 blocks
+38650 blast at 168 1298 0 mod 5 broke 9 blocks
+38650 tnt at 10,1,10 set off by entity 1
+38650 blast at 157 1248 48 mod 5 broke 9 blocks
+90650 blast at 76 1272 37 mod 5 broke 5 blocks
+96100 blast at 172 1126 25 mod 7 broke 7 blocks
+104100 tnt at 4,1,10 set off by entity 1
+104100 blast at -35 1248 48 mod 5 broke 9 blocks
+105950 blast at 23 1186 52 mod 7 broke 1 blocks
+190850 blast at 160 1073 53 mod 7 broke 4 blocks
+190850 tnt at 10,1,4 set off by entity 6
+190850 blast at 157 1056 48 mod 5 broke 9 blocks
+204500 lava client 0
+205000 lava client 0
+205500 lava client 0
+206000 lava client 0
+206500 lava client 0
+215000 lava client 5
+215500 lava client 5
+217000 lava client 1
+217500 lava client 1
+218000 lava client 1
+218500 lava client 1
+222000 lava client 3
+222500 lava client 3
+223000 lava client 3
+223500 lava client 3
+227500 lava client 0
+228000 lava client 0
+228500 lava client 0
+229000 lava client 0
+233000 lava client 7
+236500 lava client 4
+237000 lava client 4
+237500 lava client 4
+238000 lava client 4
+238500 lava client 4
+238500 lava client 6
+239000 lava client 6
+239500 lava client 6
+240000 lava client 2
+240500 lava client 2
+240500 lava client 3
+241000 lava client 2
+241000 lava client 3
+243500 lava client 5
+244000 lava client 5
+246000 lava client 4
+246500 lava client 4
+247000 lava client 4
+247500 lava client 4
+248500 lava client 3
+249000 lava client 3
+250000 lava client 2
+250500 lava client 5
+251000 lava client 5
+251500 lava client 5
+252000 lava client 5
+252500 lava client 5
+258500 lava client 0
+259000 lava client 0
+259500 lava client 0
+264500 lava client 7
+265000 lava client 7
+265500 lava client 7
+266000 lava client 5
+266000 lava client 7
+266500 lava client 5
+266500 lava client 7
+267000 lava client 7
+268500 lava client 6
+273500 lava client 4
+274000 lava client 4
+274500 lava client 4
+277000 lava client 1
+277500 lava client 1
+278000 lava client 1
+280000 lava client 0
+280500 lava client 0
+284500 lava client 4
+288000 lava client 3
+288500 lava client 3
+289000 lava client 3
+291000 lava client 3
+291500 lava client 3
+292000 lava client 3
+292500 lava client 0
+292500 lava client 3
+293000 lava client 3
+300500 lava client 4

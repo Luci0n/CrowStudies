@@ -1,5 +1,9 @@
 # Recomp & mashup experiment
 
+**Part 2 (real game): [quake3/](quake3/README.md)**: OpenArena's game logic statically recompiled and diff-tested
+against ioquake3's interpreter, reverse-engineered from the stripped binary (17/17 graded), and mashed up with
+ClassiCube's block physics. AI-assisted RE tools usable in this cloud container are surveyed in [TOOLS.md](TOOLS.md).
+
 A small, fully legal version of the pipeline behind 2026's "whole games inside other games" mods.
 Both games are original ones written here; the tools only use their ROM bytes.
 

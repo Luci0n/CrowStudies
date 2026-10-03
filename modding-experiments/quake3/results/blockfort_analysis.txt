@@ -1,0 +1,17 @@
+with BLOCKFORT                     player samples inside a solid block: 0 / 1592
+without (same layout, not solid)   player samples inside a solid block: 26 / 1610
+events: {'fort': 1, 'blast': 9, 'tnt': 3, 'lava': 78}  blocks broken by Quake explosions: 60
+cells inside map geometry (bedrock): 803
+blocks at start: 224 solid, 9 lava; at end: 72 solid, 523 lava
+kills by cause (without -> with):
+   MOD_ROCKET_SPLASH     45 ->  43
+   MOD_SHOTGUN           35 ->  34
+   MOD_MACHINEGUN        28 ->  38
+   MOD_LIGHTNING         17 ->  22
+   MOD_ROCKET            19 ->  18
+   MOD_LAVA               1 ->  16
+   MOD_GRENADE           10 ->   5
+   MOD_PLASMA             7 ->   7
+   MOD_GRENADE_SPLASH     4 ->   3
+   MOD_PLASMA_SPLASH      1 ->   2
+wrote /home/user/CrowStudies/modding-experiments/quake3/results/blockfort.gif (297 frames)

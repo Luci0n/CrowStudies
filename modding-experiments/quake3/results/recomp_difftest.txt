@@ -1,0 +1,14 @@
+qvmrecomp.py on OpenArena 0.8.8's shipped qagame.qvm: 227,181 instructions, 1,128 functions -> 241k lines of C,
+compiled to a 1.6 MB shared object in ~11 s. Compared with ioq3's bytecode interpreter after every top-level
+VM call: FNV hash of the whole 2 MB VM image + running hash of every syscall (number + 16 argument words).
+
+control (interpreter vs interpreter, 3 runs)       oa_dm1 4 bots 60 s   2418/2418 identical
+recompiled vs interpreter                          oa_dm1 4 bots 60 s   2418/2418 identical
+recompiled vs interpreter                          FFA  oa_dm4       8 bots 5 min  12022/12022 identical, 224 kills both
+recompiled vs interpreter                          CTF  oa_ctf4ish   8 bots 5 min  12022/12022 identical, 122 kills both
+recompiled vs interpreter                          TDM  am_galmevish 8 bots 5 min  12022/12022 identical,  90 kills both
+coverage (oa_dm1 60 s)                             452/1128 functions, 64,613/227,181 instructions executed
+mutation test (one operator flipped in an executed instruction, 12 mutants)
+   memory hash only:          9/12 caught
+   memory + syscall stream:  11/12 caught; the survivor is equivalent in FFA (both branches return 0)
+whole-server time, 5 min 8-bot match (QVM_FAST):  interpreter 7.5 s, ioq3 x86-64 JIT 2.4 s, recompiled 2.5 s
