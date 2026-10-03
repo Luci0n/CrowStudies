@@ -1,0 +1,19 @@
+aligned 1126/1128 shipped functions exactly, 2 by similarity
+  vmMain             0        truth: vmMain                 OK
+  G_InitGame         994      truth: G_InitGame             OK
+  G_RunFrame         8224     truth: G_RunFrame             OK
+  ClientThink        111276   truth: ClientThink            OK
+  G_Damage           161248   truth: G_Damage               OK
+  CanDamage          162858   truth: CanDamage              OK
+  G_RadiusDamage     163177   truth: G_RadiusDamage         OK
+  G_ExplodeMissile   174201   truth: G_ExplodeMissile       OK
+  G_MissileImpact    175359   truth: G_MissileImpact        OK
+  G_RunMissile       176469   truth: G_RunMissile           OK
+  fire_plasma        176784   truth: fire_plasma            OK
+  fire_grenade       177021   truth: fire_grenade           OK
+  fire_rocket        177501   truth: fire_rocket            OK
+  G_Spawn            208234   truth: G_Spawn                OK
+  G_FreeEntity       208456   truth: G_FreeEntity           OK
+  G_TempEntity       208507   truth: G_TempEntity           OK
+  g_entities         238840   truth: g_entities             OK
+17/17 identifications correct
