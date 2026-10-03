@@ -1,0 +1,214 @@
+diff --git a/code/qcommon/common.c b/code/qcommon/common.c
+index d97312c..5bae914 100644
+--- a/code/qcommon/common.c
++++ b/code/qcommon/common.c
+@@ -2651,10 +2651,12 @@ static void Com_InitRand(void)
+ {
+ 	unsigned int seed;
+ 
+-	if(Sys_RandomBytes((byte *) &seed, sizeof(seed)))
++	if(getenv("QVM_DETERMINISTIC"))	// modding-experiments
++		srand(1);
++	else if(Sys_RandomBytes((byte *) &seed, sizeof(seed)))
+ 		srand(seed);
+ 	else
+-		srand(time(NULL));
++		srand(getenv("QVM_DETERMINISTIC") ? 1 : time(NULL));
+ }
+ 
+ /*
+@@ -3144,6 +3146,11 @@ void Com_Frame( void ) {
+ 	else
+ 		minMsec = 1;
+ 
++	// modding-experiments: with fixedtime set, QVM_FAST runs frames back to back instead of
++	// waiting for the wall clock (game time per frame is unchanged, so results are identical)
++	if(com_fixedtime->integer && getenv("QVM_FAST"))
++		minMsec = 0;
++
+ 	do
+ 	{
+ 		if(com_sv_running->integer)
+diff --git a/code/qcommon/qcommon.h b/code/qcommon/qcommon.h
+index 1d9b61a..742d472 100644
+--- a/code/qcommon/qcommon.h
++++ b/code/qcommon/qcommon.h
+@@ -362,6 +362,11 @@ void	VM_Forced_Unload_Done(void);
+ vm_t	*VM_Restart(vm_t *vm, qboolean unpure);
+ 
+ intptr_t		QDECL VM_Call( vm_t *vm, int callNum, ... );
++// modding-experiments: VM_Call reads MAX_VMMAIN_ARGS-1 varargs whatever the caller passed, and the
++// QVM backends copy them into VM memory. Pad with zeros so unused slots are deterministic.
++#ifndef VM_CALL_NO_PAD
++#define VM_Call(vm, ...) VM_Call(vm, __VA_ARGS__, 0,0,0,0,0,0,0,0,0,0,0,0)
++#endif
+ 
+ void	VM_Debug( int level );
+ 
+diff --git a/code/qcommon/vm.c b/code/qcommon/vm.c
+index 9de7e15..f91909d 100644
+--- a/code/qcommon/vm.c
++++ b/code/qcommon/vm.c
+@@ -33,7 +33,32 @@ and one exported function: Perform
+ 
+ */
+ 
++#define VM_CALL_NO_PAD
+ #include "vm_local.h"
++#include <dlfcn.h>
++#include <stdio.h>
++#include <stdlib.h>
++
++/* modding-experiments: AOT backend + differential-test probe.
++   QVM_AOT=<path.so>  run that recompiled module instead of interpreting <module>.qvm
++   QVM_AOT_MODULE     which module (default qagame)
++   QVM_HASHLOG=<file> after every top-level VM_Call into that module, log callnum, arg0 and a
++                      64-bit hash of the whole VM data image (globals + heap + VM stack). */
++typedef struct {
++	int *programStack; byte *dataBase; int dataMask;
++	intptr_t (*systemCall)(intptr_t *);
++	void (*blockCopy)(unsigned int, unsigned int, size_t);
++	void (*error)(const char *);
++} aotEnv_t;
++static void AOT_Error(const char *msg) { Com_Error(ERR_DROP, "AOT: %s", msg); }
++static FILE *hashLog;
++static const char *AOT_Module(void) { const char *m = getenv("QVM_AOT_MODULE"); return m ? m : "qagame"; }
++static unsigned long long VM_HashImage(vm_t *vm) {
++	unsigned long long h = 1469598103934665603ULL; const unsigned long long *p = (const unsigned long long *)vm->dataBase;
++	int i, n = (vm->dataMask + 1) / 8;
++	for (i = 0; i < n; i++) { h ^= p[i]; h *= 1099511628211ULL; h ^= h >> 29; }
++	return h;
++}
+ 
+ 
+ vm_t	*currentVM = NULL;
+@@ -677,6 +702,18 @@ vm_t *VM_Create( const char *module, intptr_t (*systemCalls)(intptr_t *),
+ 	// load the map file
+ 	VM_LoadSymbols( vm );
+ 
++	if ( getenv("QVM_AOT") && !Q_stricmp(module, AOT_Module()) ) {
++		void *h = dlopen(getenv("QVM_AOT"), RTLD_NOW);
++		void (*init)(aotEnv_t *) = h ? (void (*)(aotEnv_t *))dlsym(h, "aot_init") : NULL;
++		static aotEnv_t env;
++		if (!init) Com_Error(ERR_FATAL, "QVM_AOT: cannot load %s: %s", getenv("QVM_AOT"), dlerror());
++		env.programStack = &vm->programStack; env.dataBase = vm->dataBase; env.dataMask = vm->dataMask;
++		env.systemCall = systemCalls; env.blockCopy = VM_BlockCopy; env.error = AOT_Error;
++		init(&env);
++		vm->aotCall = (int (*)(int *))dlsym(h, "aot_call");
++		Com_Printf("QVM_AOT: %s runs recompiled code from %s\n", module, getenv("QVM_AOT"));
++	}
++
+ 	// the stack is implicitly at the end of the image
+ 	vm->programStack = vm->dataMask + 1;
+ 	vm->stackBottom = vm->programStack - PROGRAM_STACK_SIZE;
+@@ -808,7 +845,7 @@ intptr_t QDECL VM_Call( vm_t *vm, int callnum, ... )
+ {
+ 	vm_t	*oldVM;
+ 	intptr_t r;
+-	int i;
++	int i, arg0 = 0;
+ 
+ 	if(!vm || !vm->name[0])
+ 		Com_Error(ERR_FATAL, "VM_Call with NULL vm");
+@@ -857,6 +894,10 @@ intptr_t QDECL VM_Call( vm_t *vm, int callnum, ... )
+ 			a.args[i] = va_arg(ap, int);
+ 		}
+ 		va_end(ap);
++		arg0 = a.args[0];
++		if ( vm->aotCall )
++			r = vm->aotCall( &a.callnum );
++		else
+ #ifdef HAVE_VM_COMPILED
+ 		if ( vm->compiled )
+ 			r = VM_CallCompiled( vm, &a.callnum );
+@@ -867,6 +908,18 @@ intptr_t QDECL VM_Call( vm_t *vm, int callnum, ... )
+ 	}
+ 	--vm->callLevel;
+ 
++	if ( vm->callLevel == 0 && !vm->entryPoint && getenv("QVM_HASHLOG") && !Q_stricmp(vm->name, AOT_Module()) ) {
++		if (!hashLog) hashLog = fopen(getenv("QVM_HASHLOG"), "w");
++		static int nlogged;
++		extern unsigned long long qvm_syscallHash;
++		fprintf(hashLog, "%d %d %d %016llx %016llx\n", callnum, arg0, (int)r, VM_HashImage(vm), qvm_syscallHash);
++		if ( getenv("QVM_DUMP_AT") && atoi(getenv("QVM_DUMP_AT")) == nlogged ) {
++			FILE *f = fopen(va("%s.dump", getenv("QVM_HASHLOG")), "wb");
++			fwrite(vm->dataBase, 1, vm->dataMask + 1, f); fclose(f);
++		}
++		nlogged++;
++	}
++
+ 	if ( oldVM != NULL )
+ 	  currentVM = oldVM;
+ 	return r;
+diff --git a/code/qcommon/vm_local.h b/code/qcommon/vm_local.h
+index f649cf8..211470e 100644
+--- a/code/qcommon/vm_local.h
++++ b/code/qcommon/vm_local.h
+@@ -183,6 +183,9 @@ struct vm_s {
+ 
+ 	byte		*jumpTableTargets;
+ 	int			numJumpTableTargets;
++
++	// modding-experiments: ahead-of-time recompiled QVM (qvmrecomp.py)
++	int			(*aotCall)(int *args);
+ };
+ 
+ 
+diff --git a/code/server/sv_game.c b/code/server/sv_game.c
+index 161d975..95aeb21 100644
+--- a/code/server/sv_game.c
++++ b/code/server/sv_game.c
+@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ // sv_game.c -- interface to the game dll
+ 
+ #include "server.h"
++#include <stdlib.h>
+ 
+ #include "../botlib/botlib.h"
+ 
+@@ -289,7 +290,16 @@ SV_GameSystemCalls
+ The module is making a system call
+ ====================
+ */
++static intptr_t SV_GameSystemCallsReal( intptr_t *args );
++// modding-experiments: running hash of everything the game module sends to the engine
++// (syscall number + the 16 argument words), logged next to the VM image hash by QVM_HASHLOG
++unsigned long long qvm_syscallHash = 1469598103934665603ULL;
+ intptr_t SV_GameSystemCalls( intptr_t *args ) {
++	int i;
++	for ( i = 0; i < 16; i++ ) { qvm_syscallHash ^= (unsigned int)args[i]; qvm_syscallHash *= 1099511628211ULL; }
++	return SV_GameSystemCallsReal( args );
++}
++static intptr_t SV_GameSystemCallsReal( intptr_t *args ) {
+ 	switch( args[0] ) {
+ 	case G_PRINT:
+ 		Com_Printf( "%s", (const char*)VMA(1) );
+@@ -298,6 +308,7 @@ intptr_t SV_GameSystemCalls( intptr_t *args ) {
+ 		Com_Error( ERR_DROP, "%s", (const char*)VMA(1) );
+ 		return 0;
+ 	case G_MILLISECONDS:
++		if ( getenv("QVM_DETERMINISTIC") ) return svs.time;	// modding-experiments: no wall clock
+ 		return Sys_Milliseconds();
+ 	case G_CVAR_REGISTER:
+ 		Cvar_Register( VMA(1), VMA(2), VMA(3), args[4] ); 
+@@ -424,6 +435,11 @@ intptr_t SV_GameSystemCalls( intptr_t *args ) {
+ 		BotImport_DebugPolygonDelete( args[1] );
+ 		return 0;
+ 	case G_REAL_TIME:
++		if ( getenv("QVM_DETERMINISTIC") ) {	// modding-experiments: fixed date
++			qtime_t *t = VMA(1);
++			if ( t ) { Com_Memset( t, 0, sizeof(*t) ); t->tm_year = 126; t->tm_mon = 9; t->tm_mday = 3; }
++			return 1791000000;
++		}
+ 		return Com_RealTime( VMA(1) );
+ 	case G_SNAPVECTOR:
+ 		Q_SnapVector(VMA(1));
+@@ -888,7 +904,7 @@ static void SV_InitGameVM( qboolean restart ) {
+ 	
+ 	// use the current msec count for a random seed
+ 	// init for this gamestate
+-	VM_Call (gvm, GAME_INIT, sv.time, Com_Milliseconds(), restart);
++	VM_Call (gvm, GAME_INIT, sv.time, getenv("QVM_DETERMINISTIC") ? 12345 : Com_Milliseconds(), restart);
+ }
+ 
+ 
