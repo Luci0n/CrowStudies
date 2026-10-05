@@ -10,19 +10,19 @@ import { Server } from '@hocuspocus/server';
 import admin from 'firebase-admin';
 import * as Y from 'yjs';
 import { generateJSON } from '@tiptap/html';
+import { getSchema } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
-import { prosemirrorJSONToYDoc } from 'y-prosemirror';
+import { prosemirrorToYXmlFragment } from 'y-prosemirror';
 
 const port = Number(process.env.PORT || 1234);
 const host = process.env.HOST || '127.0.0.1';
 const snapshotDelayMs = 900;
 const maxDocumentBytes = 850 * 1024; // safely under Firestore's 1 MiB limit
-const timers = new Map();
 const allowedOrigin = process.env.ALLOWED_ORIGIN || '';
 
 function serviceCredential() {
@@ -43,6 +43,7 @@ const extensions = [
   TableHeader,
   TableCell,
 ];
+const schema = getSchema(extensions);
 
 function parseDocumentName(name) {
   const match = /^project:([^:]+):block:([^:]+)$/.exec(String(name || ''));
@@ -79,16 +80,36 @@ async function initialDocument(projectId, blockId) {
   // independently seed and duplicate its contents.
   const legacy = await db.collection('projects').doc(projectId).collection('blocks').doc(blockId).get();
   const html = legacy.exists ? String(legacy.get('body') || '') : '';
-  const json = generateJSON(html || '<p></p>', extensions);
-  return prosemirrorJSONToYDoc(json, 'default');
+  const doc = seedDocument(html);
+  // Stored at once. A note nobody has edited yet is not a change, so Hocuspocus
+  // unloads it without storing when the last person leaves; the next open then
+  // seeded it again, and anyone still holding the first seed merged the two,
+  // so every line appeared twice. Studio closes and reopens notes on every
+  // redraw, so this was not rare.
+  await writeSnapshot(projectId, blockId, doc);
+  return doc;
 }
 
-async function storeSnapshot(documentName, document) {
-  const { projectId, blockId } = parseDocumentName(documentName);
-  // A block can be deleted while a browser still has its document open. Do
-  // not revive it as an orphan collaboration snapshot on disconnect.
-  const block = await db.collection('projects').doc(projectId).collection('blocks').doc(blockId).get();
-  if (!block.exists || block.get('type') !== 'note') return;
+/* The same HTML always becomes the same Yjs history: the seed is written under
+   a client id taken from the text itself. Should a note ever be seeded twice
+   from unchanged text, the two copies are the same items and merge into one
+   instead of doubling. Different text gives a different id, so two seeds can
+   never be mistaken for one another. */
+function seedClientId(html) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < html.length; i++) hash = Math.imul(hash ^ html.charCodeAt(i), 0x01000193) >>> 0;
+  return hash || 1;
+}
+
+function seedDocument(html) {
+  const doc = new Y.Doc();
+  doc.clientID = seedClientId(html);
+  const json = generateJSON(html || '<p></p>', extensions);
+  prosemirrorToYXmlFragment(schema.nodeFromJSON(json), doc.getXmlFragment('default'));
+  return doc;
+}
+
+async function writeSnapshot(projectId, blockId, document) {
   const update = Y.encodeStateAsUpdate(document);
   if (update.byteLength > maxDocumentBytes) {
     throw new Error('This note is too large to save. Split it into smaller notes.');
@@ -100,38 +121,41 @@ async function storeSnapshot(documentName, document) {
   }, { merge: true });
 }
 
-function scheduleStore(documentName, document) {
-  clearTimeout(timers.get(documentName));
-  timers.set(documentName, setTimeout(async () => {
-    timers.delete(documentName);
-    try { await storeSnapshot(documentName, document); }
-    catch (error) { console.error('Could not save', documentName, error); }
-  }, snapshotDelayMs));
+async function storeSnapshot(documentName, document) {
+  const { projectId, blockId } = parseDocumentName(documentName);
+  // A block can be deleted while a browser still has its document open. Do
+  // not revive it as an orphan collaboration snapshot on disconnect.
+  const block = await db.collection('projects').doc(projectId).collection('blocks').doc(blockId).get();
+  if (!block.exists || block.get('type') !== 'note') return;
+  await writeSnapshot(projectId, blockId, document);
 }
 
 const server = new Server({
   address: host,
   port,
-  async onAuthenticate({ token, documentName, connection, requestHeaders }) {
+  // Storing goes through Hocuspocus, which runs a pending store before it lets
+  // a document go from memory. The timers this replaced were its own, so a
+  // document could be unloaded and opened again while a store was still on
+  // its way, and the reopen read the older copy.
+  debounce: snapshotDelayMs,
+  maxDebounce: 5000,
+  async onAuthenticate({ token, documentName, connectionConfig, requestHeaders }) {
     const origin = requestHeaders && (typeof requestHeaders.get === 'function'
       ? requestHeaders.get('origin') : requestHeaders.origin);
     if (allowedOrigin && origin && origin !== allowedOrigin) throw new Error('This origin is not allowed.');
     const access = await authorize(token, documentName);
     // Hocuspocus rejects update messages at the protocol layer for read-only
     // connections. This is enforcement, not merely a disabled UI control.
-    connection.readOnly = access.role === 'viewer';
+    // Hocuspocus 3 hands this hook `connectionConfig`; there is no
+    // `connection` here, and setting a field on it threw for every person.
+    connectionConfig.readOnly = access.role === 'viewer';
     return access;
   },
   async onLoadDocument({ documentName }) {
     const { projectId, blockId } = parseDocumentName(documentName);
     return initialDocument(projectId, blockId);
   },
-  async onChange({ documentName, document }) {
-    scheduleStore(documentName, document);
-  },
-  async onDisconnect({ documentName, document }) {
-    clearTimeout(timers.get(documentName));
-    timers.delete(documentName);
+  async onStoreDocument({ documentName, document }) {
     await storeSnapshot(documentName, document);
   },
 });

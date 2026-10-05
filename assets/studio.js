@@ -701,7 +701,10 @@
       changed=true;
     });
     if(blocked)return false;
-    if(changed){ dressRowTracks(); pruneViewOnlyChrome(root); bind(); paintPresence(); }
+    /* A card patched in place can have become a note, when someone else turned
+       a block into one. It opens its shared document here, or it would stay a
+       plain copy whose edits reach nobody. */
+    if(changed){ dressRowTracks(); pruneViewOnlyChrome(root); bind(); mountCollaborativeEditors(); paintPresence(); }
     /* A contents block reads other blocks, so it can be out of date without
        having changed itself. */
     refreshContents();
@@ -922,22 +925,39 @@
       /* The plain toolbar stays until the shared one exists, so the row is
          never missing from the card in between. */
       var oldTools=card.querySelector('.rich-tools');
+      var synced=false;
+      card.classList.add('collab-waiting');
+      var slow=setTimeout(function(){ if(!synced){ card.classList.remove('collab-waiting'); card.classList.add('collab-offline'); } },8000);
       window.CrowCollab.mount(body,{
         documentName:noteDocument(block),
         user:cloud().user,
         username:(cloud().profile&&cloud().profile.username)||'someone',
         avatarUrl:(cloud().profile&&cloud().profile.avatarUrl)||'',
         readOnly:readOnly||!canEdit()||sectionLocked(block.sectionId),
-        onStatus:function(status){ card.classList.toggle('collab-offline',status!=='connected'); },
-        onSynced:refreshContents,
+        /* The note takes no typing until the server's copy arrives, so the card
+           says why: connecting at first, offline if that takes too long or the
+           connection drops later. */
+        onStatus:function(status){
+          if(status==='connected'){ if(synced)card.classList.remove('collab-offline'); }
+          else if(synced||!card.classList.contains('collab-waiting'))card.classList.add('collab-offline');
+        },
+        onSynced:function(){
+          synced=true; clearTimeout(slow);
+          card.classList.remove('collab-waiting','collab-offline');
+          refreshContents();
+        },
         onLocalChange:function(html){
           block.body=cleanHTML(html);
           queuedSave(block,false,{body:block.body});
           refreshContentsSoon();
         }
       }).then(function(entry){
-        if(entry&&oldTools)oldTools.hidden=true;
+        /* No editor: the card was redrawn while this one was being made. A
+           card still on the page tries again, once its turn comes round. */
+        if(!entry){ clearTimeout(slow); card.classList.remove('collab-waiting'); if(body.isConnected)setTimeout(mountCollaborativeEditors,400); return; }
+        if(oldTools)oldTools.hidden=true;
       }).catch(function(error){
+        clearTimeout(slow); card.classList.remove('collab-waiting');
         body.dataset.collabActive='';
         if(oldTools)oldTools.hidden=false;
         body.innerHTML=cleanHTML(block.body);
@@ -1804,7 +1824,10 @@
   var DB_KINDS=[['text','Text'],['longtext','Long text'],['number','Number'],['check','Tick box'],
     ['select','Select'],['multi','Multi-select'],['date','Date'],['url','Link'],['email','Email'],['phone','Phone']];
   var CHIP_TONES=6;
-  var dbRows={}, dbWatch={}, shownRows={};
+  /* Not `shownRows`: that is the function that lays the page out in rows, and
+     a map of the same name here replaced it once this ran, so the ⋯ menu on
+     every block threw instead of opening. */
+  var dbRows={}, dbWatch={}, shownDbRows={};
   function dbRowsSignature(list){
     return (list||[]).map(function(row){ return stableJSON({ id:row.id, order:row.order, values:row.values||{} }); }).join(' ');
   }
@@ -1824,7 +1847,7 @@
     Object.keys(dbWatch).forEach(function(blockId){
       if(wanted[blockId])return;
       try{ dbWatch[blockId](); }catch(error){}
-      delete dbWatch[blockId]; delete dbRows[blockId]; delete shownRows[blockId];
+      delete dbWatch[blockId]; delete dbRows[blockId]; delete shownDbRows[blockId];
     });
     Object.keys(wanted).forEach(function(blockId){
       if(dbWatch[blockId])return;
@@ -1837,8 +1860,8 @@
            took more than one click. Draw again only when the rows really did
            change. */
         var mark=dbRowsSignature(list);
-        if(shownRows[blockId]===mark)return;
-        shownRows[blockId]=mark;
+        if(shownDbRows[blockId]===mark)return;
+        shownDbRows[blockId]=mark;
         var card=root.querySelector('[data-block="'+blockId+'"]');
         var block=liveBlock(blockId);
         if(card&&block)paintDatabase(card,block);
@@ -1847,7 +1870,7 @@
   }
   function dropDatabases(){
     Object.keys(dbWatch).forEach(function(blockId){ try{ dbWatch[blockId](); }catch(error){} });
-    dbWatch={}; dbRows={}; shownRows={};
+    dbWatch={}; dbRows={}; shownDbRows={};
   }
   function dbValue(row, prop){
     var held=(row.values||{})[prop.id];

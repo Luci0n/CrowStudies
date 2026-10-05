@@ -1,16 +1,30 @@
-/* CrowStudies rich collaborative editor. Loaded only when a WSS endpoint is configured. */
-import * as Y from 'https://esm.sh/yjs@13.6.24';
-import { IndexeddbPersistence } from 'https://esm.sh/y-indexeddb@9.0.12';
-import { Editor } from 'https://esm.sh/@tiptap/core@2.11.5';
-import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.11.5';
-import Link from 'https://esm.sh/@tiptap/extension-link@2.11.5';
-import Table from 'https://esm.sh/@tiptap/extension-table@2.11.5';
-import TableRow from 'https://esm.sh/@tiptap/extension-table-row@2.11.5';
-import TableHeader from 'https://esm.sh/@tiptap/extension-table-header@2.11.5';
-import TableCell from 'https://esm.sh/@tiptap/extension-table-cell@2.11.5';
-import { Collaboration } from 'https://esm.sh/@tiptap/extension-collaboration@2.11.5';
-import { CollaborationCaret } from 'https://esm.sh/@tiptap/extension-collaboration-caret@2.11.5';
-import { HocuspocusProvider } from 'https://esm.sh/@hocuspocus/provider@3.2.3';
+/* CrowStudies rich collaborative editor. Loaded only when a WSS endpoint is configured.
+
+   Every import names the exact versions of what it shares with the others.
+   esm.sh otherwise resolves each package's own version ranges, and the page
+   ended up with two copies of Yjs and two of Tiptap's core. Yjs refuses to
+   work across copies ("Yjs was already imported"), so shared notes could not
+   have worked even once the import below that never existed was fixed: there
+   is no extension-collaboration-caret 2.x; the 2.x name is
+   extension-collaboration-cursor. Change these versions together or not at
+   all, and check that one copy of each still loads, and that the server's
+   versions in collab-server/package.json still match them.
+
+   Notes are not kept in the browser (there was an IndexedDB copy). A note
+   takes no typing until the server's copy arrives, so a local copy could not
+   save anything the server lacked; all it could do was carry an old copy into
+   the next merge, which is how a note came to show its text twice. */
+import * as Y from 'https://esm.sh/yjs@13.6.33';
+import { Editor } from 'https://esm.sh/@tiptap/core@2.27.3?deps=@tiptap/pm@2.27.3';
+import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.27.3?deps=@tiptap/core@2.27.3,@tiptap/pm@2.27.3';
+import Link from 'https://esm.sh/@tiptap/extension-link@2.27.3?deps=@tiptap/core@2.27.3,@tiptap/pm@2.27.3';
+import Table from 'https://esm.sh/@tiptap/extension-table@2.27.3?deps=@tiptap/core@2.27.3,@tiptap/pm@2.27.3';
+import TableRow from 'https://esm.sh/@tiptap/extension-table-row@2.27.3?deps=@tiptap/core@2.27.3,@tiptap/pm@2.27.3';
+import TableHeader from 'https://esm.sh/@tiptap/extension-table-header@2.27.3?deps=@tiptap/core@2.27.3,@tiptap/pm@2.27.3';
+import TableCell from 'https://esm.sh/@tiptap/extension-table-cell@2.27.3?deps=@tiptap/core@2.27.3,@tiptap/pm@2.27.3';
+import { Collaboration } from 'https://esm.sh/@tiptap/extension-collaboration@2.27.3?deps=@tiptap/core@2.27.3,@tiptap/pm@2.27.3,yjs@13.6.33,y-prosemirror@1.3.7';
+import { CollaborationCursor } from 'https://esm.sh/@tiptap/extension-collaboration-cursor@2.27.3?deps=@tiptap/core@2.27.3,@tiptap/pm@2.27.3,yjs@13.6.33,y-prosemirror@1.3.7';
+import { HocuspocusProvider } from 'https://esm.sh/@hocuspocus/provider@3.2.3?deps=yjs@13.6.33,@hocuspocus/common@3.2.3';
 
 const config = window.CrowStudiesCollabConfig || {};
 const live = new Map();
@@ -61,7 +75,9 @@ function toolbar(editor){
   const actions=[
     ['B','toggleBold'],['I','toggleItalic'],['• list','toggleBulletList'],['H1','toggleHeading',{level:1}],['H2','toggleHeading',{level:2}],['H3','toggleHeading',{level:3}],['P','setParagraph']
   ];
-  actions.forEach(([label,command,args])=>{ const button=document.createElement('button'); button.type='button'; button.innerHTML=label==='B'?'<b>B</b>':label==='I'?'<i>I</i>':label; button.onclick=()=>{ const chain=editor.chain().focus()[command](args); chain.run(); }; bar.append(button); });
+  /* A command changes the document whether or not the editor takes typing, so
+     the buttons wait for the same go-ahead the editor does. */
+  actions.forEach(([label,command,args])=>{ const button=document.createElement('button'); button.type='button'; button.disabled=true; button.innerHTML=label==='B'?'<b>B</b>':label==='I'?'<i>I</i>':label; button.onclick=()=>{ const chain=editor.chain().focus()[command](args); chain.run(); }; bar.append(button); });
   return bar;
 }
 
@@ -69,12 +85,17 @@ async function mount(host, options){
   if(!config.url || live.has(options.documentName)) return null;
   host.dataset.collabActive='true';
   host.oninput=null; // Never leave the old HTML/Firestore writer attached.
-  /* The note keeps the text it is already showing until the editor is ready to
-     take over. Emptying it here collapsed every shared note to a single line
-     for the length of a round trip, and the page jumped twice for it. */
-  const ydoc=new Y.Doc();
-  const offline=new IndexeddbPersistence('crowstudies:'+options.documentName,ydoc);
+  /* The note keeps showing the text it already has until the server's copy
+     arrives, but as something to read: typed into, that copy would save
+     nowhere. If the server never answers, the words stay on screen instead of
+     an empty editor that looks as if they had been wiped. */
+  host.setAttribute('contenteditable','false');
   const token=await options.user.getIdToken();
+  /* Studio may have redrawn while the token was fetched. An editor opened for
+     a card no longer on the page would claim this note, and the card that
+     replaced it could then never open its own. */
+  if(!host.isConnected||live.has(options.documentName)){ delete host.dataset.collabActive; return null; }
+  const ydoc=new Y.Doc();
   const provider=new HocuspocusProvider({
     url:config.url,
     name:options.documentName,
@@ -84,16 +105,22 @@ async function mount(host, options){
     onStatus:({status})=>options.onStatus&&options.onStatus(status),
   });
   const user={name:'@'+options.username,color:colorFor(options.user.uid),avatar:options.avatarUrl||undefined};
-  host.textContent='';
+  /* Nothing can be typed until the server's copy has arrived. Before that,
+     words typed here would exist in this browser only: if the server is
+     unreachable or turns the note away, nobody else would ever see them, and
+     they would look lost. The editor is built off the page and put in place
+     of the saved copy once it holds the server's; the card says it is
+     connecting meanwhile. */
+  const surface=document.createElement('div');
   const editor=new Editor({
-    element:host,
-    editable:!options.readOnly,
-    extensions:schema(ydoc).concat(CollaborationCaret.configure({provider,user})),
+    element:surface,
+    editable:false,
+    extensions:schema(ydoc).concat(CollaborationCursor.configure({provider,user})),
     editorProps:{attributes:{class:'tiptap ProseMirror','aria-label':'Collaborative note'}},
   });
   const controls=toolbar(editor);
   host.parentNode.insertBefore(controls,host);
-  const entry={editor,provider,offline,controls,host,synced:false};
+  const entry={editor,provider,ydoc,controls,host,synced:false};
   /* The block's `body` is the copy everything outside this editor reads:
      history, duplicate, turn into, export and the contents block. Only edits
      made here are reported, so one change is not written back by everyone
@@ -105,10 +132,19 @@ async function mount(host, options){
   });
   /* A note that connects late still has to count as caught up when it does,
      so this listens for as long as the editor is open. */
+  let heard=false;
   const caughtUp=(event)=>{
-    if(entry.synced||(event&&event.state===false))return;
+    if(heard||(event&&event.state===false))return;
+    heard=true;
     provider.off('synced',caughtUp);
-    firstDrawn().then(()=>{ entry.synced=true; if(options.onSynced)options.onSynced(); });
+    firstDrawn().then(()=>{
+      if(live.get(options.documentName)!==entry)return;
+      host.textContent='';
+      host.append(surface);
+      entry.synced=true;
+      if(!options.readOnly){ editor.setEditable(true); controls.querySelectorAll('button').forEach((button)=>{ button.disabled=false; }); }
+      if(options.onSynced)options.onSynced();
+    });
   };
   if(provider.isSynced)caughtUp(); else provider.on('synced',caughtUp);
   live.set(options.documentName,entry);
@@ -116,7 +152,7 @@ async function mount(host, options){
 }
 function destroy(documentName){
   const entry=live.get(documentName); if(!entry)return;
-  entry.controls.remove(); entry.editor.destroy(); entry.provider.destroy(); entry.offline.destroy(); live.delete(documentName);
+  entry.controls.remove(); entry.editor.destroy(); entry.provider.destroy(); entry.ydoc.destroy(); live.delete(documentName);
 }
 function destroyAll(){ Array.from(live.keys()).forEach(destroy); }
 /* What a note says right now, if it is open and has caught up with the
@@ -151,7 +187,6 @@ async function withDocument(documentName, options, use){
   if(entry){
     await whenSynced(entry.provider);
     await firstDrawn();
-    entry.synced=true;
     return use(entry.editor, entry.provider);
   }
   const ydoc=new Y.Doc();

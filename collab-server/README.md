@@ -33,6 +33,17 @@ scaled to multiple instances, add Redis (or a Hocuspocus-compatible shared
 backend) before doing so; two isolated Yjs server memories must not accept the
 same document independently.
 
+## Updating
+
+Deploy this server **before** the website whenever both change. The site's
+shared notes take no typing until this server has answered, so a site that
+is ahead of its server shows every note as read-only.
+
+The versions in `package.json` are exact on purpose. They must match the
+ones `assets/collab-editor.js` imports from esm.sh (Yjs, y-prosemirror,
+Tiptap, Hocuspocus); change them together. After copying the directory,
+run `npm install --omit=dev` and restart the service.
+
 ## Backup and history
 
 `collabDocuments/{blockId}` contains the compact latest Yjs snapshot. Version
