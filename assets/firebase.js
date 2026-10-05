@@ -202,6 +202,10 @@ function updateAuthControls(user){
 const cloud = {
   user: null,
   profile: null,
+  /* Which open copy of Studio made a write. `updatedBy` says which account,
+     but one account can have Studio open on a phone and a laptop, or in two
+     tabs, and a write from the other one is news here, not an echo. */
+  tab: (crypto.randomUUID && crypto.randomUUID()) || ('tab-' + Date.now() + '-' + Math.random().toString(16).slice(2)),
   initializing: true,
   async signIn(){
     await signInWithPopup(auth, provider);
@@ -336,7 +340,7 @@ const cloud = {
   },
   async saveBlock(projectId, blockId, data){
     if (!cloud.user) throw new Error('Sign in first');
-    const payload = Object.assign({}, data, { updatedAt:serverTimestamp(), updatedBy:cloud.user.uid });
+    const payload = Object.assign({}, data, { updatedAt:serverTimestamp(), updatedBy:cloud.user.uid, updatedTab:cloud.tab });
     delete payload.pending;
     await setDoc(doc(db, 'projects', projectId, 'blocks', blockId), payload, { merge:true });
   },
@@ -344,7 +348,7 @@ const cloud = {
      block would let a title edit overwrite somebody else's body edit. */
   async patchBlock(projectId, blockId, changes){
     if (!cloud.user) throw new Error('Sign in first');
-    const payload = Object.assign({}, changes, { updatedAt:serverTimestamp(), updatedBy:cloud.user.uid });
+    const payload = Object.assign({}, changes, { updatedAt:serverTimestamp(), updatedBy:cloud.user.uid, updatedTab:cloud.tab });
     delete payload.id; delete payload.pending;
     await setDoc(doc(db, 'projects', projectId, 'blocks', blockId), payload, { merge:true });
   },

@@ -89,7 +89,7 @@ function versionMark(data){
   if(!data)return '';
   const tidy = (block) => {
     const copy = Object.assign({}, block);
-    delete copy.updatedAt; delete copy.updatedBy; delete copy.pending;
+    delete copy.updatedAt; delete copy.updatedBy; delete copy.updatedTab; delete copy.pending;
     return copy;
   };
   try{
@@ -166,7 +166,9 @@ async function saveCheckpoint(){
   if(!id)return;
   const label = window.prompt('Name this version', 'Before changes');
   if(label === null)return;
-  const data = s.snapshot();
+  /* Someone asked for this one by name, so it is worth reading every shared
+     note from the server rather than trusting the copies. */
+  const data = s.liveSnapshot ? await s.liveSnapshot() : s.snapshot();
   await cloud().saveHistory(id, label.trim() || 'Checkpoint', data, 'named');
   lastSavedMark = versionMark(data); dirtySince = 0;
   showHistory();
@@ -216,8 +218,11 @@ async function restoreVersion(entry){
     + 'A version of the project as it stands right now is saved first, so this can be undone from the same list.',
     'Restore this version');
   if(!ok)return;
-  const before = s.snapshot();
-  try{ await cloud().saveHistory(id, 'Before restoring “' + (full.label || 'a version') + '”', before, 'named'); }catch(error){}
+  /* A restore now reaches into shared notes too, so the version it promises to
+     keep has to hold their real words, and it has to have been kept. */
+  const before = s.liveSnapshot ? await s.liveSnapshot() : s.snapshot();
+  try{ await cloud().saveHistory(id, 'Before restoring “' + (full.label || 'a version') + '”', before, 'named'); }
+  catch(error){ await tell('Nothing was restored', 'A version of the project as it is now could not be saved first, so restoring could not be undone. Check your connection and try again.'); return; }
   closeOverlay();
   await s.restore(full.snapshot);
   if(s.previewing())s.closePreview(); else await s.reload(id);

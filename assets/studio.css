@@ -503,6 +503,24 @@
 .studio-block.callout .block-kicker{ color:var(--gold); }
 .studio-block.code .block-kicker{ color:var(--ink-3); }
 
+/* ---------- contents: the headings of a section, one click away ---------- */
+.studio-block.toc .block-kicker{ color:var(--ink-3); }
+.contents-list{ display:grid; gap:1px; margin-top:6px; }
+.contents-item{ display:block; width:100%; padding:6px 8px; border:0; border-radius:7px; background:transparent; color:var(--ink-2); font-family:inherit; font-size:14px; font-weight:600; line-height:1.35; text-align:left; overflow-wrap:anywhere; cursor:pointer; transition:background .15s ease, color .15s ease; }
+.contents-item.depth-0{ color:var(--ink); font-weight:700; }
+.contents-item.depth-1{ padding-left:22px; }
+.contents-item.depth-2{ padding-left:36px; font-size:13px; }
+.contents-item:hover,.contents-item:focus-visible{ background:var(--glass-lift); color:var(--brand); outline:none; }
+.contents-page{ padding:10px 8px 3px; color:var(--ink-3); font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
+.contents-page:first-child{ padding-top:2px; }
+.contents-empty{ margin:6px 0 0; color:var(--ink-3); font-size:13px; line-height:1.5; }
+/* Land below the sticky site header (and the version bar, when one is showing). */
+.studio-block,.block-body h1,.block-body h2,.block-body h3{ scroll-margin-top:84px; }
+.studio-main.in-preview .studio-block,.studio-main.in-preview .block-body h1,.studio-main.in-preview .block-body h2,.studio-main.in-preview .block-body h3{ scroll-margin-top:140px; }
+.studio-block.contents-target::after{ content:''; position:absolute; inset:-1px; border-radius:inherit; pointer-events:none; box-shadow:0 0 0 2px var(--brand); animation:contents-arrive 1.6s ease forwards; }
+@keyframes contents-arrive{ 0%,35%{ opacity:1; } 100%{ opacity:0; } }
+@media (prefers-reduced-motion: reduce){ .studio-block.contents-target::after{ animation:none; } }
+
 /* ---------- one way in, instead of a button for every kind ---------- */
 .add-row{ position:relative; }
 .add-open{ padding:9px 14px; border:1px dashed var(--glass-edge); border-radius:9px; background:transparent; color:var(--brand); font-family:inherit; font-weight:800; font-size:13px; transition:background .2s ease, border-color .2s ease; }

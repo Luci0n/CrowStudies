@@ -260,7 +260,7 @@
   function projectPayload(){
     return { crowstudies:'project', version:FILE_FORMAT, exportedAt:new Date().toISOString(),
       project:{ title:activeProject.title, sections:activeProject.sections||[] },
-      blocks:blocks.map(function(block){ var copy=Object.assign({},block); delete copy.pending; return copy; }),
+      blocks:blocks.map(function(block){ var copy=Object.assign({},block,{ body:currentBody(block) }); delete copy.pending; return copy; }),
       rows:(function(){ var out={}; blocks.filter(isDatabase).forEach(function(block){ out[block.id]=dbRowsOf(block.id).map(function(row){ return Object.assign({},row); }); }); return out; })() };
   }
   /* Everything comes back with fresh ids so an import never collides with a
@@ -401,7 +401,7 @@
   }
   function withoutStamps(value){
     var copy=Object.assign({}, value);
-    delete copy.updatedAt; delete copy.updatedBy; delete copy.createdAt; delete copy.pending;
+    delete copy.updatedAt; delete copy.updatedBy; delete copy.updatedTab; delete copy.createdAt; delete copy.pending;
     return copy;
   }
   function blocksSignature(list){
@@ -448,6 +448,14 @@
     if(pending)return true;
     var mine=cloud()&&cloud().user&&cloud().user.uid;
     if(!mine)return false;
+    /* Matching the account was not enough. A change made on this account's
+       phone, or in another tab, was taken for an echo here and never drawn,
+       so this copy went on showing the old words, and the next keystroke in
+       it saved those old words over the new ones. Only this tab's own writes
+       are echoes. A write stamped before tabs were recorded has no tab, and
+       is treated as news: drawing something twice is harmless. */
+    var tab=cloud().tab;
+    function ownWrite(block){ return block.updatedBy===mine&&!!tab&&block.updatedTab===tab; }
     var oldById={}; before.forEach(function(block){ oldById[block.id]=block; });
     var nextById={}; after.forEach(function(block){ nextById[block.id]=block; });
     var changed=false;
@@ -455,14 +463,13 @@
       var previous=oldById[id], current=nextById[id];
       if(!previous||stableJSON(withoutStamps(previous))!==stableJSON(withoutStamps(current))){
         changed=true;
-        if(current.updatedBy!==mine)return false;
+        if(!ownWrite(current))return false;
       }
     }
+    /* This tab takes a block it deletes out of its own list before the write
+       goes, so a block that vanishes here was deleted somewhere else. */
     for(var oldId in oldById){
-      if(!nextById[oldId]){
-        changed=true;
-        if(oldById[oldId].updatedBy!==mine)return false;
-      }
+      if(!nextById[oldId])return false;
     }
     return changed;
   }
@@ -562,7 +569,7 @@
   function sectionPages(sectionId){ var section=findSection(sectionId); return section&&Array.isArray(section.pages)?section.pages:[]; }
   function sectionLocked(sectionId){ var section=findSection(sectionId); return !!(section&&section.locked); }
   function normalizeBlock(block){
-    var copy=Object.assign({},block), supported=['note','tasks','status','milestone','schedule','idea','lesson','table','image','quote','callout','code','database'];
+    var copy=Object.assign({},block), supported=['note','tasks','status','milestone','schedule','idea','lesson','table','image','quote','callout','code','database','toc'];
     if(copy.type==='task')copy.type='tasks';
     if(supported.indexOf(copy.type)<0)copy.type='note';
     if(!Array.isArray(copy.items))copy.items=[];
@@ -609,6 +616,39 @@
       }
     }catch(error){}
   }
+  /* A shared note's words live in its collaborative document. Its `body` is
+     only a copy, kept for everything outside the editor to read. */
+  function liveDocument(body){ return !!body&&body.dataset.collabActive==='true'; }
+  function noteDocument(block){ return noteDocumentIn(activeProject.id,block); }
+  function noteDocumentIn(projectId, block){ return 'project:'+projectId+':block:'+block.id; }
+  function sharingNotesFor(projectId){ return !!(projectId&&window.CrowCollab&&window.CrowCollab.enabled()&&window.CrowCollab.replace&&cloud().user); }
+  /* What a shared note says on the server, open on this page or not. */
+  async function sharedText(projectId, block){
+    return cleanHTML(await window.CrowCollab.read(noteDocumentIn(projectId,block),{ user:cloud().user })||'');
+  }
+  /* A version of the project with every shared note's words read from the
+     server rather than from `body`. Taking one costs a connection per note,
+     so it is kept for the moments that matter: just before a restore, and a
+     version somebody asks for by name. */
+  async function liveSnapshot(){
+    var data=window.CrowStudio.snapshot();
+    var projectId=activeProject&&activeProject.id;
+    if(!data||!sharingNotesFor(projectId))return data;
+    await Promise.all(data.blocks.map(function(copy){
+      if(copy.type!=='note')return null;
+      return sharedText(projectId,copy).then(function(html){ copy.body=html; },function(){});
+    }));
+    return data;
+  }
+  /* The text a block holds right now. For a shared note that is open, the
+     editor is asked, because `body` may not have caught up with it. */
+  function currentBody(block){
+    if(block&&block.type==='note'&&activeProject&&!previewing()&&window.CrowCollab&&window.CrowCollab.html){
+      var live=window.CrowCollab.html(noteDocument(block));
+      if(live!==null)return cleanHTML(live);
+    }
+    return block?block.body||'':'';
+  }
   function patchFocusedCard(card, before, after){
     var active=document.activeElement;
     var title=card.querySelector('[data-title]'), body=card.querySelector('[data-body]');
@@ -621,7 +661,9 @@
       title.value=after.title||'';
       if(active===title)try{ title.setSelectionRange(Math.min(titleStart,title.value.length),Math.min(titleEnd,title.value.length)); }catch(error){}
     }
-    if(changedBody&&body){
+    /* Writing the copy into a shared note's editor would put old text where
+       the live text is. */
+    if(changedBody&&body&&!liveDocument(body)){
       if(active===body)replaceFocusedBody(body,after.body||'');
       else body.innerHTML=cleanHTML(after.body||'');
     }
@@ -643,7 +685,13 @@
       if(stableJSON(withoutStamps(oldShown[index]))===stableJSON(withoutStamps(block)))return;
       var card=root.querySelector('[data-block="'+block.id+'"]');
       if(!card){ blocked=true; return; }
-      if(card.contains(document.activeElement)){
+      /* Redrawing a shared note's card threw its live editor away and drew the
+         saved copy of the text instead, which for a note written since sharing
+         began was empty: the words looked wiped, and anything typed after went
+         nowhere that lasts. Its card is patched in place, like the card being
+         typed in, and anything bigger than a title is left to a full redraw,
+         which opens the shared document again. */
+      if(card.contains(document.activeElement)||liveDocument(card.querySelector('[data-body]'))){
         if(!patchFocusedCard(card,oldShown[index],block)){ blocked=true; return; }
         changed=true; return;
       }
@@ -654,6 +702,9 @@
     });
     if(blocked)return false;
     if(changed){ dressRowTracks(); pruneViewOnlyChrome(root); bind(); paintPresence(); }
+    /* A contents block reads other blocks, so it can be out of date without
+       having changed itself. */
+    refreshContents();
     return true;
   }
   /* A share that changed elsewhere lives on the row, not on the card, so a
@@ -842,7 +893,16 @@
     try{ if(window.CrowStudioUpgrades&&window.CrowStudioUpgrades.decorate)window.CrowStudioUpgrades.decorate(); }catch(error){}
     setTimeout(paintPresence,0);
   }
+  /* Notes whose text has to reach the shared document before an editor may
+     open on it: one just turned back into a note, while it is written. */
+  var unshared={}, fresh={}, shareRetry=null;
   function mountCollaborativeEditors(){
+    clearTimeout(shareRetry);
+    var waiting=false;
+    mountNotes(function(){ waiting=true; });
+    if(waiting)shareRetry=setTimeout(mountCollaborativeEditors,400);
+  }
+  function mountNotes(wait){
     /* A shared note is a live document. Mounting one here would quietly put
        today's text inside a page that is meant to be showing an old one. */
     if(previewing())return;
@@ -850,22 +910,40 @@
     root.querySelectorAll('[data-block].note [data-body]').forEach(function(body){
       var card=body.closest('[data-block]'), block=blocks.filter(function(item){return item.id===card.dataset.block;})[0];
       if(!block||body.dataset.collabActive==='true')return;
+      /* The server turns a note away until its block exists, and an editor
+         left open after that keeps what is typed in this browser alone. A
+         note that has not landed yet stays plain until it has. */
+      if(block.pending||unshared[block.id])return;
+      /* A note made here opens its shared document from `body`, so anything
+         already typed into it has to have been saved first, and it is not
+         taken out from under someone still typing. */
+      if(fresh[block.id]&&(saveTimers[block.id]||inFlight[block.id]||body.contains(document.activeElement))){ wait(); return; }
+      delete fresh[block.id];
       /* The plain toolbar stays until the shared one exists, so the row is
          never missing from the card in between. */
       var oldTools=card.querySelector('.rich-tools');
       window.CrowCollab.mount(body,{
-        documentName:'project:'+activeProject.id+':block:'+block.id,
+        documentName:noteDocument(block),
         user:cloud().user,
         username:(cloud().profile&&cloud().profile.username)||'someone',
         avatarUrl:(cloud().profile&&cloud().profile.avatarUrl)||'',
         readOnly:readOnly||!canEdit()||sectionLocked(block.sectionId),
-        onStatus:function(status){ card.classList.toggle('collab-offline',status!=='connected'); }
+        onStatus:function(status){ card.classList.toggle('collab-offline',status!=='connected'); },
+        onSynced:refreshContents,
+        onLocalChange:function(html){
+          block.body=cleanHTML(html);
+          queuedSave(block,false,{body:block.body});
+          refreshContentsSoon();
+        }
       }).then(function(entry){
         if(entry&&oldTools)oldTools.hidden=true;
       }).catch(function(error){
         body.dataset.collabActive='';
         if(oldTools)oldTools.hidden=false;
         body.innerHTML=cleanHTML(block.body);
+        /* Nothing typed here could reach the shared document, so the note is
+           shown, not offered for editing it would quietly lose. */
+        body.setAttribute('contenteditable','false');
         card.classList.add('collab-offline');
         console.warn('Collaborative note unavailable',error);
       });
@@ -982,10 +1060,31 @@
         await cloud().saveRow(projectId,copy.id,want[m].id,{ order:want[m].order||m, values:want[m].values||{} });
       }
     }
+    /* Writing `body` puts a shared note's old words back in the copy, but the
+       note shows its shared document, so they are written there too. Without
+       this a restore left every shared note exactly as it was. */
+    var unrestored=[];
+    if(sharingNotesFor(projectId)){
+      for(var n=0;n<incoming.length;n++){
+        var note=incoming[n];
+        if(note.type!=='note')continue;
+        try{
+          /* Versions saved before notes kept their copy up to date hold an
+             empty copy for many notes that were not empty. A blank note in a
+             version is not allowed to wipe one that has words in it. */
+          if(!plainText(note.body).trim()&&plainText(await sharedText(projectId,note)).trim())continue;
+          await window.CrowCollab.replace(noteDocumentIn(projectId,note),note.body||'',{ user:cloud().user });
+        }catch(error){
+          unrestored.push(implicitBlockTitle(note.title)?'An untitled note':note.title);
+          console.warn('A note could not be restored into its shared document',error);
+        }
+      }
+    }
     await cloud().saveProject(projectId,{
       title:(data.project&&data.project.title)||activeProject.title,
       sections:(data.project&&data.project.sections)||[]
     });
+    if(unrestored.length)notify('Some notes were not restored',unrestored.join(', ')+' kept '+(unrestored.length===1?'its':'their')+' current text, because the collaboration server could not be reached. Restoring the same version again once it is back will finish the job.');
     return projectId;
   }
   function freeImageSlot(block){
@@ -1338,7 +1437,7 @@
 
   var CALLOUT_ICON='\uD83D\uDCA1';
   var CALLOUT_ICONS=['💡','⚠️','✅','📌','❗','🔥','⭐','📚'];
-  var BLOCK_LABELS={note:'Note',tasks:'Task list',status:'Status',milestone:'Milestone',schedule:'Schedule',idea:'Idea inbox',lesson:'Practice lesson',table:'Table',image:'Image',quote:'Quote',callout:'Highlight',code:'Code',database:'Database'};
+  var BLOCK_LABELS={note:'Note',tasks:'Task list',status:'Status',milestone:'Milestone',schedule:'Schedule',idea:'Idea inbox',lesson:'Practice lesson',table:'Table',image:'Image',quote:'Quote',callout:'Highlight',code:'Code',database:'Database',toc:'Contents'};
   /* The kinds whose content is text at heart, so one can become another with
      nothing lost on the way. A lesson, a table and an image are left out: their
      shape is the block, and there is nowhere for it to go. */
@@ -1357,21 +1456,46 @@
   function turnInto(block, type){
     if(!block||block.type===type)return;
     var patch={ type:type };
-    if(type!=='tasks'&&block.type==='tasks'&&!plainText(block.body).trim()){
+    /* A shared note's words are in its editor, and they leave with it. */
+    var text=currentBody(block);
+    if(text!==block.body)patch.body=text;
+    if(type!=='tasks'&&block.type==='tasks'&&!plainText(text).trim()){
       var written=(block.items||[]).filter(function(item){ return (item.text||'').trim(); });
       if(written.length)patch.body='<ul>'+written.map(function(item){ return '<li>'+esc(item.text)+'</li>'; }).join('')+'</ul>';
     }
     if(type==='tasks'&&!(block.items||[]).filter(function(item){ return (item.text||'').trim(); }).length){
-      var lines=textLines(block.body);
+      var lines=textLines(text);
       if(lines.length)patch.items=lines.map(function(text){ return { text:text, done:false }; });
     }
     if(type==='callout'&&!block.icon)patch.icon=CALLOUT_ICON;
+    var intoShared=type==='note'&&sharingNotes();
+    if(intoShared)unshared[block.id]=true;
     Object.assign(block,patch);
     render();
-    queuedSave(block,true,patch);
+    if(!intoShared){ queuedSave(block,true,patch); return; }
+    /* A block that was a note once still has that note's shared document, and
+       opening it would bring back what the note said then. What it says now
+       is written there first, once the server knows it is a note again. */
+    markShown();
+    var landed=holdInFlight(block.id,patch);
+    cloud().patchBlock(activeProject.id,block.id,patch).then(function(){
+      landed();
+      return window.CrowCollab.replace(noteDocument(block),block.body||'',{ user:cloud().user });
+    }).catch(function(error){
+      landed();
+      console.warn('The note could not take its text into the shared document',error);
+    }).then(function(){
+      delete unshared[block.id];
+      if(block.type==='note')mountCollaborativeEditors();
+    });
   }
+  function sharingNotes(){ return !!(window.CrowCollab&&window.CrowCollab.enabled()&&cloud().user&&!previewing()); }
   function duplicateBlock(block){
     var copy=Object.assign({},block,{ id:id(), order:(block.order||Date.now())+0.5, pending:true });
+    /* The copy's shared document is made from its `body` the first time it
+       opens, so that has to be what the note says now. */
+    copy.body=currentBody(block);
+    if(copy.type==='note')fresh[copy.id]=true;
     delete copy.updatedAt; delete copy.updatedBy;
     /* An uploaded picture belongs to one block: the copy shows the same address
        but does not own the file, so deleting either cannot take the other's
@@ -1383,7 +1507,89 @@
       copy.pending=false;
       var card=root.querySelector('[data-block="'+copy.id+'"]');
       if(card){ card.classList.remove('is-pending'); var dot=card.querySelector('.save-dot'); if(dot)dot.remove(); }
+      mountCollaborativeEditors();
     }).catch(function(){ copy.pending=false; });
+  }
+  /* ---------------------------------------------------------------- contents
+     A contents block lists the headings written in the other blocks of its own
+     section, across all of that section's pages, and takes you to one when it
+     is picked. It keeps nothing of its own: it is drawn from the blocks each
+     time, so it cannot fall out of step with them. */
+  var CONTENTS_FROM=['note','idea','callout','quote'], contentsTimer=null;
+  function headingText(node){ return String(node.textContent||'').replace(/\s+/g,' ').trim(); }
+  function contentsEntries(block){
+    var sectionId=block.sectionId||'', pageAt={'':0};
+    sectionPages(sectionId).forEach(function(page,index){ pageAt[page.id]=index+1; });
+    function placeOf(other){ var at=pageAt[other.pageId||'']; return at===undefined?1e6:at; }
+    var sources=blocks.map(function(other,at){ return { block:other, at:at }; }).filter(function(item){
+      return item.block.id!==block.id&&(item.block.sectionId||'')===sectionId&&CONTENTS_FROM.indexOf(item.block.type)>=0;
+    }).sort(function(a,b){ return (placeOf(a.block)-placeOf(b.block))||(a.at-b.at); });
+    var entries=[];
+    sources.forEach(function(item){
+      var holder=document.createElement('template'); holder.innerHTML=currentBody(item.block);
+      Array.prototype.forEach.call(holder.content.querySelectorAll('h1,h2,h3'),function(heading,index){
+        var text=headingText(heading);
+        if(text)entries.push({ blockId:item.block.id, pageId:item.block.pageId||'', index:index, level:+heading.tagName.charAt(1), text:text });
+      });
+    });
+    return entries;
+  }
+  function contentsHTML(block){
+    var entries=contentsEntries(block);
+    if(!entries.length){
+      var frozen=readOnly||!canEdit();
+      return '<p class="contents-empty">'+(frozen?'No headings in this section yet.':'Headings in this section’s notes appear here. Make one with H1, H2 or H3 in a note.')+'</p>';
+    }
+    var titled={}; sectionPages(block.sectionId||'').forEach(function(page){ titled[page.id]=page.title; });
+    /* Page names are only worth showing when the headings are on more than one. */
+    var spread=entries.some(function(entry){ return entry.pageId!==entries[0].pageId; });
+    var top=Math.min.apply(null,entries.map(function(entry){ return entry.level; }));
+    var html='', lastPage=null;
+    entries.forEach(function(entry){
+      if(spread&&entry.pageId!==lastPage){ lastPage=entry.pageId; html+='<div class="contents-page">'+esc(titled[entry.pageId]||'Not on a page')+'</div>'; }
+      html+='<button type="button" class="contents-item depth-'+Math.min(2,entry.level-top)+'" data-go-block="'+esc(entry.blockId)+'" data-go-index="'+entry.index+'">'+esc(entry.text)+'</button>';
+    });
+    return html;
+  }
+  function refreshContents(){
+    clearTimeout(contentsTimer);
+    if(!root)return;
+    root.querySelectorAll('.studio-block.toc [data-contents]').forEach(function(nav){
+      var block=liveBlock(nav.closest('[data-block]').dataset.block);
+      if(!block)return;
+      var html=contentsHTML(block);
+      /* Compared with what was last drawn, not with innerHTML, which the
+         browser writes back in its own spelling. */
+      if(nav.__drawn!==html){ nav.innerHTML=html; nav.__drawn=html; }
+    });
+  }
+  /* Typing changes headings a keystroke at a time; the list follows when the
+     typing pauses rather than on every key. */
+  function refreshContentsSoon(){ clearTimeout(contentsTimer); contentsTimer=setTimeout(refreshContents,250); }
+  function headingIn(card, index, text){
+    var body=card.querySelector('[data-body]'); if(!body)return null;
+    var list=Array.prototype.slice.call(body.querySelectorAll('h1,h2,h3'));
+    if(list[index]&&headingText(list[index])===text)return list[index];
+    return list.filter(function(node){ return headingText(node)===text; })[0]||null;
+  }
+  function goToHeading(blockId, index, text){
+    var target=liveBlock(blockId); if(!target||!root)return;
+    var onPage=visibleBlocks(blocks).some(function(block){ return block.id===blockId; });
+    /* The heading may be on another page of this section. */
+    if(!onPage){ activePage=target.pageId||'all'; render(); }
+    var tries=0;
+    (function seek(){
+      var card=root.querySelector('[data-block="'+blockId+'"]'); if(!card)return;
+      var heading=headingIn(card,index,text);
+      /* A shared note empties for a moment while its editor opens. */
+      if(!heading&&tries++<12){ setTimeout(seek,150); return; }
+      var still=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      (heading||card).scrollIntoView({ behavior:still?'auto':'smooth', block:'start' });
+      /* The mark goes on the card, not the heading: the heading may belong to
+         an editor that would take a class it did not put there as a change. */
+      card.classList.remove('contents-target'); void card.offsetWidth; card.classList.add('contents-target');
+      setTimeout(function(){ card.classList.remove('contents-target'); },1700);
+    })();
   }
   function closeBlockMenu(){
     var open=root.querySelector('.block-menu');
@@ -1432,10 +1638,10 @@
      making of a block lives in one place instead of inside a handler. */
   function addBlockOfType(type){
     if(!type||!activeProject)return;
-    var block={id:id(),type:type,title:'',body:'',sectionId:activeSection==='all'?'':activeSection,pageId:activePage==='all'?'':activePage,order:Date.now(),done:false,due:'',pending:true,items:type==='tasks'?[{text:'',done:false}]:[],steps:type==='lesson'?[normalizeStep({kind:'choice'})]:[],lessonSection:type==='lesson'?sectionName(activeSection==='all'?'':activeSection):'',lessonBlurb:'',lessonIcon:type==='lesson'?'✦':'',lessonColor:type==='lesson'?LESSON_DEFAULT_COLOR:'',lessonHint:''};blocks.push(block);render();var card=root.querySelector('[data-block="'+block.id+'"]'), field=card&&card.querySelector('[data-title]');if(field)field.focus();cloud().saveBlock(activeProject.id,block.id,block).then(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current)current.classList.remove('is-pending');var dot=current&&current.querySelector('.save-dot');if(dot)dot.remove();}).catch(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current){current.classList.remove('is-pending');current.classList.add('save-failed');}});
+    var block={id:id(),type:type,title:'',body:'',sectionId:activeSection==='all'?'':activeSection,pageId:activePage==='all'?'':activePage,order:Date.now(),done:false,due:'',pending:true,items:type==='tasks'?[{text:'',done:false}]:[],steps:type==='lesson'?[normalizeStep({kind:'choice'})]:[],lessonSection:type==='lesson'?sectionName(activeSection==='all'?'':activeSection):'',lessonBlurb:'',lessonIcon:type==='lesson'?'✦':'',lessonColor:type==='lesson'?LESSON_DEFAULT_COLOR:'',lessonHint:''};if(type==='note')fresh[block.id]=true;blocks.push(block);render();var card=root.querySelector('[data-block="'+block.id+'"]'), field=card&&card.querySelector('[data-title]');if(field)field.focus();cloud().saveBlock(activeProject.id,block.id,block).then(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current)current.classList.remove('is-pending');var dot=current&&current.querySelector('.save-dot');if(dot)dot.remove();mountCollaborativeEditors();}).catch(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current){current.classList.remove('is-pending');current.classList.add('save-failed');}});
   }
   var ADD_GROUPS=[
-    { name:'Text', types:['note','quote','callout','code'] },
+    { name:'Text', types:['note','quote','callout','code','toc'] },
     { name:'Planning', types:['tasks','status','milestone','schedule'] },
     { name:'Thinking', types:['idea'] },
     { name:'Media', types:['image','table','database'] },
@@ -1446,7 +1652,8 @@
     tasks:'A list you can tick off', status:'Where something stands right now',
     milestone:'A date to work towards', schedule:'A time and what happens at it',
     idea:'Somewhere to put a thought before it goes', image:'A picture, uploaded or linked',
-    table:'Rows and columns', database:'Rows with properties you choose', lesson:'Practice steps you can run' };
+    table:'Rows and columns', database:'Rows with properties you choose', lesson:'Practice steps you can run',
+    toc:'A table of contents for this section’s headings' };
   function closeIconPicker(){
     var open=root.querySelector('.icon-picker');
     if(open&&open.parentNode)open.parentNode.removeChild(open);
@@ -3044,6 +3251,7 @@
     /* Code is text, not markup: it is kept and shown as what was typed, so a
        stray angle bracket stays a stray angle bracket. */
     if(block.type==='database') body='<div class="db" data-db-table></div>';
+    if(block.type==='toc') body='<nav class="contents-list" data-contents aria-label="Contents of this section">'+contentsHTML(block)+'</nav>';
     if(block.type==='code'){
       /* Leading empty lines are an editor artefact, never useful source. */
       var written=plainText(block.body).replace(/^\n+/,''), language=String(block.codeLanguage||'plain');
@@ -3619,13 +3827,21 @@
     if(restore)restore.onclick=function(){ if(window.CrowStudioHistory)window.CrowStudioHistory.confirmRestore(); };
     root.querySelectorAll('[data-section]').forEach(function(button){button.onclick=function(){activeSection=button.dataset.section;activePage='all';openSectionMenu='';render();};});
     root.querySelectorAll('[data-page]').forEach(function(button){button.onclick=function(){activePage=button.dataset.page;render();};});
+    /* The list inside is redrawn as headings change, so the click is taken on
+       the list itself rather than on each entry. */
+    root.querySelectorAll('[data-contents]').forEach(function(nav){
+      nav.onclick=function(event){
+        var go=event.target.closest('[data-go-block]'); if(!go)return;
+        goToHeading(go.dataset.goBlock,+go.dataset.goIndex,headingText(go));
+      };
+    });
     root.querySelectorAll('[data-section-menu]').forEach(function(button){button.onclick=function(event){event.stopPropagation();toggleSectionMenu(button.dataset.sectionMenu);};});
     bindSectionMenu(root);
     watchSectionMenu();
     root.querySelectorAll('[data-add-open]').forEach(function(addOpen){
       addOpen.onclick=function(event){ event.stopPropagation(); openAddPalette(addOpen); };
     });
-    root.querySelectorAll('[data-block]').forEach(function(card){var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0], body=card.querySelector('[data-body]'), titleField=card.querySelector('[data-title]');if(titleField)titleField.oninput=function(e){block.title=e.target.value;queuedSave(block,false,{title:block.title});};if(body){guardRichBody(body);body.oninput=function(e){block.body=cleanHTML(e.target.innerHTML);queuedSave(block,false,{body:block.body});};}var practice=card.querySelector('[data-practice]');if(practice)practice.oninput=function(e){block.practice=e.target.value;queuedSave(block,false,{practice:block.practice});};var answer=card.querySelector('[data-answer]');if(answer)answer.oninput=function(e){block.answer=e.target.value;queuedSave(block,false,{answer:block.answer});};var image=card.querySelector('[data-image-url]');if(image)image.onchange=function(e){block.imageUrl=e.target.value.trim();queuedSave(block,true);render();};var imageUpload=card.querySelector('[data-image-upload]');if(imageUpload)imageUpload.onchange=function(e){var file=e.target.files&&e.target.files[0];if(file)takeImage(block,file,imageUpload);e.target.value='';};
+    root.querySelectorAll('[data-block]').forEach(function(card){var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0], body=card.querySelector('[data-body]'), titleField=card.querySelector('[data-title]');if(titleField)titleField.oninput=function(e){block.title=e.target.value;queuedSave(block,false,{title:block.title});};if(body&&!liveDocument(body)){guardRichBody(body);body.oninput=function(e){block.body=cleanHTML(e.target.innerHTML);queuedSave(block,false,{body:block.body});refreshContentsSoon();};}var practice=card.querySelector('[data-practice]');if(practice)practice.oninput=function(e){block.practice=e.target.value;queuedSave(block,false,{practice:block.practice});};var answer=card.querySelector('[data-answer]');if(answer)answer.oninput=function(e){block.answer=e.target.value;queuedSave(block,false,{answer:block.answer});};var image=card.querySelector('[data-image-url]');if(image)image.onchange=function(e){block.imageUrl=e.target.value.trim();queuedSave(block,true);render();};var imageUpload=card.querySelector('[data-image-upload]');if(imageUpload)imageUpload.onchange=function(e){var file=e.target.files&&e.target.files[0];if(file)takeImage(block,file,imageUpload);e.target.value='';};
       var drop=card.querySelector('[data-image-drop]');
       if(drop)bindImageDrop(drop,block);
       var clear=card.querySelector('[data-image-clear]');
@@ -3635,7 +3851,7 @@
         render();
         await cloud().patchBlock(activeProject.id,block.id,{imageUrl:'',imageSlot:''});
         if(slot)cloud().deleteProjectImage(activeProject.id,slot);
-      };var status=card.querySelector('[data-status]');if(status)status.onchange=function(e){block.status=e.target.value;queuedSave(block,true);};var ideaStage=card.querySelector('[data-idea-stage]');if(ideaStage)ideaStage.onchange=function(e){block.ideaStage=e.target.value;queuedSave(block,true);};card.querySelectorAll('[data-task-check]').forEach(function(input){input.onchange=function(e){block.items[+e.target.dataset.taskCheck].done=e.target.checked;queuedSave(block,true);};});card.querySelectorAll('[data-task-text]').forEach(function(input){input.oninput=function(e){block.items[+e.target.dataset.taskText].text=e.target.value;queuedSave(block);};});var addTask=card.querySelector('[data-add-task]');if(addTask)addTask.onclick=function(){block.items.push({text:'',done:false});render();queuedSave(block,true);};var date=card.querySelector('[data-date]');if(date)date.onchange=function(e){block.due=e.target.value;queuedSave(block,true);};var remove=card.querySelector('[data-delete]');if(remove)remove.onclick=async function(){if(!await askConfirm('Delete block?', 'This block will be removed from the project.', 'Delete block'))return;var imageSlot=block.imageSlot;blocks=blocks.filter(function(b){return b.id!==block.id;});render();if(block.type==='database')await cloud().removeAllRows(activeProject.id,block.id);await cloud().deleteBlock(activeProject.id,block.id);if(imageSlot)cloud().deleteProjectImage(activeProject.id,imageSlot);};card.querySelectorAll('[data-format]').forEach(function(button){button.onmousedown=function(e){e.preventDefault();body.focus();if(button.dataset.format==='formatBlock')applyBlockTag(body,(button.dataset.value||'P').toUpperCase());else document.execCommand(button.dataset.format,false,null);tidyHeadings(body);block.body=cleanHTML(body.innerHTML);queuedSave(block);};});});
+      };var status=card.querySelector('[data-status]');if(status)status.onchange=function(e){block.status=e.target.value;queuedSave(block,true);};var ideaStage=card.querySelector('[data-idea-stage]');if(ideaStage)ideaStage.onchange=function(e){block.ideaStage=e.target.value;queuedSave(block,true);};card.querySelectorAll('[data-task-check]').forEach(function(input){input.onchange=function(e){block.items[+e.target.dataset.taskCheck].done=e.target.checked;queuedSave(block,true);};});card.querySelectorAll('[data-task-text]').forEach(function(input){input.oninput=function(e){block.items[+e.target.dataset.taskText].text=e.target.value;queuedSave(block);};});var addTask=card.querySelector('[data-add-task]');if(addTask)addTask.onclick=function(){block.items.push({text:'',done:false});render();queuedSave(block,true);};var date=card.querySelector('[data-date]');if(date)date.onchange=function(e){block.due=e.target.value;queuedSave(block,true);};var remove=card.querySelector('[data-delete]');if(remove)remove.onclick=async function(){if(!await askConfirm('Delete block?', 'This block will be removed from the project.', 'Delete block'))return;var imageSlot=block.imageSlot;blocks=blocks.filter(function(b){return b.id!==block.id;});render();if(block.type==='database')await cloud().removeAllRows(activeProject.id,block.id);await cloud().deleteBlock(activeProject.id,block.id);if(imageSlot)cloud().deleteProjectImage(activeProject.id,imageSlot);};card.querySelectorAll('[data-format]').forEach(function(button){button.onmousedown=function(e){e.preventDefault();body.focus();if(button.dataset.format==='formatBlock')applyBlockTag(body,(button.dataset.value||'P').toUpperCase());else document.execCommand(button.dataset.format,false,null);tidyHeadings(body);block.body=cleanHTML(body.innerHTML);queuedSave(block,false,{body:block.body});refreshContentsSoon();};});});
     root.querySelectorAll('[data-block]').forEach(function(card){
       var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0];
       if(block&&block.type==='lesson')bindLessonCard(card,block);
@@ -4267,7 +4483,13 @@
     sendPresence(true);
     stopBlocks=cloud().watchBlocks(projectId,function(list,ours){
       if(!activeProject||activeProject.id!==projectId)return;
-      var before=blocks;
+      /* adoptBlocks writes the incoming fields into the block objects already
+         in hand, so the handlers bound to them stay current. That made `before`
+         and `next` the same objects, and every comparison below compared a block
+         with itself: somebody else's edit was never drawn on an open page, and
+         the next keystroke there saved the old words over theirs. `before` is a
+         copy taken first. */
+      var before=blocks.map(function(block){ return Object.assign({},block); });
       var next=adoptBlocks(list.map(normalizeBlock));
       var mark=blocksSignature(next);
       var localEcho=ownBlockEcho(before,next,ours);
@@ -4278,6 +4500,11 @@
          frame. Its first snapshot must still redraw, otherwise the skeleton
          remains forever after switching projects. */
       if(mark===shownBlocks){ if(wasLoading)render(); return; }
+      /* What a project opens with is drawn whoever wrote it. Reloading after a
+         restore kept the old blocks in hand while it waited, so the restored
+         copy, written by this very tab, looked like an echo of itself and the
+         page was left on its placeholders. */
+      if(wasLoading){ shownBlocks=mark; render(); return; }
       if(localEcho){
         shownBlocks=mark;
         return;
@@ -4352,10 +4579,13 @@
       (from.blocks||[]).filter(isDatabase).forEach(function(block){
         rows[block.id]=dbRowsOf(block.id).map(function(row){ return Object.assign({},row); });
       });
+      /* A shared note's `body` can trail what its editor says, and a version
+         is only worth keeping if it holds the words people actually see. */
       return { project:{ title:from.project.title, sections:from.project.sections||[] },
-        blocks:(from.blocks||[]).map(function(block){ var copy=Object.assign({},block); delete copy.pending; return copy; }),
+        blocks:(from.blocks||[]).map(function(block){ var copy=Object.assign({},block,{ body:currentBody(block) }); delete copy.pending; return copy; }),
         rows:rows };
     },
+    liveSnapshot:liveSnapshot,
     previewing:function(){ return previewing(); },
     previewEntry:function(){ return preview; },
     openPreview:enterPreview,
