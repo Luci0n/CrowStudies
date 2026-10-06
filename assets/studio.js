@@ -192,25 +192,149 @@
   }
   /* Replaces the block the caret sits in instead of wrapping it, so pressing
      H1 twice keeps one H1 and switching to P clears the heading entirely. */
-  function applyBlockTag(host, tag){
+  function applyBlockTag(host, tag, keepSelection){
     ensureParagraphs(host);
     var targets=selectedBlocks(host);
     if(!targets.length)return;
-    var last=null;
+    var first=null, last=null;
     targets.forEach(function(node){
       /* Anything living inside a list item is levelled through the item, so a
          heading is swapped or removed rather than left behind. */
       var item=node.tagName==='LI'?node:(node.parentNode&&node.parentNode.tagName==='LI'?node.parentNode:null);
-      if(item){ last=setItemLevel(item,tag)||last; return; }
-      if(node.tagName===tag){ last=node; return; }
-      var replacement=document.createElement(tag);
-      while(node.firstChild) replacement.appendChild(node.firstChild);
-      node.parentNode.replaceChild(replacement,node);
-      last=replacement;
+      if(item){ last=setItemLevel(item,tag)||last; }
+      else if(node.tagName===tag){ last=node; }
+      else {
+        var replacement=document.createElement(tag);
+        while(node.firstChild) replacement.appendChild(node.firstChild);
+        node.parentNode.replaceChild(replacement,node);
+        last=replacement;
+      }
+      if(!first)first=last;
     });
     tidyHeadings(host);
+    /* The floating toolbar only shows over a selection, so from there the
+       lines just changed stay selected and the toolbar stays where it is. */
+    if(keepSelection&&first&&last&&host.contains(first)&&host.contains(last)){
+      var selection=window.getSelection(), range=document.createRange();
+      range.setStart(first,0); range.setEnd(last,last.childNodes.length);
+      selection.removeAllRanges(); selection.addRange(range);
+      return;
+    }
     if(last&&host.contains(last)) caretToEnd(last);
   }
+  /* What a format button does to a note that is not shared. The docked toolbar
+     and the floating one both come through here, so they cannot drift apart. */
+  function formatPlain(block, body, format, value, keepSelection){
+    body.focus();
+    if(format==='formatBlock')applyBlockTag(body,String(value||'P').toUpperCase(),keepSelection);
+    else document.execCommand(format,false,null);
+    tidyHeadings(body);
+    block.body=cleanHTML(body.innerHTML);
+    queuedSave(block,false,{body:block.body});
+    refreshContentsSoon();
+  }
+  /* ------------------------------------------------------ floating text tools
+     On a desktop the formatting buttons float just above the text you select,
+     instead of sliding open at the top of the note every time it is clicked,
+     which pushed the whole card down. Nothing shows while you only type. On a
+     touch screen the phone's own bubble already sits over a selection, so the
+     docked toolbar stays as it was there. One toolbar serves every note: a
+     shared note is formatted through its editor, any other through the same
+     code its docked buttons use. */
+  var FLOAT_TOOLS=[
+    { label:'<b>B</b>', title:'Bold', format:'bold', cmd:'toggleBold', mark:'bold' },
+    { label:'<i>I</i>', title:'Italic', format:'italic', cmd:'toggleItalic', mark:'italic' },
+    { label:'• list', title:'Bullet list', format:'insertUnorderedList', cmd:'toggleBulletList', mark:'bulletList' },
+    { label:'H1', title:'Heading 1', tag:'H1', cmd:'toggleHeading', args:{level:1} },
+    { label:'H2', title:'Heading 2', tag:'H2', cmd:'toggleHeading', args:{level:2} },
+    { label:'H3', title:'Heading 3', tag:'H3', cmd:'toggleHeading', args:{level:3} },
+    { label:'P', title:'Paragraph', tag:'P', cmd:'setParagraph', mark:'paragraph' }
+  ];
+  var floatTools=null, floatFrame=0, floatPressing=false, floatDismissed=false;
+  function floatAllowed(){ try{ return window.matchMedia('(hover:hover) and (pointer:fine)').matches; }catch(error){ return false; } }
+  /* The note the selection is in, if it is one the toolbar may change. */
+  function floatTarget(){
+    if(!root||!floatAllowed()||readOnly||previewing())return null;
+    var selection=window.getSelection();
+    if(!selection||!selection.rangeCount||selection.isCollapsed)return null;
+    var range=selection.getRangeAt(0), node=range.commonAncestorContainer;
+    if(node&&node.nodeType!==1)node=node.parentNode;
+    if(!node||!root.contains(node))return null;
+    var body=node.closest('[data-body]'), card=body&&body.closest('.studio-block.note,.studio-block.idea');
+    var block=card&&liveBlock(card.dataset.block);
+    if(!block)return null;
+    if(liveDocument(body)){
+      var editor=window.CrowCollab&&window.CrowCollab.editorFor?window.CrowCollab.editorFor(node):null;
+      return editor?{ block:block, body:body, range:range, editor:editor }:null;
+    }
+    if(body.getAttribute('contenteditable')!=='true')return null;
+    return { block:block, body:body, range:range, editor:null };
+  }
+  function floatToolsElement(){
+    if(floatTools)return floatTools;
+    floatTools=document.createElement('div');
+    floatTools.className='float-tools'; floatTools.hidden=true;
+    floatTools.setAttribute('role','toolbar'); floatTools.setAttribute('aria-label','Text formatting');
+    floatTools.innerHTML=FLOAT_TOOLS.map(function(tool,index){ return '<button type="button" data-float="'+index+'" title="'+tool.title+'">'+tool.label+'</button>'; }).join('');
+    /* Pressing a button must not take the selection away from the text. */
+    floatTools.addEventListener('mousedown',function(event){
+      event.preventDefault();
+      var button=event.target.closest('[data-float]');
+      if(button)applyFloatTool(FLOAT_TOOLS[+button.dataset.float]);
+    });
+    document.body.appendChild(floatTools);
+    return floatTools;
+  }
+  function applyFloatTool(tool){
+    var target=floatTarget(); if(!target)return;
+    if(target.editor){ var chain=target.editor.chain().focus(); chain[tool.cmd](tool.args).run(); }
+    else formatPlain(target.block,target.body,tool.tag?'formatBlock':tool.format,tool.tag,true);
+    placeFloatTools();
+  }
+  function floatToolOn(tool, target){
+    try{
+      if(target.editor)return tool.args?target.editor.isActive('heading',tool.args):target.editor.isActive(tool.mark);
+      if(tool.tag){
+        var line=nearestBlock(target.range.startContainer,target.body), tag=line?line.tagName:'P';
+        if(tag==='LI'){ var inner=line.querySelector('h1,h2,h3,h4,h5,h6'); tag=inner?inner.tagName:'P'; }
+        return tag===tool.tag;
+      }
+      return document.queryCommandState(tool.format);
+    }catch(error){ return false; }
+  }
+  function hideFloatTools(){ if(floatTools)floatTools.hidden=true; }
+  /* The lowest of whatever stays pinned to the top of the window. */
+  function floatCeiling(){
+    var edge=0;
+    document.querySelectorAll('.sitehead,.preview-bar').forEach(function(bar){ edge=Math.max(edge,bar.getBoundingClientRect().bottom); });
+    return edge;
+  }
+  function placeFloatTools(){
+    floatFrame=0;
+    var target=floatPressing||floatDismissed?null:floatTarget();
+    if(!target){ hideFloatTools(); return; }
+    var bar=floatToolsElement(), box=target.range.getBoundingClientRect();
+    if(!box.width&&!box.height){ var first=target.range.getClientRects()[0]; if(first)box=first; }
+    bar.querySelectorAll('[data-float]').forEach(function(button){ button.classList.toggle('is-on',floatToolOn(FLOAT_TOOLS[+button.dataset.float],target)); });
+    var arriving=bar.hidden;
+    bar.hidden=false;
+    var width=bar.offsetWidth, height=bar.offsetHeight, gap=8;
+    /* Above the selection, unless that would put it under the pinned header. */
+    var top=box.top-height-gap;
+    if(top<floatCeiling()+4)top=box.bottom+gap;
+    var left=Math.max(8,Math.min(box.left+box.width/2-width/2,window.innerWidth-width-8));
+    bar.style.top=Math.round(top)+'px';
+    bar.style.left=Math.round(left)+'px';
+    if(arriving){ bar.classList.remove('is-arriving'); void bar.offsetWidth; bar.classList.add('is-arriving'); }
+  }
+  function scheduleFloatTools(){ if(!floatFrame)floatFrame=setTimeout(placeFloatTools,16); }
+  document.addEventListener('selectionchange',function(){ floatDismissed=false; scheduleFloatTools(); });
+  /* It waits for a drag to finish rather than chasing the pointer. */
+  document.addEventListener('mousedown',function(event){ if(!floatTools||!floatTools.contains(event.target)){ floatPressing=true; hideFloatTools(); } },true);
+  document.addEventListener('mouseup',function(){ if(floatPressing){ floatPressing=false; scheduleFloatTools(); } },true);
+  document.addEventListener('keydown',function(event){ if(event.key==='Escape'&&floatTools&&!floatTools.hidden){ floatDismissed=true; hideFloatTools(); } });
+  window.addEventListener('scroll',function(){ if(floatTools&&!floatTools.hidden)scheduleFloatTools(); },true);
+  window.addEventListener('resize',scheduleFloatTools);
   function cloud(){ return window.CrowCloud; }
   var FILE_FORMAT=1;
   async function notify(title, body){
@@ -324,7 +448,7 @@
           {text:'Press View project, then come back',done:false}
         ]}),
         block({type:'note',sectionId:start,title:'Editing and reading',body:'<p><b>Edit project</b> is where you build: every field is open, blocks can be dragged, and the controls are all there.</p><p><b>View project</b> is how the project reads once it is built. Editing controls step out of the way, empty image blocks are left out, and a practice lesson shows what it covers instead of how it was made.</p><p>The button sits at the top right. Try it now and then come back.</p>'}),
-        block({type:'note',sectionId:kinds,title:'Note',body:'<p>A note is for writing. Click into it and a small toolbar appears: <b>B</b>, <i>I</i>, a bullet list, and H1 to H3 for headings.</p><p>Headings work on the line the cursor is in. Pressing H1 twice leaves one heading, and P clears it again.</p>'}),
+        block({type:'note',sectionId:kinds,title:'Note',body:'<p>A note is for writing. Select some text and a small toolbar appears above it: <b>B</b>, <i>I</i>, a bullet list, and H1 to H3 for headings. On a phone or tablet it sits at the top of the note instead.</p><p>Headings work on the lines you have selected. Pressing H1 twice leaves one heading, and P clears it again.</p>'}),
         block({type:'table',sectionId:kinds,title:'Table',body:'<table><colgroup><col style="width:34.000%"><col style="width:33.000%"><col style="width:33.000%"></colgroup><tbody><tr><th>Do this</th><th>To get</th><th>Note</th></tr><tr><td>Drag across cells</td><td>A block of cells selected</td><td>Shift-click works too</td></tr><tr><td>+ Row, + Column</td><td>Added next to the selection</td><td>− removes the selection</td></tr><tr><td>Drag a divider</td><td>A wider or narrower column</td><td>Between the header cells</td></tr></tbody></table>'}),
         block({type:'lesson',sectionId:kinds,title:'How a practice lesson works',
           lessonSection:'Lessons',lessonBlurb:'teach something, then ask about it',lessonIcon:'✦',lessonColor:'#7657f7',
@@ -972,6 +1096,8 @@
     });
   }
   function render(){
+    /* The text the floating toolbar sat over is about to be drawn again. */
+    hideFloatTools();
     /* Shared notes keep their live editors through a redraw of the same
        project: mountCollaborativeEditors hands each one to the card drawn for
        its note, so changing section, page or mode neither reconnects them nor
@@ -1687,12 +1813,6 @@
   var CONTENTS_FROM=['note','idea','callout','quote'], contentsTimer=null;
   /* What a contents block lists. Each one keeps its own choice. */
   var CONTENTS_SHOW=[['both','Titles and headings'],['titles','Titles only'],['headings','Headings only']];
-  function contentsShowHTML(block){
-    var show=block.contentsShow||'both';
-    return '<label class="contents-show"><span>Show</span><select class="status-select" data-contents-show>'
-      +CONTENTS_SHOW.map(function(choice){ return '<option value="'+choice[0]+'"'+(show===choice[0]?' selected':'')+'>'+choice[1]+'</option>'; }).join('')
-      +'</select></label>';
-  }
   function headingText(node){ return String(node.textContent||'').replace(/\s+/g,' ').trim(); }
   /* A block on no page shows only under All pages, except a contents block:
      it covers every page of its section, so it is on every one of them. */
@@ -1808,6 +1928,23 @@
     if(already)return;
     var menu=document.createElement('div'); menu.className='block-menu';
     var rows=[];
+    /* A block's own settings come first, in the one menu every block has,
+       rather than in a control of their own on the card. */
+    if(block.type==='toc'){
+      var show=block.contentsShow||'both';
+      rows.push('<div class="block-menu-head">Show</div>'+CONTENTS_SHOW.map(function(choice){
+        return '<button type="button" data-contents-show="'+choice[0]+'"'+(show===choice[0]?' class="is-on"':'')+'>'+choice[1]+'</button>';
+      }).join(''));
+    }
+    if(block.type==='table'){
+      var picked=card.querySelectorAll('.block-table .selected-cell').length;
+      rows.push('<div class="block-menu-head">Table</div>'
+        +'<button type="button" data-t-toggle="header"'+(card.querySelector('.block-table th')?' class="is-on"':'')+'>Header row</button>'
+        +'<button type="button" data-t-toggle="zebra"'+(block.tableZebra?' class="is-on"':'')+'>Striped rows</button>'
+        +'<button type="button" data-t-toggle="dense"'+(block.tableDense?' class="is-on"':'')+'>Compact</button>'
+        +'<div class="block-menu-head">'+(picked?'Align selected cells':'Align cells')+'</div>'
+        +'<div class="block-menu-row"><button type="button" data-t-align="left">Left</button><button type="button" data-t-align="center">Centre</button><button type="button" data-t-align="right">Right</button></div>');
+    }
     if(TURN_INTO.indexOf(block.type)>=0){
       rows.push('<div class="block-menu-head">Turn into</div>');
       TURN_INTO.forEach(function(type){ if(type!==block.type)rows.push('<button type="button" data-turn="'+type+'">'+BLOCK_LABELS[type]+'</button>'); });
@@ -1832,6 +1969,28 @@
     var join=menu.querySelector('[data-join-row]');
     if(join)join.onclick=function(){ closeBlockMenu(); joinRowAbove(block); };
     menu.querySelector('[data-duplicate]').onclick=function(){ closeBlockMenu(); duplicateBlock(block); };
+    menu.querySelectorAll('[data-contents-show]').forEach(function(button){
+      button.onclick=function(){
+        closeBlockMenu();
+        block.contentsShow=button.dataset.contentsShow;
+        queuedSave(block,true,{ contentsShow:block.contentsShow });
+        refreshContents();
+      };
+    });
+    /* Table switches leave the menu open, so several can be set in one go. */
+    menu.querySelectorAll('[data-t-toggle]').forEach(function(button){
+      button.onclick=function(){
+        var on=!button.classList.contains('is-on'), holder=card.querySelector('.block-table');
+        button.classList.toggle('is-on',on);
+        if(button.dataset.tToggle==='header'){ setTableHeader(card,block,on); return; }
+        if(button.dataset.tToggle==='zebra'){ block.tableZebra=on; if(holder)holder.classList.toggle('zebra',on); }
+        else { block.tableDense=on; if(holder)holder.classList.toggle('dense',on); }
+        saveTableLook(card,block);
+      };
+    });
+    menu.querySelectorAll('[data-t-align]').forEach(function(button){
+      button.onclick=function(){ alignTableCells(card,block,button.dataset.tAlign); };
+    });
     setTimeout(function(){ document.addEventListener('click',awayFromBlockMenu); },0);
   }
   /* Reached from the palette now rather than from a button per kind, so the
@@ -1853,7 +2012,7 @@
     milestone:'A date to work towards', schedule:'A time and what happens at it',
     idea:'Somewhere to put a thought before it goes', image:'A picture, uploaded or linked',
     table:'Rows and columns', database:'Rows with properties you choose', lesson:'Practice steps you can run',
-    toc:'A table of contents for this section’s headings' };
+    toc:'A table of contents for this section' };
   function closeIconPicker(){
     var open=root.querySelector('.icon-picker');
     if(open&&open.parentNode)open.parentNode.removeChild(open);
@@ -1862,15 +2021,6 @@
   function awayFromIconPicker(event){
     if(event.target.closest('.icon-picker')||event.target.closest('[data-callout-icon]'))return;
     closeIconPicker();
-  }
-  function closeTableDesign(){
-    var open=root.querySelector('.table-design');
-    if(open&&open.parentNode)open.parentNode.removeChild(open);
-    document.removeEventListener('click',awayFromTableDesign);
-  }
-  function awayFromTableDesign(event){
-    if(event.target.closest('.table-design')||event.target.closest('[data-table-design]'))return;
-    closeTableDesign();
   }
   function saveTableLook(card, block){
     var holder=card.querySelector('.block-table');
@@ -1904,34 +2054,6 @@
     if(!chosen.length)chosen=holder.querySelectorAll('th,td');
     Array.prototype.forEach.call(chosen,function(cell){ cell.style.textAlign=how; });
     saveTableLook(card,block);
-  }
-  function openTableDesign(card, block, anchor){
-    var already=card.querySelector('.table-design');
-    closeTableDesign();
-    if(already)return;
-    var holder=card.querySelector('.block-table');
-    var panel=document.createElement('div'); panel.className='table-design';
-    panel.innerHTML='<label><input type="checkbox" data-t-header'+(card.querySelector('.block-table th')?' checked':'')+'>Header row</label>'
-      +'<label><input type="checkbox" data-t-zebra'+(block.tableZebra?' checked':'')+'>Striped rows</label>'
-      +'<label><input type="checkbox" data-t-dense'+(block.tableDense?' checked':'')+'>Compact</label>'
-      +'<div class="table-design-head">Align cells</div>'
-      +'<div class="table-align"><button type="button" data-t-align="left">Left</button><button type="button" data-t-align="center">Centre</button><button type="button" data-t-align="right">Right</button></div>';
-    anchor.parentNode.insertBefore(panel,anchor.nextSibling);
-    panel.querySelector('[data-t-header]').onchange=function(event){ setTableHeader(card,block,event.target.checked); };
-    panel.querySelector('[data-t-zebra]').onchange=function(event){
-      block.tableZebra=event.target.checked;
-      if(holder)holder.classList.toggle('zebra',block.tableZebra);
-      saveTableLook(card,block);
-    };
-    panel.querySelector('[data-t-dense]').onchange=function(event){
-      block.tableDense=event.target.checked;
-      if(holder)holder.classList.toggle('dense',block.tableDense);
-      saveTableLook(card,block);
-    };
-    panel.querySelectorAll('[data-t-align]').forEach(function(button){
-      button.onclick=function(){ alignTableCells(card,block,button.dataset.tAlign); };
-    });
-    setTimeout(function(){ document.addEventListener('click',awayFromTableDesign); },0);
   }
   function taskCount(card, block){
     var holder=card.querySelector('.task-count');
@@ -3438,7 +3560,7 @@
         extra='<div class="lesson-actions"><button class="btn ghost sm" data-practice-lesson>Preview and practice</button><button class="btn ghost sm" data-export-lesson>Export</button><button class="btn ghost sm" data-import-lesson'+disabled+'>Import</button></div>';
       }
     }
-    if(block.type==='table') body='<div class="table-tools"><span>Drag across cells to select a row or a column</span>'+(frozen?'':'<button data-table-design>Design</button><span class="table-selection" data-table-selection hidden><b>Selected</b><button type="button" data-remove-row>Delete row</button><button type="button" data-remove-col>Delete column</button><button type="button" class="table-clear" data-table-clear aria-label="Clear the selection">×</button></span>')+'</div><div class="table-frame"><div class="block-body block-table'+(block.tableZebra?' zebra':'')+(block.tableDense?' dense':'')+'" data-body contenteditable="'+editable+'" data-placeholder="Create a simple table…">'+(block.body?cleanHTML(block.body):TABLE_DEFAULT)+'</div><div class="table-resizers"></div>'+(frozen?'':'<button type="button" class="table-add table-add-col" data-table-col title="Add a column" aria-label="Add a column">+</button><button type="button" class="table-add table-add-row" data-table-row title="Add a row" aria-label="Add a row">+</button>')+'</div>';
+    if(block.type==='table') body='<div class="table-tools"><span>Drag across cells to select a row or a column</span>'+(frozen?'':'<span class="table-selection" data-table-selection hidden><b>Selected</b><button type="button" data-remove-row>Delete row</button><button type="button" data-remove-col>Delete column</button><button type="button" class="table-clear" data-table-clear aria-label="Clear the selection">×</button></span>')+'</div><div class="table-frame"><div class="block-body block-table'+(block.tableZebra?' zebra':'')+(block.tableDense?' dense':'')+'" data-body contenteditable="'+editable+'" data-placeholder="Create a simple table…">'+(block.body?cleanHTML(block.body):TABLE_DEFAULT)+'</div><div class="table-resizers"></div>'+(frozen?'':'<button type="button" class="table-add table-add-col" data-table-col title="Add a column" aria-label="Add a column">+</button><button type="button" class="table-add table-add-row" data-table-row title="Add a row" aria-label="Add a row">+</button>')+'</div>';
     if(block.type==='image'){
       var picker='<input data-image-upload type="file" accept="image/jpeg,image/png,image/webp" hidden>';
       body=(block.imageUrl
@@ -3454,7 +3576,7 @@
     /* Code is text, not markup: it is kept and shown as what was typed, so a
        stray angle bracket stays a stray angle bracket. */
     if(block.type==='database') body='<div class="db" data-db-table></div>';
-    if(block.type==='toc') body=(frozen?'':contentsShowHTML(block))+'<nav class="contents-list" data-contents aria-label="Contents of this section">'+contentsHTML(block)+'</nav>';
+    if(block.type==='toc') body='<nav class="contents-list" data-contents aria-label="Contents of this section">'+contentsHTML(block)+'</nav>';
     if(block.type==='code'){
       /* Leading empty lines are an editor artefact, never useful source. */
       var written=plainText(block.body).replace(/^\n+/,''), language=String(block.codeLanguage||'plain');
@@ -3466,7 +3588,7 @@
         +'<span data-copy-word>Copy</span></button></div></div>'
         +'<div class="code-body"><div class="code-lines" data-code-lines aria-hidden="true">'+codeLinesHTML(written)+'</div><div class="code-editor"><pre class="block-code" data-code contenteditable="'+editable+'" spellcheck="false" data-placeholder="Paste or write code\u2026">'+syntaxCodeHTML(written,language)+'</pre></div></div></div>';
     }
-    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-cols="'+blockSpan(block)+'" data-block="'+block.id+'" style="--w:'+blockSpan(block)+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<span class="width-grip" data-width-grip title="Drag to set how wide this block is" aria-hidden="true"></span>')+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Turn into, duplicate">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div>'+(hideDefaultTitle?'':'<input class="block-title'+(titleIsDefault?' is-default-title':'')+'" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>')+body+extra+'</article>';
+    return '<article class="studio-block '+block.type+(block.done?' done':'')+(block.pending?' is-pending':'')+(chosen[block.id]?' is-chosen':'')+'" data-cols="'+blockSpan(block)+'" data-block="'+block.id+'" style="--w:'+blockSpan(block)+'"><button class="drag-handle" data-drag title="Drag to reorder" aria-label="Drag to reorder"'+disabled+'>⠿</button><button class="block-delete" data-delete aria-label="Delete block"'+disabled+'>×</button>'+(frozen?'':'<span class="width-grip" data-width-grip title="Drag to set how wide this block is" aria-hidden="true"></span>')+(frozen?'':'<button type="button" class="block-more" data-block-menu aria-label="More for this block" title="Settings for this block">⋯</button>')+'<div class="block-kicker">'+(labels[block.type]||'Block')+' · '+esc(sectionName(block.sectionId||''))+(block.pending?'<span class="save-dot">Saving</span>':'')+'</div>'+(hideDefaultTitle?'':'<input class="block-title'+(titleIsDefault?' is-default-title':'')+'" data-title value="'+esc(block.title||'')+'" placeholder="Untitled '+(labels[block.type]||'block').toLowerCase()+'"'+disabled+'>')+body+extra+'</article>';
   }
   function queuedSave(block, immediate, patch){
     var old=saveTimers[block.id]; if(old) clearTimeout(old);
@@ -3903,7 +4025,8 @@
     if(clear)clear.onclick=function(event){ event.stopPropagation(); letGo(); };
     document.addEventListener('pointerdown',function(event){
       if(!picked)return;
-      if(event.target.closest('.table-frame')||event.target.closest('.table-tools'))return;
+      /* The ⋯ menu aligns the selected cells, so using it keeps them selected. */
+      if(event.target.closest('.table-frame')||event.target.closest('.table-tools')||event.target.closest('.block-menu')||event.target.closest('[data-block-menu]'))return;
       letGo();
     });
     document.addEventListener('keydown',function(event){ if(event.key==='Escape')letGo(); });
@@ -4058,7 +4181,7 @@
         render();
         await cloud().patchBlock(activeProject.id,block.id,{imageUrl:'',imageSlot:''});
         if(slot)cloud().deleteProjectImage(activeProject.id,slot);
-      };var status=card.querySelector('[data-status]');if(status)status.onchange=function(e){block.status=e.target.value;queuedSave(block,true);};var contentsShow=card.querySelector('[data-contents-show]');if(contentsShow)contentsShow.onchange=function(e){block.contentsShow=e.target.value;queuedSave(block,true,{contentsShow:block.contentsShow});refreshContents();};var ideaStage=card.querySelector('[data-idea-stage]');if(ideaStage)ideaStage.onchange=function(e){block.ideaStage=e.target.value;queuedSave(block,true);};card.querySelectorAll('[data-task-check]').forEach(function(input){input.onchange=function(e){block.items[+e.target.dataset.taskCheck].done=e.target.checked;queuedSave(block,true);};});card.querySelectorAll('[data-task-text]').forEach(function(input){input.oninput=function(e){block.items[+e.target.dataset.taskText].text=e.target.value;queuedSave(block);};});var addTask=card.querySelector('[data-add-task]');if(addTask)addTask.onclick=function(){block.items.push({text:'',done:false});render();queuedSave(block,true);};var date=card.querySelector('[data-date]');if(date)date.onchange=function(e){block.due=e.target.value;queuedSave(block,true);};var remove=card.querySelector('[data-delete]');if(remove)remove.onclick=async function(){if(!await askConfirm('Delete block?', 'This block will be removed from the project.', 'Delete block'))return;var imageSlot=block.imageSlot;blocks=blocks.filter(function(b){return b.id!==block.id;});render();if(block.type==='database')await cloud().removeAllRows(activeProject.id,block.id);await cloud().deleteBlock(activeProject.id,block.id);if(imageSlot)cloud().deleteProjectImage(activeProject.id,imageSlot);};card.querySelectorAll('[data-format]').forEach(function(button){button.onmousedown=function(e){e.preventDefault();body.focus();if(button.dataset.format==='formatBlock')applyBlockTag(body,(button.dataset.value||'P').toUpperCase());else document.execCommand(button.dataset.format,false,null);tidyHeadings(body);block.body=cleanHTML(body.innerHTML);queuedSave(block,false,{body:block.body});refreshContentsSoon();};});});
+      };var status=card.querySelector('[data-status]');if(status)status.onchange=function(e){block.status=e.target.value;queuedSave(block,true);};var ideaStage=card.querySelector('[data-idea-stage]');if(ideaStage)ideaStage.onchange=function(e){block.ideaStage=e.target.value;queuedSave(block,true);};card.querySelectorAll('[data-task-check]').forEach(function(input){input.onchange=function(e){block.items[+e.target.dataset.taskCheck].done=e.target.checked;queuedSave(block,true);};});card.querySelectorAll('[data-task-text]').forEach(function(input){input.oninput=function(e){block.items[+e.target.dataset.taskText].text=e.target.value;queuedSave(block);};});var addTask=card.querySelector('[data-add-task]');if(addTask)addTask.onclick=function(){block.items.push({text:'',done:false});render();queuedSave(block,true);};var date=card.querySelector('[data-date]');if(date)date.onchange=function(e){block.due=e.target.value;queuedSave(block,true);};var remove=card.querySelector('[data-delete]');if(remove)remove.onclick=async function(){if(!await askConfirm('Delete block?', 'This block will be removed from the project.', 'Delete block'))return;var imageSlot=block.imageSlot;blocks=blocks.filter(function(b){return b.id!==block.id;});render();if(block.type==='database')await cloud().removeAllRows(activeProject.id,block.id);await cloud().deleteBlock(activeProject.id,block.id);if(imageSlot)cloud().deleteProjectImage(activeProject.id,imageSlot);};card.querySelectorAll('[data-format]').forEach(function(button){button.onmousedown=function(e){e.preventDefault();formatPlain(block,body,button.dataset.format,button.dataset.value,false);};});});
     root.querySelectorAll('[data-block]').forEach(function(card){
       var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0];
       if(block&&block.type==='lesson')bindLessonCard(card,block);
@@ -4256,8 +4379,6 @@
         copy.classList.add('is-done');
         setTimeout(function(){ if(word)word.textContent='Copy'; copy.classList.remove('is-done'); },1600);
       };
-      var design=card.querySelector('[data-table-design]');
-      if(design)design.onclick=function(event){ event.stopPropagation(); openTableDesign(card,block,design.parentNode); };
       bindTasks(card,block);
     });
     bindDrag();

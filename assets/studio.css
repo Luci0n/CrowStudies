@@ -102,6 +102,17 @@
 .studio-block:focus-within .rich-tools{ max-height:42px; opacity:1; transform:translateY(0); }
 .rich-tools button{ min-width:29px; border:1px solid var(--line); border-radius:5px; background:var(--card); color:var(--ink-2); padding:5px; font-family:inherit; font-weight:800; font-size:12px; line-height:1; }
 .rich-tools button:hover{ color:var(--brand); border-color:var(--brand); }
+/* On a desktop the formatting buttons float over a selection instead (see
+   .float-tools), so the docked row never opens and the card never shifts. */
+@media (hover:hover) and (pointer:fine){ .studio-block .rich-tools{ display:none !important; } }
+.float-tools{ position:fixed; z-index:70; display:flex; gap:2px; padding:4px; border:1px solid var(--line); border-radius:9px; background:var(--card); box-shadow:0 12px 28px #0006; }
+.float-tools[hidden]{ display:none; }
+.float-tools button{ min-width:29px; border:1px solid transparent; border-radius:6px; background:transparent; color:var(--ink-2); padding:5px 6px; font-family:inherit; font-weight:800; font-size:12px; line-height:1; }
+.float-tools button:hover{ background:var(--glass-lift); color:var(--ink); }
+.float-tools button.is-on{ color:var(--brand); border-color:color-mix(in srgb,var(--brand) 45%,transparent); background:var(--brand-soft); }
+.float-tools.is-arriving{ animation:float-tools-in .14s ease-out; }
+@keyframes float-tools-in{ from{ opacity:0; transform:translateY(3px); } to{ opacity:1; transform:none; } }
+@media (prefers-reduced-motion: reduce){ .float-tools.is-arriving{ animation:none; } }
 .block-body{ min-height:62px; outline:none; color:var(--ink-2); line-height:1.55; overflow-wrap:anywhere; border-radius:6px; padding:4px; margin:8px -4px 0; transition:background .22s ease, box-shadow .22s ease; }
 .studio-block:hover .block-body,.studio-block:focus-within .block-body{ background:var(--glass-lift); }
 .block-body:focus{ background:var(--card)!important; box-shadow:0 0 0 2px color-mix(in srgb,var(--brand) 55%,transparent); }
@@ -503,6 +514,12 @@
 .block-menu-head{ padding:7px 8px 4px; color:var(--ink-3); font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
 .block-menu button{ border:0; border-radius:6px; background:transparent; color:var(--ink-2); text-align:left; padding:7px 8px; font-family:inherit; font-weight:700; font-size:12px; }
 .block-menu button:hover{ background:var(--glass-lift); color:var(--ink); }
+/* The choice in force, and a switch that is on, carry a tick. */
+.block-menu button.is-on{ display:flex; align-items:center; color:var(--ink); }
+.block-menu button.is-on::after{ content:"✓"; margin-left:auto; padding-left:12px; color:var(--brand); font-size:12px; font-weight:800; }
+.block-menu-row{ display:flex; gap:4px; padding:2px 3px 4px; }
+.block-menu-row button{ flex:1 1 0; padding:6px 4px; border:1px solid var(--glass-edge); text-align:center; }
+.block-menu-row button:hover{ border-color:var(--brand); color:var(--brand); }
 
 .block-quote,.block-code{ outline:none; overflow-wrap:anywhere; }
 .block-quote:empty::before,.block-code:empty::before{ content:attr(data-placeholder); color:var(--ink-3); }
@@ -520,8 +537,6 @@
 /* ---------- contents: the headings of a section, one click away ---------- */
 .studio-block.toc .block-kicker{ color:var(--ink-3); }
 .contents-list{ display:grid; gap:1px; margin-top:6px; }
-.contents-show{ display:inline-flex; align-items:center; gap:8px; margin-top:4px; color:var(--ink-3); font-size:11px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
-.contents-show .status-select{ margin:0; text-transform:none; letter-spacing:0; }
 .contents-item{ display:block; width:100%; padding:6px 8px; border:0; border-radius:7px; background:transparent; color:var(--ink-2); font-family:inherit; font-size:14px; font-weight:600; line-height:1.35; text-align:left; overflow-wrap:anywhere; cursor:pointer; transition:background .15s ease, color .15s ease; }
 .contents-item.depth-0{ color:var(--ink); font-weight:700; }
 .contents-item.depth-1{ padding-left:22px; }
@@ -577,13 +592,6 @@
 .icon-picker button{ padding:4px 5px; border:0; border-radius:6px; background:transparent; font-size:17px; line-height:1; }
 .icon-picker button:hover{ background:var(--glass-lift); }
 .table-tools{ position:relative; }
-.table-design{ position:absolute; z-index:7; left:0; top:calc(100% + 6px); display:grid; gap:2px; min-width:200px; padding:7px; border:1px solid var(--line); border-radius:10px; background:var(--card); box-shadow:0 16px 34px #0006; }
-.table-design label{ display:flex; align-items:center; gap:8px; padding:6px 7px; border-radius:7px; color:var(--ink-2); font-size:12px; font-weight:700; }
-.table-design label:hover{ background:var(--glass-lift); }
-.table-design-head{ padding:7px 7px 3px; color:var(--ink-3); font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
-.table-align{ display:flex; gap:4px; padding:0 3px 3px; }
-.table-align button{ flex:1 1 auto; padding:6px 4px; border:1px solid var(--glass-edge); border-radius:7px; background:transparent; color:var(--ink-2); font-family:inherit; font-weight:750; font-size:11.5px; }
-.table-align button:hover{ border-color:var(--brand); color:var(--brand); }
 .block-table.zebra tr:nth-child(even) td{ background:color-mix(in srgb,var(--card-2) 30%,transparent); }
 .block-table.dense th,.block-table.dense td{ height:30px; padding:4px 7px; font-size:12.5px; }
 .add-palette.above{ top:auto; bottom:calc(100% + 8px); }

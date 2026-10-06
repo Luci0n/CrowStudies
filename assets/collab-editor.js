@@ -224,6 +224,14 @@ setInterval(()=>{
     if(now-entry.parkedAt>PARK_LIMIT) destroy(name);
   });
 },15000);
+/* The editor a node on the page belongs to, if it may be typed in: Studio's
+   floating toolbar formats a shared note through it. */
+function editorFor(node){
+  for(const entry of live.values()){
+    if(entry.synced&&!entry.options.readOnly&&entry.editor.isEditable&&entry.host.contains(node))return entry.editor;
+  }
+  return null;
+}
 /* What a note says right now, if it is open and has caught up with the
    server. Before that the editor may be showing nothing at all, and an empty
    answer would be mistaken for an empty note. */
@@ -272,5 +280,5 @@ async function withDocument(documentName, options, use){
     ydoc.destroy();
   }
 }
-window.CrowCollab={enabled:()=>Boolean(config.url),mount,destroy,destroyAll,keepOnly,html,replace,read};
+window.CrowCollab={enabled:()=>Boolean(config.url),mount,destroy,destroyAll,keepOnly,html,replace,read,editorFor};
 window.dispatchEvent(new Event('crow-collab-ready'));
