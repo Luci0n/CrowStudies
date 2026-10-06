@@ -141,14 +141,18 @@ async function create(host, options){
      it instead of the editor inside, which then never knew it had focus and
      never shared its caret. */
   host.setAttribute('contenteditable','false');
-  const token=await options.user.getIdToken();
   const ydoc=new Y.Doc();
   const entry={ options, status:'', parkedAt:0, synced:false, host, ydoc };
   const provider=new HocuspocusProvider({
     url:config.url,
     name:options.documentName,
     document:ydoc,
-    token,
+    /* Asked for on every connection, not once. A Firebase token lasts an
+       hour; an editor kept open longer reconnected with the one it started
+       with, was turned away as expired, and tried again every second for as
+       long as the tab stayed open. getIdToken hands back a fresh one when the
+       old one is due. */
+    token:()=>entry.options.user.getIdToken(),
     preserveConnection:false,
     onStatus:({status})=>{ entry.status=status; if(entry.options.onStatus) entry.options.onStatus(status); },
   });
@@ -255,8 +259,7 @@ async function withDocument(documentName, options, use){
     return use(entry.editor, entry.provider);
   }
   const ydoc=new Y.Doc();
-  const token=await options.user.getIdToken();
-  const provider=new HocuspocusProvider({ url:config.url, name:documentName, document:ydoc, token, preserveConnection:false });
+  const provider=new HocuspocusProvider({ url:config.url, name:documentName, document:ydoc, token:()=>options.user.getIdToken(), preserveConnection:false });
   let editor=null;
   try{
     await whenSynced(provider);
