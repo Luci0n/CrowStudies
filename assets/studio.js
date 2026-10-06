@@ -439,7 +439,7 @@
         ]
       },
       blocks:[
-        block({type:'note',sectionId:start,title:'What this is',body:'<p>Studio is your private workspace. Nobody else can see it, and it follows you to any device you sign in on.</p><p>A <b>project</b> holds <b>blocks</b>. Blocks are the notes, lists, tables, and lessons below. Group them into <b>sections</b> using the row of buttons above, and give a section <b>pages</b> from its cog menu when one section is not enough.</p><p>Everything saves as you type. There is no save button.</p>'}),
+        block({type:'note',sectionId:start,title:'What this is',body:'<p>Studio is your private workspace. Nobody else can see it, and it follows you to any device you sign in on.</p><p>A <b>project</b> holds <b>blocks</b>. Blocks are the notes, lists, tables, and lessons below. Group them into <b>sections</b> using the tabs above, and give a section <b>pages</b> with + Page under its tab when one section is not enough.</p><p>Everything saves as you type. There is no save button.</p>'}),
         block({type:'tasks',sectionId:start,title:'Five things to try',items:[
           {text:'Add a block from the row at the bottom',done:false},
           {text:'Type a title on it',done:false},
@@ -1408,7 +1408,6 @@
     return '<div class="section-popover"><button data-rename-section="'+section.id+'">Rename section</button>'
       +(at>0?'<button data-move-section="'+section.id+'" data-step="-1">Move left</button>':'')
       +(at>-1&&at<sections.length-1?'<button data-move-section="'+section.id+'" data-step="1">Move right</button>':'')
-      +'<button data-add-page="'+section.id+'">Add page</button>'
       +'<button data-lock-section="'+section.id+'">'+(section.locked?'Unlock section':'Lock section')+'</button>'
       +'<button class="danger" data-remove-section="'+section.id+'">Delete section</button></div>';
   }
@@ -1611,9 +1610,20 @@
     /* An empty image block is only a prompt to paste a URL, which is no use
        to someone reading the project. */
     if(readOnly)shown=shown.filter(function(b){ return !(b.type==='image'&&!b.imageUrl); });
-    var sectionButtons=sections.map(function(s){var selected=activeSection===s.id, menu=openSectionMenu===s.id;return '<div class="section-choice"><button class="section-filter '+(selected?'active':'')+'" data-section="'+s.id+'" title="'+esc(s.title)+'">'+esc(s.title)+(s.locked?' · locked':'')+'</button><button class="section-cog" data-section-menu="'+s.id+'" aria-label="Section settings">⚙</button>'+(menu?sectionMenuHTML(s):'')+'</div>';}).join('');
+    /* Sections are the tabs of a project and pages sit under the chosen one,
+       so the two read as levels rather than two rows of the same pill. The
+       section's menu is on the chosen tab only, beside its name, and adding a
+       section or a page happens at the end of the row it would join. */
+    var adding=!previewing()&&!readOnly;
+    var sectionButtons=sections.map(function(s){var selected=activeSection===s.id, menu=openSectionMenu===s.id;return '<div class="section-choice"><button class="section-filter '+(selected?'active':'')+'" data-section="'+s.id+'" title="'+esc(s.title)+'">'+esc(s.title)+(s.locked?'<span class="section-locked"> · locked</span>':'')+'</button>'+(selected&&adding?'<button type="button" class="section-cog" data-section-menu="'+s.id+'" aria-label="Section settings" title="Section settings">⋯</button>':'')+(menu?sectionMenuHTML(s):'')+'</div>';}).join('');
+    /* Unsorted is where blocks without a section end up, not a section anyone
+       made, so it shows only when it holds something, and says how much. */
+    var unsorted=blocks.filter(function(b){ return !b.sectionId; }).length;
+    var unsortedTab=unsorted||activeSection===''?'<button class="section-filter is-quiet '+(activeSection===''?'active':'')+'" data-section="">Unsorted'+(unsorted?'<span class="section-count">'+unsorted+'</span>':'')+'</button>':'';
     var pages=activeSection&&activeSection!=='all'?sectionPages(activeSection):[];
-    var pageBar=activeSection&&activeSection!=='all'?'<div class="page-bar"><button class="page-filter '+(activePage==='all'?'active':'')+'" data-page="all">All pages</button>'+pages.map(function(p){return '<button class="page-filter '+(activePage===p.id?'active':'')+'" data-page="'+p.id+'">'+esc(p.title)+'</button>';}).join('')+'</div>':'';
+    var pageChips=(pages.length?'<button class="page-filter '+(activePage==='all'?'active':'')+'" data-page="all">All pages</button>':'')+pages.map(function(p){return '<button class="page-filter '+(activePage===p.id?'active':'')+'" data-page="'+p.id+'">'+esc(p.title)+'</button>';}).join('')
+      +(adding&&activeSection&&!sectionLocked(activeSection)?'<button type="button" class="page-add" data-add-page="'+activeSection+'">+ Page</button>':'');
+    var pageBar=activeSection&&activeSection!=='all'&&pageChips?'<div class="page-bar">'+pageChips+'</div>':'';
     var locked=activeSection&&activeSection!=='all'&&sectionLocked(activeSection);
     if(loadingProject){
       return previewBarHTML()+'<div class="project-top"><h1 class="project-title">'+esc(activeProject.title)+'</h1></div>'
@@ -1624,7 +1634,7 @@
     var overview=blocks.length+' '+(blocks.length===1?'block':'blocks')+' · '+sections.length+' '+(sections.length===1?'section':'sections');
     var actions=previewing()
       ? '<button class="btn sm" data-restore-preview>Restore this version</button>'
-      : '<button class="btn ghost sm" data-new-section>+ Section</button>';
+      : '';
     /* Edit and view are two positions of one state, so the state indicator is
        the control and there is no separate button restating it. Somebody
        looking at a past version, or at a project they may not edit, has no
@@ -1633,7 +1643,7 @@
     var mode=(previewing()||!canEdit())
       ? '<span class="mode-indicator '+(settled?'is-viewing':'is-editing')+'" aria-live="polite"><i aria-hidden="true"></i>'+ (settled?'View mode':'Edit mode') +'</span>'
       : '<button type="button" class="mode-switch" role="switch" data-toggle-view data-viewing="'+(readOnly?'true':'false')+'" aria-checked="'+(readOnly?'false':'true')+'" title="'+(readOnly?'Turn on to edit this project':'Turn off to read without editing')+'"><span class="mode-switch-track" aria-hidden="true"><span class="mode-switch-knob"></span></span><span class="mode-switch-label">'+ (readOnly?'View mode':'Edit mode') +'</span></button>';
-    return previewBarHTML()+'<div class="project-top"><div class="project-heading"><h1 class="project-title">'+esc(activeProject.title)+'</h1><div class="project-meta"><span class="'+(shared?'shared':'private')+'">'+esc(access)+'</span><span>'+esc(overview)+'</span></div><div class="project-presence" hidden><span>Viewing now</span><div class="collab-people" data-collab-people aria-label="People viewing this project"></div></div></div><div class="project-actions">'+mode+'<div class="project-action-buttons">'+actions+'</div></div></div><div class="section-bar"><button class="section-filter '+(activeSection==='all'?'active':'')+'" data-section="all">All</button><button class="section-filter '+(activeSection===''?'active':'')+'" data-section="">Unsorted</button>'+sectionButtons+'</div>'+pageBar+(locked?'<p class="section-lock-note">This section is locked. Unlock it from its cog menu to edit.</p>':'')+'<div class="add-row add-row-start '+(locked?'is-locked':'')+'">'+(locked?'':'<button type="button" class="add-open" data-add-open>+ Add block</button>')+'</div><div class="block-grid">'+rowsFrom(shown).map(rowHTML).join('')+'</div><div class="add-row '+(locked?'is-locked':'')+'">'+(locked?'<span>This section is locked</span>':'<button type="button" class="add-open" data-add-open>+ Add block</button>')+'</div>';
+    return previewBarHTML()+'<div class="project-top"><div class="project-heading"><h1 class="project-title">'+esc(activeProject.title)+'</h1><div class="project-meta"><span class="'+(shared?'shared':'private')+'">'+esc(access)+'</span><span>'+esc(overview)+'</span></div><div class="project-presence" hidden><span>Viewing now</span><div class="collab-people" data-collab-people aria-label="People viewing this project"></div></div></div><div class="project-actions">'+mode+'<div class="project-action-buttons">'+actions+'</div></div></div><nav class="section-bar" aria-label="Sections"><button class="section-filter '+(activeSection==='all'?'active':'')+'" data-section="all">All</button>'+sectionButtons+unsortedTab+(adding?'<button type="button" class="section-add" data-new-section aria-label="Add a section" title="Add a section">+</button>':'')+'</nav>'+pageBar+(locked?'<p class="section-lock-note">This section is locked. Unlock it from its ⋯ menu to edit.</p>':'')+'<div class="add-row add-row-start '+(locked?'is-locked':'')+'">'+(locked?'':'<button type="button" class="add-open" data-add-open>+ Add block</button>')+'</div><div class="block-grid">'+rowsFrom(shown).map(rowHTML).join('')+'</div><div class="add-row '+(locked?'is-locked':'')+'">'+(locked?'<span>This section is locked</span>':'<button type="button" class="add-open" data-add-open>+ Add block</button>')+'</div>';
   }
   function personName(uid){
     var people=(activeProject&&activeProject.people)||{};
