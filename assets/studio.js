@@ -384,7 +384,7 @@
   function projectPayload(){
     return { crowstudies:'project', version:FILE_FORMAT, exportedAt:new Date().toISOString(),
       project:{ title:activeProject.title, sections:activeProject.sections||[] },
-      blocks:blocks.map(function(block){ var copy=Object.assign({},block,{ body:currentBody(block) }); delete copy.pending; return copy; }),
+      blocks:blocks.map(function(block){ var copy=withCurrentCopy(block); delete copy.pending; return copy; }),
       rows:(function(){ var out={}; blocks.filter(isDatabase).forEach(function(block){ out[block.id]=dbRowsOf(block.id).map(function(row){ return Object.assign({},row); }); }); return out; })() };
   }
   /* Everything comes back with fresh ids so an import never collides with a
@@ -720,7 +720,7 @@
     return true;
   }
   function normalizeBlock(block){
-    var copy=Object.assign({},block), supported=['note','tasks','status','milestone','schedule','idea','lesson','table','image','quote','callout','code','database','toc'];
+    var copy=Object.assign({},block), supported=['note','tasks','status','milestone','schedule','idea','lesson','table','image','quote','callout','code','database','toc','whiteboard'];
     if(copy.type==='task')copy.type='tasks';
     if(supported.indexOf(copy.type)<0)copy.type='note';
     if(!Array.isArray(copy.items))copy.items=[];
@@ -735,6 +735,10 @@
     if(width>=1&&width<=48)copy.width=width; else delete copy.width;
     copy.row=typeof copy.row==='string'?copy.row:'';
     if(copy.type==='toc'&&CONTENTS_SHOW.map(function(choice){ return choice[0]; }).indexOf(copy.contentsShow)<0)copy.contentsShow='both';
+    if(copy.type==='whiteboard'){
+      if(typeof copy.board!=='string')copy.board='';
+      if(!BOARD_HEIGHTS[copy.boardHeight])copy.boardHeight='medium';
+    }
     if(copy.type==='database'){
       if(!Array.isArray(copy.props))copy.props=[];
       if(!Array.isArray(copy.views))copy.views=[];
@@ -785,12 +789,41 @@
   async function liveSnapshot(){
     var data=window.CrowStudio.snapshot();
     var projectId=activeProject&&activeProject.id;
-    if(!data||!sharingNotesFor(projectId))return data;
+    if(!data)return data;
     await Promise.all(data.blocks.map(function(copy){
-      if(copy.type!=='note')return null;
-      return sharedText(projectId,copy).then(function(html){ copy.body=html; },function(){});
+      if(copy.type==='note'&&sharingNotesFor(projectId))
+        return sharedText(projectId,copy).then(function(html){ copy.body=html; },function(){});
+      if(copy.type==='whiteboard'&&sharingBoardsFor(projectId))
+        return window.CrowWhiteboard.read(noteDocumentIn(projectId,copy),{ user:cloud().user })
+          .then(function(list){ if(list)copy.board=JSON.stringify(list); },function(){});
+      return null;
     }));
     return data;
+  }
+  /* ------------------------------------------------------------ whiteboards
+     A whiteboard's drawing lives in its shared document, like a note's text;
+     `board` is the saved copy everything else reads. */
+  var BOARD_HEIGHTS={ small:{ label:'Small', px:320 }, medium:{ label:'Medium', px:480 }, tall:{ label:'Tall', px:680 } };
+  /* The saved copy goes on the block itself, whose document Firestore caps at
+     1 MB. A board past this is still kept by the server, only not copied. */
+  var BOARD_COPY_LIMIT=700*1024;
+  /* A block as it stands, for a version or an export: a shared note's live
+     text and a shared board's live drawing rather than their saved copies. */
+  function withCurrentCopy(block){
+    var copy=Object.assign({},block,{ body:currentBody(block) });
+    if(block.type==='whiteboard')copy.board=currentBoard(block);
+    return copy;
+  }
+  function boardHeightPx(block){ return (BOARD_HEIGHTS[block.boardHeight]||BOARD_HEIGHTS.medium).px; }
+  function sharingBoardsFor(projectId){ return !!(projectId&&window.CrowWhiteboard&&window.CrowWhiteboard.enabled()&&cloud().user); }
+  function boardIsEmpty(json){ try{ var list=JSON.parse(json||'[]'); return !Array.isArray(list)||!list.some(function(element){ return element&&!element.isDeleted; }); }catch(error){ return true; } }
+  /* The drawing a board holds right now: the open board when there is one. */
+  function currentBoard(block){
+    if(block&&block.type==='whiteboard'&&activeProject&&!previewing()&&window.CrowWhiteboard){
+      var live=window.CrowWhiteboard.elements(noteDocument(block));
+      if(live!==null)return JSON.stringify(live);
+    }
+    return block?block.board||'':'';
   }
   /* The text a block holds right now. For a shared note that is open, the
      editor is asked, because `body` may not have caught up with it. */
@@ -821,6 +854,9 @@
     }
     var oldRest=Object.assign({},withoutStamps(before)), nextRest=Object.assign({},withoutStamps(after));
     delete oldRest.title; delete oldRest.body; delete nextRest.title; delete nextRest.body;
+    /* A live board's drawing comes through its shared document; its saved copy
+       changing is not a reason to draw the card again. */
+    if(card.querySelector('[data-whiteboard][data-collab-active="true"]')){ delete oldRest.board; delete nextRest.board; }
     return JSON.stringify(oldRest)===JSON.stringify(nextRest);
   }
   function patchLiveBlocks(before, after){
@@ -843,7 +879,7 @@
          nowhere that lasts. Its card is patched in place, like the card being
          typed in, and anything bigger than a title is left to a full redraw,
          which opens the shared document again. */
-      if(card.contains(document.activeElement)||liveDocument(card.querySelector('[data-body]'))){
+      if(card.contains(document.activeElement)||card.querySelector('[data-collab-active="true"]')){
         if(!patchFocusedCard(card,oldShown[index],block)){ blocked=true; return; }
         changed=true; return;
       }
@@ -1104,11 +1140,13 @@
        flashes the stored text. Anything else (another project, an old version
        on screen) closes them. Normal remote note edits are transported by Yjs
        and never redraw Studio or rewrite HTML. */
+    var keep=activeProject&&!previewing()?'project:'+activeProject.id+':':'';
     if(window.CrowCollab){
-      var keep=activeProject&&!previewing()?'project:'+activeProject.id+':':'';
       if(window.CrowCollab.keepOnly)window.CrowCollab.keepOnly(keep);
       else if(window.CrowCollab.destroyAll)window.CrowCollab.destroyAll();
     }
+    /* Whiteboards are kept through a redraw the same way. */
+    if(window.CrowWhiteboard)window.CrowWhiteboard.keepOnly(keep);
     shownBlocks=blocksSignature(blocks);
     shownProject=projectSignature(activeProject);
     shownList=listSignature(window.__crowProjects||[]);
@@ -1154,7 +1192,108 @@
     clearTimeout(shareRetry);
     var waiting=false;
     mountNotes(function(){ waiting=true; });
+    mountWhiteboards(function(){ waiting=true; });
     if(waiting)shareRetry=setTimeout(mountCollaborativeEditors,400);
+  }
+  /* Each whiteboard on the page gets its shared board, or, in an old version
+     or without a collaboration server, a board to look at drawn from its saved
+     copy. The drawing library is only fetched once a board is on the page. */
+  function mountWhiteboards(wait){
+    if(!root||!window.CrowWhiteboard||!activeProject)return;
+    root.querySelectorAll('[data-block].whiteboard [data-whiteboard]').forEach(function(host){
+      var card=host.closest('[data-block]'), block=liveBlock(card.dataset.block);
+      if(!block||host.dataset.collabActive==='true'||host.dataset.boardShown==='true')return;
+      if(previewing()||!sharingBoardsFor(activeProject.id)){
+        host.dataset.boardShown='true';
+        window.CrowWhiteboard.mountStatic(host,block.board).catch(function(error){ host.textContent='This whiteboard could not be drawn.'; console.warn(error); });
+        return;
+      }
+      if(block.pending)return;
+      if(fresh[block.id]&&(saveTimers[block.id]||inFlight[block.id])){ wait(); return; }
+      delete fresh[block.id];
+      var synced=false;
+      card.classList.add('collab-waiting');
+      var slow=setTimeout(function(){ if(!synced){ card.classList.remove('collab-waiting'); card.classList.add('collab-offline'); } },15000);
+      window.CrowWhiteboard.mount(host,{
+        documentName:noteDocument(block),
+        user:cloud().user,
+        username:(cloud().profile&&cloud().profile.username)||'someone',
+        saved:block.board,
+        readOnly:readOnly||!canEdit()||sectionLocked(block.sectionId),
+        onStatus:function(status){
+          if(status==='connected'){ if(synced)card.classList.remove('collab-offline'); }
+          else if(synced||!card.classList.contains('collab-waiting'))card.classList.add('collab-offline');
+        },
+        onSynced:function(){ synced=true; clearTimeout(slow); card.classList.remove('collab-waiting','collab-offline'); },
+        onLocalChange:function(json){
+          if(json.length>BOARD_COPY_LIMIT){ boardNotice(block,'This board is too big to keep a saved copy, so History may miss its latest changes. It is still saved for everyone.'); return; }
+          block.board=json;
+          queuedSave(block,false,{ board:json });
+        },
+        onNotice:function(text){ boardNotice(block,text); }
+      }).then(function(entry){
+        if(!entry){ clearTimeout(slow); card.classList.remove('collab-waiting'); if(host.isConnected)setTimeout(mountCollaborativeEditors,400); return; }
+        if(entry.synced){
+          synced=true; clearTimeout(slow);
+          card.classList.remove('collab-waiting');
+          card.classList.toggle('collab-offline',!!entry.status&&entry.status!=='connected');
+        }
+      }).catch(function(error){
+        clearTimeout(slow); card.classList.remove('collab-waiting'); card.classList.add('collab-offline');
+        host.dataset.collabActive='';
+        host.textContent='This whiteboard could not be opened. Check your connection and reload.';
+        console.warn('Whiteboard unavailable',error);
+      });
+    });
+  }
+  /* A board takes the pointer only once it has been clicked into, so the page
+     scrolls past it rather than the wheel being caught and zooming the board.
+     Full screen is always taken. Both survive a redraw of the page. */
+  var activeBoardId='', fullBoardId='';
+  function setBoardActive(card, on){
+    var frame=card&&card.querySelector('.whiteboard-frame'); if(!frame)return;
+    frame.classList.toggle('is-active',on);
+    activeBoardId=on?card.dataset.block:(activeBoardId===card.dataset.block?'':activeBoardId);
+  }
+  function setBoardFull(card, on){
+    if(!card)return;
+    card.classList.toggle('whiteboard-full',on);
+    document.documentElement.classList.toggle('has-board-full',on);
+    fullBoardId=on?card.dataset.block:'';
+    var button=card.querySelector('[data-board-full]');
+    if(button){ button.textContent=on?'Exit full screen':'Full screen'; button.setAttribute('aria-pressed',on?'true':'false'); }
+    setBoardActive(card,on||activeBoardId===card.dataset.block);
+  }
+  function bindWhiteboards(){
+    root.querySelectorAll('.studio-block.whiteboard').forEach(function(card){
+      var activate=card.querySelector('[data-board-activate]'), full=card.querySelector('[data-board-full]');
+      if(activate)activate.onclick=function(){ setBoardActive(card,true); };
+      if(full)full.onclick=function(){ setBoardFull(card,!card.classList.contains('whiteboard-full')); };
+      if(activeBoardId===card.dataset.block)setBoardActive(card,true);
+      if(fullBoardId===card.dataset.block)setBoardFull(card,true);
+    });
+    if(fullBoardId&&!root.querySelector('[data-block="'+fullBoardId+'"]')){ fullBoardId=''; document.documentElement.classList.remove('has-board-full'); }
+  }
+  document.addEventListener('pointerdown',function(event){
+    if(!activeBoardId||fullBoardId===activeBoardId||!root)return;
+    var card=root.querySelector('[data-block="'+activeBoardId+'"]');
+    if(!card){ activeBoardId=''; return; }
+    if(card.querySelector('.whiteboard-frame').contains(event.target)||(event.target.closest&&event.target.closest('.block-menu,[data-block-menu]')))return;
+    setBoardActive(card,false);
+  },true);
+  /* Escape leaves full screen, unless it was pressed while typing on the board. */
+  document.addEventListener('keydown',function(event){
+    if(event.key!=='Escape'||!fullBoardId||!root)return;
+    if(event.target&&event.target.closest&&event.target.closest('textarea,input'))return;
+    setBoardFull(root.querySelector('[data-block="'+fullBoardId+'"]'),false);
+  });
+  /* A short line under the board, gone after a few seconds. */
+  function boardNotice(block, text){
+    var card=root&&root.querySelector('[data-block="'+block.id+'"]'); if(!card)return;
+    var line=card.querySelector('.whiteboard-notice');
+    if(!line){ line=document.createElement('p'); line.className='whiteboard-notice'; line.setAttribute('role','status'); var frame=card.querySelector('.whiteboard-frame'); if(frame)frame.parentNode.insertBefore(line,frame.nextSibling); else card.appendChild(line); }
+    line.textContent=text;
+    clearTimeout(line.__timer); line.__timer=setTimeout(function(){ if(line.parentNode)line.parentNode.removeChild(line); },6000);
   }
   function mountNotes(wait){
     /* A shared note is a live document. Mounting one here would quietly put
@@ -1373,11 +1512,31 @@
         }
       }
     }
+    /* A shared board shows its shared document too, so its drawing goes there
+       the same way, with the same rule: an empty board in a version does not
+       wipe one that has a drawing on it. */
+    if(sharingBoardsFor(projectId)){
+      for(var w=0;w<incoming.length;w++){
+        var board=incoming[w];
+        if(board.type!=='whiteboard')continue;
+        try{
+          var name=noteDocumentIn(projectId,board);
+          if(boardIsEmpty(board.board)){
+            var there=await window.CrowWhiteboard.read(name,{ user:cloud().user });
+            if(there&&there.length)continue;
+          }
+          await window.CrowWhiteboard.replace(name,JSON.parse(board.board||'[]'),{ user:cloud().user });
+        }catch(error){
+          unrestored.push(implicitBlockTitle(board.title)?'An untitled whiteboard':board.title);
+          console.warn('A whiteboard could not be restored into its shared document',error);
+        }
+      }
+    }
     await cloud().saveProject(projectId,{
       title:(data.project&&data.project.title)||activeProject.title,
       sections:(data.project&&data.project.sections)||[]
     });
-    if(unrestored.length)notify('Some notes were not restored',unrestored.join(', ')+' kept '+(unrestored.length===1?'its':'their')+' current text, because the collaboration server could not be reached. Restoring the same version again once it is back will finish the job.');
+    if(unrestored.length)notify('Some blocks were not restored',unrestored.join(', ')+' kept '+(unrestored.length===1?'its':'their')+' current contents, because the collaboration server could not be reached. Restoring the same version again once it is back will finish the job.');
     return projectId;
   }
   function freeImageSlot(block){
@@ -1730,7 +1889,7 @@
 
   var CALLOUT_ICON='\uD83D\uDCA1';
   var CALLOUT_ICONS=['💡','⚠️','✅','📌','❗','🔥','⭐','📚'];
-  var BLOCK_LABELS={note:'Note',tasks:'Task list',status:'Status',milestone:'Milestone',schedule:'Schedule',idea:'Idea inbox',lesson:'Practice lesson',table:'Table',image:'Image',quote:'Quote',callout:'Highlight',code:'Code',database:'Database',toc:'Contents'};
+  var BLOCK_LABELS={note:'Note',tasks:'Task list',status:'Status',milestone:'Milestone',schedule:'Schedule',idea:'Idea inbox',lesson:'Practice lesson',table:'Table',image:'Image',quote:'Quote',callout:'Highlight',code:'Code',database:'Database',toc:'Contents',whiteboard:'Whiteboard'};
   /* The kinds whose content is text at heart, so one can become another with
      nothing lost on the way. A lesson, a table and an image are left out: their
      shape is the block, and there is nowhere for it to go. */
@@ -1788,7 +1947,8 @@
     /* The copy's shared document is made from its `body` the first time it
        opens, so that has to be what the note says now. */
     copy.body=currentBody(block);
-    if(copy.type==='note')fresh[copy.id]=true;
+    if(copy.type==='whiteboard')copy.board=currentBoard(block);
+    if(copy.type==='note'||copy.type==='whiteboard')fresh[copy.id]=true;
     delete copy.updatedAt; delete copy.updatedBy;
     /* An uploaded picture belongs to one block: the copy shows the same address
        but does not own the file, so deleting either cannot take the other's
@@ -1945,6 +2105,12 @@
         +'<div class="block-menu-head">'+(picked?'Align selected cells':'Align cells')+'</div>'
         +'<div class="block-menu-row"><button type="button" data-t-align="left">Left</button><button type="button" data-t-align="center">Centre</button><button type="button" data-t-align="right">Right</button></div>');
     }
+    if(block.type==='whiteboard'){
+      var height=BOARD_HEIGHTS[block.boardHeight]?block.boardHeight:'medium';
+      rows.push('<div class="block-menu-head">Height</div>'+Object.keys(BOARD_HEIGHTS).map(function(key){
+        return '<button type="button" data-board-height="'+key+'"'+(height===key?' class="is-on"':'')+'>'+BOARD_HEIGHTS[key].label+'</button>';
+      }).join('')+'<button type="button" data-board-full-menu>Full screen</button>');
+    }
     if(TURN_INTO.indexOf(block.type)>=0){
       rows.push('<div class="block-menu-head">Turn into</div>');
       TURN_INTO.forEach(function(type){ if(type!==block.type)rows.push('<button type="button" data-turn="'+type+'">'+BLOCK_LABELS[type]+'</button>'); });
@@ -1991,6 +2157,19 @@
     menu.querySelectorAll('[data-t-align]').forEach(function(button){
       button.onclick=function(){ alignTableCells(card,block,button.dataset.tAlign); };
     });
+    /* The height is set on the card's frame in place, so the live board keeps
+       drawing and nobody's strokes are interrupted. */
+    menu.querySelectorAll('[data-board-height]').forEach(function(button){
+      button.onclick=function(){
+        closeBlockMenu();
+        block.boardHeight=button.dataset.boardHeight;
+        var frame=card.querySelector('.whiteboard-frame');
+        if(frame)frame.style.setProperty('--board-height',boardHeightPx(block)+'px');
+        queuedSave(block,true,{ boardHeight:block.boardHeight });
+      };
+    });
+    var fullFromMenu=menu.querySelector('[data-board-full-menu]');
+    if(fullFromMenu)fullFromMenu.onclick=function(){ closeBlockMenu(); setBoardFull(card,true); };
     setTimeout(function(){ document.addEventListener('click',awayFromBlockMenu); },0);
   }
   /* Reached from the palette now rather than from a button per kind, so the
@@ -2003,7 +2182,7 @@
     { name:'Text', types:['note','quote','callout','code','toc'] },
     { name:'Planning', types:['tasks','status','milestone','schedule'] },
     { name:'Thinking', types:['idea'] },
-    { name:'Media', types:['image','table','database'] },
+    { name:'Media', types:['image','table','database','whiteboard'] },
     { name:'Learning', types:['lesson'] }
   ];
   var BLOCK_BLURBS={ note:'Words, headings and lists', quote:'Someone else\u2019s words, set apart',
@@ -2012,7 +2191,7 @@
     milestone:'A date to work towards', schedule:'A time and what happens at it',
     idea:'Somewhere to put a thought before it goes', image:'A picture, uploaded or linked',
     table:'Rows and columns', database:'Rows with properties you choose', lesson:'Practice steps you can run',
-    toc:'A table of contents for this section' };
+    toc:'A table of contents for this section', whiteboard:'Draw, sketch and diagram together' };
   function closeIconPicker(){
     var open=root.querySelector('.icon-picker');
     if(open&&open.parentNode)open.parentNode.removeChild(open);
@@ -3085,7 +3264,7 @@
      a row is roomy beside one block and cramped beside three, so what a table
      needs is measured in pixels and turned into a share of whatever row it is
      actually on. */
-  var MIN_PX={ database:280, table:280, lesson:260, schedule:220, image:180 };
+  var MIN_PX={ database:280, table:280, lesson:260, schedule:220, image:180, whiteboard:320 };
   function minPx(block){ return MIN_PX[block.type]||150; }
   function minShare(block, roomPx, total){
     if(!(roomPx>0)||!(total>0))return 1;
@@ -3576,6 +3755,9 @@
     /* Code is text, not markup: it is kept and shown as what was typed, so a
        stray angle bracket stays a stray angle bracket. */
     if(block.type==='database') body='<div class="db" data-db-table></div>';
+    /* The board is drawn into [data-whiteboard] once the drawing library is in.
+       Until it is clicked into it lets the page scroll past it. */
+    if(block.type==='whiteboard') body='<div class="whiteboard-frame" style="--board-height:'+boardHeightPx(block)+'px"><div class="whiteboard-board" data-whiteboard><p class="whiteboard-loading">Loading whiteboard…</p></div><button type="button" class="whiteboard-activate" data-board-activate><span>Click to draw</span></button></div><div class="whiteboard-tools"><button type="button" class="whiteboard-full-button" data-board-full aria-pressed="false">Full screen</button></div>';
     if(block.type==='toc') body='<nav class="contents-list" data-contents aria-label="Contents of this section">'+contentsHTML(block)+'</nav>';
     if(block.type==='code'){
       /* Leading empty lines are an editor artefact, never useful source. */
@@ -4159,6 +4341,7 @@
     root.querySelectorAll('[data-page]').forEach(function(button){button.onclick=function(){if(activePage===button.dataset.page)return;activePage=button.dataset.page;renderAnimated();};});
     /* The list inside is redrawn as headings change, so the click is taken on
        the list itself rather than on each entry. */
+    bindWhiteboards();
     root.querySelectorAll('[data-contents]').forEach(function(nav){
       nav.onclick=function(event){
         var go=event.target.closest('[data-go-block]'); if(!go)return;
@@ -4875,6 +5058,7 @@
   }
   window.addEventListener('crow-auth-state',function(event){if(event.detail&&event.detail.user)loadProjects();else{window.__crowProjects=[];activeProject=null;blocks=[];studioError='';render();}});
   window.addEventListener('crow-collab-ready',function(){ mountCollaborativeEditors(); });
+  window.addEventListener('crow-whiteboard-ready',function(){ mountCollaborativeEditors(); });
   function boot(){
     if(!cloud()){setTimeout(boot,20);return;}
     render();
@@ -4908,7 +5092,7 @@
       /* A shared note's `body` can trail what its editor says, and a version
          is only worth keeping if it holds the words people actually see. */
       return { project:{ title:from.project.title, sections:from.project.sections||[] },
-        blocks:(from.blocks||[]).map(function(block){ var copy=Object.assign({},block,{ body:currentBody(block) }); delete copy.pending; return copy; }),
+        blocks:(from.blocks||[]).map(function(block){ var copy=withCurrentCopy(block); delete copy.pending; return copy; }),
         rows:rows };
     },
     liveSnapshot:liveSnapshot,

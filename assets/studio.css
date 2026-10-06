@@ -534,6 +534,33 @@
 .studio-block.callout .block-kicker{ color:var(--gold); }
 .studio-block.code .block-kicker{ color:var(--ink-3); }
 
+/* ---------- whiteboard: Excalidraw in a frame, shared live ---------- */
+.studio-block.whiteboard .block-kicker{ color:var(--ink-3); }
+.whiteboard-frame{ position:relative; height:var(--board-height,480px); margin-top:8px; border:1px solid var(--glass-edge); border-radius:10px; overflow:hidden; background:var(--well); transition:height .2s ease; }
+.whiteboard-board{ position:absolute; inset:0; }
+.whiteboard-loading{ display:grid; place-items:center; height:100%; margin:0; color:var(--ink-3); font-size:13px; font-weight:700; }
+/* Until it is clicked into, the board lets the wheel scroll the page. */
+.whiteboard-frame:not(.is-active) .whiteboard-board{ pointer-events:none; }
+.whiteboard-activate{ position:absolute; inset:0; z-index:3; display:grid; place-items:center; border:0; background:transparent; cursor:pointer; }
+.whiteboard-activate span{ padding:7px 12px; border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--ink-2); font-size:12px; font-weight:800; opacity:0; transform:translateY(3px); transition:opacity .15s ease, transform .15s ease; box-shadow:0 8px 20px #0005; }
+.whiteboard-activate:hover span,.whiteboard-activate:focus-visible span{ opacity:1; transform:none; }
+.whiteboard-frame.is-active .whiteboard-activate{ display:none; }
+.whiteboard-frame.is-active{ border-color:color-mix(in srgb,var(--brand) 55%,var(--glass-edge)); }
+.whiteboard-tools{ display:flex; justify-content:flex-end; margin-top:6px; }
+.whiteboard-full-button{ border:0; background:transparent; color:var(--brand); padding:4px 2px; font-family:inherit; font-weight:800; font-size:12.5px; }
+.whiteboard-notice{ margin:6px 0 0; color:var(--warn,#e0a42d); font-size:12.5px; font-weight:700; }
+/* Full screen: the card covers the window, the board fills it. */
+.has-board-full{ overflow:hidden; }
+/* The main area's frosted backdrop and isolation keep a fixed card inside it,
+   below the site header; both go while a board is full screen. */
+.has-board-full .studio-main{ -webkit-backdrop-filter:none; backdrop-filter:none; isolation:auto; }
+.studio-block.whiteboard-full{ position:fixed; inset:0; z-index:90; display:flex; flex-direction:column; margin:0; padding:14px 16px 12px; border-radius:0; background:var(--ground,var(--card)); }
+.studio-block.whiteboard-full .whiteboard-frame{ flex:1 1 auto; height:auto; }
+.studio-block.whiteboard-full .drag-handle,.studio-block.whiteboard-full .width-grip,.studio-block.whiteboard-full .block-delete,.studio-block.whiteboard-full .block-more,.studio-block.whiteboard-full .upgrade-comment{ display:none; }
+/* The site's own focus ring is larger than Excalidraw's controls expect. */
+.whiteboard-board .excalidraw :focus-visible{ outline-offset:0; }
+@media (prefers-reduced-motion: reduce){ .whiteboard-frame,.whiteboard-activate span{ transition:none; } }
+
 /* ---------- contents: the headings of a section, one click away ---------- */
 .studio-block.toc .block-kicker{ color:var(--ink-3); }
 .contents-list{ display:grid; gap:1px; margin-top:6px; }

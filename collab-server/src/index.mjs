@@ -20,6 +20,9 @@ import TableCell from '@tiptap/extension-table-cell';
 import { prosemirrorToYXmlFragment } from 'y-prosemirror';
 
 const port = Number(process.env.PORT || 1234);
+// Block types that are shared live documents: a note's text, a whiteboard's
+// drawing. Anything else is turned away.
+const SHARED_TYPES = ['note', 'whiteboard'];
 const host = process.env.HOST || '127.0.0.1';
 const snapshotDelayMs = 900;
 const maxDocumentBytes = 850 * 1024; // safely under Firestore's 1 MiB limit
@@ -59,7 +62,7 @@ async function authorize(token, documentName) {
   const role = project.exists ? (project.get('members') || {})[decoded.uid] : null;
   if (!['owner', 'editor', 'viewer'].includes(role)) throw new Error('You no longer have access to this project.');
   const block = await db.collection('projects').doc(projectId).collection('blocks').doc(blockId).get();
-  if (!block.exists || block.get('type') !== 'note') throw new Error('This collaborative note no longer exists.');
+  if (!block.exists || !SHARED_TYPES.includes(block.get('type'))) throw new Error('This shared block no longer exists.');
   return { uid: decoded.uid, role, projectId, blockId };
 }
 
@@ -90,8 +93,9 @@ async function initialDocument(projectId, blockId) {
   // before clients synchronize, so two people opening an old note cannot
   // independently seed and duplicate its contents.
   const legacy = await db.collection('projects').doc(projectId).collection('blocks').doc(blockId).get();
-  const html = legacy.exists ? String(legacy.get('body') || '') : '';
-  const doc = seedDocument(html);
+  const doc = legacy.exists && legacy.get('type') === 'whiteboard'
+    ? seedBoard(String(legacy.get('board') || ''))
+    : seedDocument(legacy.exists ? String(legacy.get('body') || '') : '');
   // Stored at once. A note nobody has edited yet is not a change, so Hocuspocus
   // unloads it without storing when the last person leaves; the next open then
   // seeded it again, and anyone still holding the first seed merged the two,
@@ -120,10 +124,26 @@ function seedDocument(html) {
   return doc;
 }
 
+/* A whiteboard is a map of drawing elements by id, made from the block's saved
+   copy. Seeded under an id taken from that copy, for the same reason as a note. */
+function seedBoard(json) {
+  const doc = new Y.Doc();
+  doc.clientID = seedClientId(json);
+  let elements = [];
+  try { elements = JSON.parse(json || '[]'); } catch (error) { elements = []; }
+  const map = doc.getMap('elements');
+  doc.transact(() => {
+    (Array.isArray(elements) ? elements : []).forEach((element) => {
+      if (element && typeof element.id === 'string') map.set(element.id, element);
+    });
+  });
+  return doc;
+}
+
 async function writeSnapshot(projectId, blockId, document) {
   const update = Y.encodeStateAsUpdate(document);
   if (update.byteLength > maxDocumentBytes) {
-    throw new Error('This note is too large to save. Split it into smaller notes.');
+    throw new Error('This block is too large to save. Split it into smaller ones.');
   }
   await snapshotRef(projectId, blockId).set({
     update: Buffer.from(update),
@@ -137,7 +157,7 @@ async function storeSnapshot(documentName, document) {
   // A block can be deleted while a browser still has its document open. Do
   // not revive it as an orphan collaboration snapshot on disconnect.
   const block = await db.collection('projects').doc(projectId).collection('blocks').doc(blockId).get();
-  if (!block.exists || block.get('type') !== 'note') return;
+  if (!block.exists || !SHARED_TYPES.includes(block.get('type'))) return;
   await writeSnapshot(projectId, blockId, document);
 }
 

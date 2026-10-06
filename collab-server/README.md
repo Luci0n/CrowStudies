@@ -33,6 +33,17 @@ scaled to multiple instances, add Redis (or a Hocuspocus-compatible shared
 backend) before doing so; two isolated Yjs server memories must not accept the
 same document independently.
 
+## What it shares
+
+Two block types are shared live documents, named `project:<id>:block:<id>`:
+
+- `note`: a Tiptap/ProseMirror document in the XML fragment `default`, seeded
+  from the block's `body` HTML the first time it is opened.
+- `whiteboard`: Excalidraw elements in the map `elements` (element id →
+  element), seeded from the block's `board` JSON the first time it is opened.
+
+Any other block type is turned away.
+
 ## Updating
 
 Deploy this server **before** the website whenever both change. The site's
