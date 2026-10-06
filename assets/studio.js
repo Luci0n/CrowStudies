@@ -610,6 +610,7 @@
     var width=Math.round(Number(copy.width));
     if(width>=1&&width<=48)copy.width=width; else delete copy.width;
     copy.row=typeof copy.row==='string'?copy.row:'';
+    if(copy.type==='toc'&&CONTENTS_SHOW.map(function(choice){ return choice[0]; }).indexOf(copy.contentsShow)<0)copy.contentsShow='both';
     if(copy.type==='database'){
       if(!Array.isArray(copy.props))copy.props=[];
       if(!Array.isArray(copy.views))copy.views=[];
@@ -1684,6 +1685,14 @@
      of its own: it is drawn from the blocks each time, so it cannot fall out
      of step with them. */
   var CONTENTS_FROM=['note','idea','callout','quote'], contentsTimer=null;
+  /* What a contents block lists. Each one keeps its own choice. */
+  var CONTENTS_SHOW=[['both','Titles and headings'],['titles','Titles only'],['headings','Headings only']];
+  function contentsShowHTML(block){
+    var show=block.contentsShow||'both';
+    return '<label class="contents-show"><span>Show</span><select class="status-select" data-contents-show>'
+      +CONTENTS_SHOW.map(function(choice){ return '<option value="'+choice[0]+'"'+(show===choice[0]?' selected':'')+'>'+choice[1]+'</option>'; }).join('')
+      +'</select></label>';
+  }
   function headingText(node){ return String(node.textContent||'').replace(/\s+/g,' ').trim(); }
   /* A block on no page shows only under All pages, except a contents block:
      it covers every page of its section, so it is on every one of them. */
@@ -1698,13 +1707,14 @@
     var sources=blocks.map(function(other,at){ return { block:other, at:at }; }).filter(function(item){
       return item.block.type!=='toc'&&(item.block.sectionId||'')===sectionId;
     }).sort(function(a,b){ return (placeOf(a.block)-placeOf(b.block))||(a.at-b.at); });
-    var entries=[];
+    var show=block.contentsShow||'both', entries=[];
     sources.forEach(function(item){
       var other=item.block, pageId=other.pageId||'';
-      var titled=!implicitBlockTitle(other.title);
+      /* With headings only, a title is left out and its headings move up. */
+      var titled=show!=='headings'&&!implicitBlockTitle(other.title);
       /* index -1 stands for the block itself rather than a heading in it. */
       if(titled)entries.push({ blockId:other.id, pageId:pageId, index:-1, depth:0, text:String(other.title).replace(/\s+/g,' ').trim() });
-      if(CONTENTS_FROM.indexOf(other.type)<0)return;
+      if(show==='titles'||CONTENTS_FROM.indexOf(other.type)<0)return;
       var holder=document.createElement('template'); holder.innerHTML=currentBody(other);
       var found=[];
       Array.prototype.forEach.call(holder.content.querySelectorAll('h1,h2,h3'),function(heading,index){
@@ -1724,7 +1734,11 @@
     var entries=contentsEntries(block);
     if(!entries.length){
       var frozen=readOnly||!canEdit();
-      return '<p class="contents-empty">'+(frozen?'Nothing in this section yet.':'The titles of this section’s blocks appear here, with the H1, H2 and H3 headings inside its notes beneath them.')+'</p>';
+      var show=block.contentsShow||'both';
+      var hint=show==='titles'?'The titles of this section’s blocks appear here.'
+        :show==='headings'?'The H1, H2 and H3 headings in this section’s notes appear here.'
+        :'The titles of this section’s blocks appear here, with the H1, H2 and H3 headings inside its notes beneath them.';
+      return '<p class="contents-empty">'+(frozen?'Nothing in this section yet.':hint)+'</p>';
     }
     var titled={}; sectionPages(block.sectionId||'').forEach(function(page){ titled[page.id]=page.title; });
     /* Page names are only worth showing when the entries are on more than one. */
@@ -3440,7 +3454,7 @@
     /* Code is text, not markup: it is kept and shown as what was typed, so a
        stray angle bracket stays a stray angle bracket. */
     if(block.type==='database') body='<div class="db" data-db-table></div>';
-    if(block.type==='toc') body='<nav class="contents-list" data-contents aria-label="Contents of this section">'+contentsHTML(block)+'</nav>';
+    if(block.type==='toc') body=(frozen?'':contentsShowHTML(block))+'<nav class="contents-list" data-contents aria-label="Contents of this section">'+contentsHTML(block)+'</nav>';
     if(block.type==='code'){
       /* Leading empty lines are an editor artefact, never useful source. */
       var written=plainText(block.body).replace(/^\n+/,''), language=String(block.codeLanguage||'plain');
@@ -4044,7 +4058,7 @@
         render();
         await cloud().patchBlock(activeProject.id,block.id,{imageUrl:'',imageSlot:''});
         if(slot)cloud().deleteProjectImage(activeProject.id,slot);
-      };var status=card.querySelector('[data-status]');if(status)status.onchange=function(e){block.status=e.target.value;queuedSave(block,true);};var ideaStage=card.querySelector('[data-idea-stage]');if(ideaStage)ideaStage.onchange=function(e){block.ideaStage=e.target.value;queuedSave(block,true);};card.querySelectorAll('[data-task-check]').forEach(function(input){input.onchange=function(e){block.items[+e.target.dataset.taskCheck].done=e.target.checked;queuedSave(block,true);};});card.querySelectorAll('[data-task-text]').forEach(function(input){input.oninput=function(e){block.items[+e.target.dataset.taskText].text=e.target.value;queuedSave(block);};});var addTask=card.querySelector('[data-add-task]');if(addTask)addTask.onclick=function(){block.items.push({text:'',done:false});render();queuedSave(block,true);};var date=card.querySelector('[data-date]');if(date)date.onchange=function(e){block.due=e.target.value;queuedSave(block,true);};var remove=card.querySelector('[data-delete]');if(remove)remove.onclick=async function(){if(!await askConfirm('Delete block?', 'This block will be removed from the project.', 'Delete block'))return;var imageSlot=block.imageSlot;blocks=blocks.filter(function(b){return b.id!==block.id;});render();if(block.type==='database')await cloud().removeAllRows(activeProject.id,block.id);await cloud().deleteBlock(activeProject.id,block.id);if(imageSlot)cloud().deleteProjectImage(activeProject.id,imageSlot);};card.querySelectorAll('[data-format]').forEach(function(button){button.onmousedown=function(e){e.preventDefault();body.focus();if(button.dataset.format==='formatBlock')applyBlockTag(body,(button.dataset.value||'P').toUpperCase());else document.execCommand(button.dataset.format,false,null);tidyHeadings(body);block.body=cleanHTML(body.innerHTML);queuedSave(block,false,{body:block.body});refreshContentsSoon();};});});
+      };var status=card.querySelector('[data-status]');if(status)status.onchange=function(e){block.status=e.target.value;queuedSave(block,true);};var contentsShow=card.querySelector('[data-contents-show]');if(contentsShow)contentsShow.onchange=function(e){block.contentsShow=e.target.value;queuedSave(block,true,{contentsShow:block.contentsShow});refreshContents();};var ideaStage=card.querySelector('[data-idea-stage]');if(ideaStage)ideaStage.onchange=function(e){block.ideaStage=e.target.value;queuedSave(block,true);};card.querySelectorAll('[data-task-check]').forEach(function(input){input.onchange=function(e){block.items[+e.target.dataset.taskCheck].done=e.target.checked;queuedSave(block,true);};});card.querySelectorAll('[data-task-text]').forEach(function(input){input.oninput=function(e){block.items[+e.target.dataset.taskText].text=e.target.value;queuedSave(block);};});var addTask=card.querySelector('[data-add-task]');if(addTask)addTask.onclick=function(){block.items.push({text:'',done:false});render();queuedSave(block,true);};var date=card.querySelector('[data-date]');if(date)date.onchange=function(e){block.due=e.target.value;queuedSave(block,true);};var remove=card.querySelector('[data-delete]');if(remove)remove.onclick=async function(){if(!await askConfirm('Delete block?', 'This block will be removed from the project.', 'Delete block'))return;var imageSlot=block.imageSlot;blocks=blocks.filter(function(b){return b.id!==block.id;});render();if(block.type==='database')await cloud().removeAllRows(activeProject.id,block.id);await cloud().deleteBlock(activeProject.id,block.id);if(imageSlot)cloud().deleteProjectImage(activeProject.id,imageSlot);};card.querySelectorAll('[data-format]').forEach(function(button){button.onmousedown=function(e){e.preventDefault();body.focus();if(button.dataset.format==='formatBlock')applyBlockTag(body,(button.dataset.value||'P').toUpperCase());else document.execCommand(button.dataset.format,false,null);tidyHeadings(body);block.body=cleanHTML(body.innerHTML);queuedSave(block,false,{body:block.body});refreshContentsSoon();};});});
     root.querySelectorAll('[data-block]').forEach(function(card){
       var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0];
       if(block&&block.type==='lesson')bindLessonCard(card,block);
