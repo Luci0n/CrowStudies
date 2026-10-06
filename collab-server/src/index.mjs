@@ -67,11 +67,22 @@ function snapshotRef(projectId, blockId) {
   return db.collection('projects').doc(projectId).collection('collabDocuments').doc(blockId);
 }
 
+/* The Admin SDK reads a bytes field back as a Node Buffer. toUint8Array() is
+   the browser SDK's Bytes type, and calling it here threw on every note that
+   already had a snapshot: a note opened once could never be opened again. */
+function storedBytes(value) {
+  if (!value) return null;
+  if (value instanceof Uint8Array) return value;
+  if (typeof value.toUint8Array === 'function') return value.toUint8Array();
+  return null;
+}
+
 async function initialDocument(projectId, blockId) {
   const snapshot = await snapshotRef(projectId, blockId).get();
-  if (snapshot.exists && snapshot.get('update')) {
+  const stored = snapshot.exists ? storedBytes(snapshot.get('update')) : null;
+  if (stored) {
     const doc = new Y.Doc();
-    Y.applyUpdate(doc, snapshot.get('update').toUint8Array());
+    Y.applyUpdate(doc, stored);
     return doc;
   }
 
