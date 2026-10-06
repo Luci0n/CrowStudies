@@ -424,8 +424,11 @@
     var byId={};
     blocks.forEach(function(block){ byId[block.id]=block; });
     var adopted=next.map(function(fresh){
-      var held=inFlight[fresh.id];
-      if(held)fresh=Object.assign({},fresh,held);
+      /* The same goes for an edit still waiting out its short save delay: it
+         has not even left yet, and a snapshot taken meanwhile would put the
+         old text back into the card being typed in. */
+      var held=inFlight[fresh.id], waiting=savePatches[fresh.id];
+      if(held||waiting)fresh=Object.assign({},fresh,held,waiting);
       var mine=byId[fresh.id];
       if(!mine)return fresh;
       Object.keys(mine).forEach(function(key){ if(!(key in fresh))delete mine[key]; });
@@ -556,9 +559,9 @@
       left:Math.min(picked.from.column,picked.to.column), right:Math.max(picked.from.column,picked.to.column)
     };
   }
-  async function askName(title, placeholder, action){
-    if (window.CrowUI) return window.CrowUI.prompt({title:title,body:'Choose a clear name. You can edit it later.',placeholder:placeholder,confirmLabel:action});
-    return prompt(title);
+  async function askName(title, placeholder, action, value){
+    if (window.CrowUI) return window.CrowUI.prompt({title:title,body:'Choose a clear name. You can edit it later.',placeholder:placeholder,confirmLabel:action,value:value||''});
+    return prompt(title, value||'');
   }
   async function askConfirm(title, body, action){
     if (window.CrowUI) return window.CrowUI.confirm({title:title,body:body,confirmLabel:action,danger:true});
@@ -568,6 +571,30 @@
   function findSection(sectionId){ return (activeProject.sections||[]).filter(function(s){return s.id===sectionId;})[0]||null; }
   function sectionPages(sectionId){ var section=findSection(sectionId); return section&&Array.isArray(section.pages)?section.pages:[]; }
   function sectionLocked(sectionId){ var section=findSection(sectionId); return !!(section&&section.locked); }
+  /* Renaming and moving a section only touch the project's section list:
+     blocks point at a section by id, so they follow it without a save. The
+     change is drawn before it is saved, so the project's own echo of the
+     save matches what is on screen and does not redraw over the motion. */
+  async function renameSection(sectionId){
+    var section=findSection(sectionId);
+    if(!section)return false;
+    var title=await askName('Rename section','e.g. Week one','Rename',section.title);
+    if(!title||!title.trim()||title.trim()===section.title)return false;
+    section.title=title.trim();
+    renderAnimated();
+    await cloud().saveProject(activeProject.id,{sections:activeProject.sections});
+    return true;
+  }
+  async function moveSection(sectionId, step){
+    var sections=activeProject.sections||[], from=sections.findIndex(function(s){return s.id===sectionId;}), to=from+step;
+    if(from<0||to<0||to>=sections.length)return false;
+    var moved=sections.splice(from,1)[0];
+    sections.splice(to,0,moved);
+    activeProject.sections=sections;
+    renderAnimated();
+    await cloud().saveProject(activeProject.id,{sections:sections});
+    return true;
+  }
   function normalizeBlock(block){
     var copy=Object.assign({},block), supported=['note','tasks','status','milestone','schedule','idea','lesson','table','image','quote','callout','code','database','toc'];
     if(copy.type==='task')copy.type='tasks';
@@ -854,10 +881,107 @@
       else done();
     }catch(error){ done(); render(); }
   }
+  /* Switching section or page, or adding, renaming or moving a section,
+     redraws the whole project, which used to make everything jump straight
+     to its new place. This redraws the same way and then plays back only
+     what helps you follow the change, using nothing but transform and
+     opacity so the browser can run it off the main thread:
+     - a new section or page: the highlight slides from the old chip to the
+       new one, and the blocks fade in together as one layer;
+     - the section list itself changing: chips that stayed slide to their
+       new place, and new ones fade in.
+     Blocks are not flown around the page one by one; tall cards crossing
+     each other read as lag, not as motion. Anyone who has asked for less
+     motion gets the plain redraw. */
+  var MOTION_EASE='cubic-bezier(.2,.8,.2,1)';
+  function motionChips(){
+    var chips={};
+    root.querySelectorAll('.section-bar>*,.page-bar>[data-page],.section-settings>[data-section-row]').forEach(function(el){
+      var chip=el.matches('[data-section],[data-page]')?el:el.querySelector('[data-section]');
+      var key=el.dataset.sectionRow?'row:'+el.dataset.sectionRow:chip&&chip.dataset.page!==undefined?'page:'+chip.dataset.page:chip?'section:'+chip.dataset.section:'';
+      if(key)chips[key]={ el:el, rect:el.getBoundingClientRect() };
+    });
+    return chips;
+  }
+  function activeChip(selector){
+    var chip=root.querySelector(selector);
+    return chip?{ key:chip.dataset.section!==undefined?'section:'+chip.dataset.section:'page:'+chip.dataset.page, rect:chip.getBoundingClientRect() }:null;
+  }
+  function slideHighlight(from, chip){
+    /* One pill, laid under the chips, travels from the old choice to the new
+       one. The new chip keeps its own fill hidden until the pill arrives. */
+    var bar=chip.closest('.section-bar,.page-bar'), box=bar.getBoundingClientRect(), to=chip.getBoundingClientRect();
+    var pill=document.createElement('span');
+    pill.className='choice-pill '+(bar.classList.contains('page-bar')?'is-page':'is-section');
+    pill.setAttribute('aria-hidden','true');
+    pill.style.cssText='left:'+(to.left-box.left)+'px;top:'+(to.top-box.top)+'px;width:'+to.width+'px;height:'+to.height+'px;';
+    bar.insertBefore(pill,bar.firstChild);
+    chip.classList.add('pill-target');
+    var sx=from.width/to.width, sy=from.height/to.height;
+    var slide=pill.animate([
+      { transform:'translate('+(from.left-to.left)+'px,'+(from.top-to.top)+'px) scale('+sx+','+sy+')' },
+      { transform:'none' }
+    ],{ duration:240, easing:MOTION_EASE });
+    var done=function(){ chip.classList.remove('pill-target'); if(pill.parentNode)pill.parentNode.removeChild(pill); };
+    slide.onfinish=slide.oncancel=done;
+  }
+  function renderAnimated(){
+    var still=false;
+    try{ still=window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(error){}
+    if(still||typeof Element.prototype.animate!=='function'){ render(); return; }
+    var chipsBefore=motionChips();
+    var sectionBefore=activeChip('.section-bar .section-filter.active'), pageBefore=activeChip('.page-bar .page-filter.active');
+    var hadPageBar=!!root.querySelector('.page-bar'), hadLockNote=!!root.querySelector('.section-lock-note');
+    render();
+    var sectionAfter=activeChip('.section-bar .section-filter.active'), pageAfter=activeChip('.page-bar .page-filter.active');
+    var switched=!!sectionBefore&&!!sectionAfter&&(sectionBefore.key!==sectionAfter.key||(!!pageBefore&&!!pageAfter&&pageBefore.key!==pageAfter.key));
+    /* Every block card rises in from the stylesheet whenever it is drawn,
+       each on its own. Here the blocks either did not change or arrive as one
+       layer below, so the per-card rise is stopped. */
+    root.querySelectorAll('.block-grid [data-block]').forEach(function(card){
+      card.getAnimations().forEach(function(motion){ if(motion.animationName==='studio-new')motion.cancel(); });
+    });
+    if(switched){
+      if(sectionBefore.key!==sectionAfter.key){
+        var newSection=root.querySelector('.section-bar .section-filter.active');
+        if(newSection&&chipsBefore[sectionBefore.key])slideHighlight(sectionBefore.rect,newSection);
+      }else{
+        var newPage=root.querySelector('.page-bar .page-filter.active');
+        if(newPage)slideHighlight(pageBefore.rect,newPage);
+      }
+      root.querySelectorAll('.block-grid,.add-row').forEach(function(part){
+        part.animate([{ opacity:0, transform:'translateY(6px)' },{ opacity:1, transform:'none' }],{ duration:200, easing:MOTION_EASE });
+      });
+    }
+    var bar=root.querySelector('.page-bar');
+    if(bar&&!hadPageBar)bar.animate([{ opacity:0, transform:'translateY(-4px)' },{ opacity:1, transform:'none' }],{ duration:200, easing:MOTION_EASE });
+    var note=root.querySelector('.section-lock-note');
+    if(note&&!hadLockNote)note.animate([{ opacity:0 },{ opacity:1 }],{ duration:180, easing:'ease-out' });
+    /* The chips themselves are small and sit in one row, so moving them
+       is cheap and shows exactly what was reordered. */
+    var chipsAfter=motionChips();
+    Object.keys(chipsAfter).forEach(function(key){
+      var now=chipsAfter[key], was=chipsBefore[key];
+      if(!was){
+        if(Object.keys(chipsBefore).length&&!(key.indexOf('page:')===0&&!hadPageBar))now.el.animate([{ opacity:0, transform:'scale(.92)' },{ opacity:1, transform:'none' }],{ duration:200, easing:MOTION_EASE });
+        return;
+      }
+      var dx=was.rect.left-now.rect.left, dy=was.rect.top-now.rect.top;
+      if(Math.abs(dx)>.5||Math.abs(dy)>.5)now.el.animate([{ transform:'translate('+dx+'px,'+dy+'px)' },{ transform:'none' }],{ duration:240, easing:MOTION_EASE });
+    });
+  }
   function render(){
-    /* A structural redraw closes open document providers. Normal remote note
-       edits are transported by Yjs and never redraw Studio or rewrite HTML. */
-    if(window.CrowCollab&&window.CrowCollab.destroyAll)window.CrowCollab.destroyAll();
+    /* Shared notes keep their live editors through a redraw of the same
+       project: mountCollaborativeEditors hands each one to the card drawn for
+       its note, so changing section, page or mode neither reconnects them nor
+       flashes the stored text. Anything else (another project, an old version
+       on screen) closes them. Normal remote note edits are transported by Yjs
+       and never redraw Studio or rewrite HTML. */
+    if(window.CrowCollab){
+      var keep=activeProject&&!previewing()?'project:'+activeProject.id+':':'';
+      if(window.CrowCollab.keepOnly)window.CrowCollab.keepOnly(keep);
+      else if(window.CrowCollab.destroyAll)window.CrowCollab.destroyAll();
+    }
     shownBlocks=blocksSignature(blocks);
     shownProject=projectSignature(activeProject);
     shownList=listSignature(window.__crowProjects||[]);
@@ -921,6 +1045,7 @@
          already typed into it has to have been saved first, and it is not
          taken out from under someone still typing. */
       if(fresh[block.id]&&(saveTimers[block.id]||inFlight[block.id]||body.contains(document.activeElement))){ wait(); return; }
+      var madeHere=!!fresh[block.id];
       delete fresh[block.id];
       /* The plain toolbar stays until the shared one exists, so the row is
          never missing from the card in between. */
@@ -944,6 +1069,16 @@
         onSynced:function(){
           synced=true; clearTimeout(slow);
           card.classList.remove('collab-waiting','collab-offline');
+          /* Someone else's Studio sees a new note the moment it exists, and
+             opening it there has the server make its shared document from
+             `body` while that is still empty. What its maker typed before
+             their own editor opened was then nowhere but `body`, and vanished
+             when the empty document arrived. Its maker puts it in. */
+          if(madeHere){
+            var name=noteDocument(block), shared=window.CrowCollab.html(name)||'';
+            if(!plainText(shared).trim()&&plainText(block.body).trim())
+              window.CrowCollab.replace(name,block.body,{ user:cloud().user }).catch(function(error){ console.warn('A new note could not take its first words',error); });
+          }
           refreshContents();
         },
         onLocalChange:function(html){
@@ -956,6 +1091,13 @@
            card still on the page tries again, once its turn comes round. */
         if(!entry){ clearTimeout(slow); card.classList.remove('collab-waiting'); if(body.isConnected)setTimeout(mountCollaborativeEditors,400); return; }
         if(oldTools)oldTools.hidden=true;
+        /* A redraw hands this card the editor the last one had. If that one
+           had already caught up, it will not say so again. */
+        if(entry.synced){
+          synced=true; clearTimeout(slow);
+          card.classList.remove('collab-waiting');
+          card.classList.toggle('collab-offline',!!entry.status&&entry.status!=='connected');
+        }
       }).catch(function(error){
         clearTimeout(slow); card.classList.remove('collab-waiting');
         body.dataset.collabActive='';
@@ -970,7 +1112,11 @@
     });
   }
   function sectionMenuHTML(section){
-    return '<div class="section-popover"><button data-add-page="'+section.id+'">Add page</button>'
+    var sections=activeProject.sections||[], at=sections.indexOf(section);
+    return '<div class="section-popover"><button data-rename-section="'+section.id+'">Rename section</button>'
+      +(at>0?'<button data-move-section="'+section.id+'" data-step="-1">Move left</button>':'')
+      +(at>-1&&at<sections.length-1?'<button data-move-section="'+section.id+'" data-step="1">Move right</button>':'')
+      +'<button data-add-page="'+section.id+'">Add page</button>'
       +'<button data-lock-section="'+section.id+'">'+(section.locked?'Unlock section':'Lock section')+'</button>'
       +'<button class="danger" data-remove-section="'+section.id+'">Delete section</button></div>';
   }
@@ -1215,7 +1361,7 @@
   }
   function settingsHTML(){
     var sections=activeProject.sections||[];
-    return '<div class="settings-top"><button class="btn ghost sm" data-settings-back>← Back to project</button><h1>Project settings</h1><p>Change the project details and organize its sections.</p></div><section class="settings-card"><h2>Project name</h2><div class="settings-inline"><input class="dialog-input" data-project-name value="'+esc(activeProject.title)+'"><button class="btn sm" data-save-project-name>Save</button></div></section><section class="settings-card"><h2>Sections</h2><p>Deleting a section keeps its blocks and moves them to Unsorted.</p><div class="section-settings">'+(sections.length?sections.map(function(s){return '<div><span>'+esc(s.title)+'</span><button class="btn ghost sm danger-action" data-delete-section="'+s.id+'">Delete</button></div>';}).join(''):'<p>No custom sections yet.</p>')+'</div></section>'+shareCardHTML()+'<section class="settings-card"><h2>Import and export</h2><p>Export writes this project, its sections, and every block to one .json file. Importing always creates a new project, so nothing here is overwritten.</p><div class="settings-inline"><button class="btn sm" data-export-project>Export project</button><button class="btn ghost sm" data-import-project>Import a project</button></div></section>'+(myRole()==='owner'
+    return '<div class="settings-top"><button class="btn ghost sm" data-settings-back>← Back to project</button><h1>Project settings</h1><p>Change the project details and organize its sections.</p></div><section class="settings-card"><h2>Project name</h2><div class="settings-inline"><input class="dialog-input" data-project-name value="'+esc(activeProject.title)+'"><button class="btn sm" data-save-project-name>Save</button></div></section><section class="settings-card"><h2>Sections</h2><p>Rename sections or change their order here. Deleting a section keeps its blocks and moves them to Unsorted.</p><div class="section-settings">'+(sections.length?sections.map(function(s,i){return '<div data-section-row="'+s.id+'"><span>'+esc(s.title)+'</span><span class="section-settings-actions"><button class="btn ghost sm" data-move-section="'+s.id+'" data-step="-1" aria-label="Move '+esc(s.title)+' up"'+(i===0?' disabled':'')+'>↑</button><button class="btn ghost sm" data-move-section="'+s.id+'" data-step="1" aria-label="Move '+esc(s.title)+' down"'+(i===sections.length-1?' disabled':'')+'>↓</button><button class="btn ghost sm" data-rename-section="'+s.id+'">Rename</button><button class="btn ghost sm danger-action" data-delete-section="'+s.id+'">Delete</button></span></div>';}).join(''):'<p>No custom sections yet.</p>')+'</div></section>'+shareCardHTML()+'<section class="settings-card"><h2>Import and export</h2><p>Export writes this project, its sections, and every block to one .json file. Importing always creates a new project, so nothing here is overwritten.</p><div class="settings-inline"><button class="btn sm" data-export-project>Export project</button><button class="btn ghost sm" data-import-project>Import a project</button></div></section>'+(myRole()==='owner'
       ?'<section class="settings-card settings-danger"><h2>Danger zone</h2><p>Delete this project and every block inside it, for everyone it is shared with.</p><button class="btn bad sm" data-delete-project>Delete project</button></section>'
       :'<section class="settings-card"><h2>Leave this project</h2><p>It stays as it is for everyone else.</p><button class="btn ghost sm danger-action" data-leave-project>Leave project</button></section>')+'';
   }
@@ -3767,9 +3913,11 @@
     layout();
   }
   function bindSectionMenu(scope){
-    scope.querySelectorAll('[data-add-page]').forEach(function(button){button.onclick=async function(){var title=await askName('New page','e.g. Basics','Add page');if(!title||!title.trim())return;var section=findSection(button.dataset.addPage);section.pages=(section.pages||[]).concat({id:id(),title:title.trim()});activeSection=section.id;activePage=section.pages[section.pages.length-1].id;openSectionMenu='';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};});
-    scope.querySelectorAll('[data-lock-section]').forEach(function(button){button.onclick=async function(){var section=findSection(button.dataset.lockSection);section.locked=!section.locked;openSectionMenu='';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};});
-    scope.querySelectorAll('[data-remove-section]').forEach(function(button){button.onclick=async function(){var section=findSection(button.dataset.removeSection);if(!await askConfirm('Delete section?', 'Its blocks will stay in the project under Unsorted.', 'Delete section'))return;blocks.forEach(function(block){if(block.sectionId===section.id){block.sectionId='';block.pageId='';cloud().saveBlock(activeProject.id,block.id,block).catch(function(){});}});activeProject.sections=activeProject.sections.filter(function(item){return item.id!==section.id;});activeSection='all';activePage='all';openSectionMenu='';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};});
+    scope.querySelectorAll('[data-rename-section]').forEach(function(button){button.onclick=async function(){openSectionMenu='';closeSectionMenu();await renameSection(button.dataset.renameSection);};});
+    scope.querySelectorAll('[data-move-section]').forEach(function(button){button.onclick=async function(){openSectionMenu='';if(!await moveSection(button.dataset.moveSection,Number(button.dataset.step)))closeSectionMenu();};});
+    scope.querySelectorAll('[data-add-page]').forEach(function(button){button.onclick=async function(){var title=await askName('New page','e.g. Basics','Add page');if(!title||!title.trim())return;var section=findSection(button.dataset.addPage);section.pages=(section.pages||[]).concat({id:id(),title:title.trim()});activeSection=section.id;activePage=section.pages[section.pages.length-1].id;openSectionMenu='';renderAnimated();await cloud().saveProject(activeProject.id,{sections:activeProject.sections});};});
+    scope.querySelectorAll('[data-lock-section]').forEach(function(button){button.onclick=async function(){var section=findSection(button.dataset.lockSection);section.locked=!section.locked;openSectionMenu='';renderAnimated();await cloud().saveProject(activeProject.id,{sections:activeProject.sections});};});
+    scope.querySelectorAll('[data-remove-section]').forEach(function(button){button.onclick=async function(){var section=findSection(button.dataset.removeSection);if(!await askConfirm('Delete section?', 'Its blocks will stay in the project under Unsorted.', 'Delete section'))return;blocks.forEach(function(block){if(block.sectionId===section.id){block.sectionId='';block.pageId='';cloud().saveBlock(activeProject.id,block.id,block).catch(function(){});}});activeProject.sections=activeProject.sections.filter(function(item){return item.id!==section.id;});activeSection='all';activePage='all';openSectionMenu='';renderAnimated();await cloud().saveProject(activeProject.id,{sections:activeProject.sections});};});
   }
   function bind(){
     /* The list and its handle belong to the shell, not to the project view, so
@@ -3796,7 +3944,9 @@
     if(view==='settings'){
       root.querySelector('[data-settings-back]').onclick=function(){view='project';renderSwitch();};
       root.querySelector('[data-save-project-name]').onclick=async function(){var input=root.querySelector('[data-project-name]'), title=input.value.trim();if(!title)return;activeProject.title=title;await cloud().saveProject(activeProject.id,{title:title,sections:activeProject.sections||[]});await loadProjects(activeProject.id);view='settings';render();};
-      root.querySelectorAll('[data-delete-section]').forEach(function(button){button.onclick=async function(){var sectionId=button.dataset.deleteSection, section=(activeProject.sections||[]).filter(function(s){return s.id===sectionId;})[0];if(!await askConfirm('Delete section?', '“'+(section?section.title:'This section')+'” will be removed. Its blocks will stay in the project under Unsorted.', 'Delete section'))return;blocks.forEach(function(block){if(block.sectionId===sectionId){block.sectionId='';cloud().saveBlock(activeProject.id,block.id,block).catch(function(){});}});activeProject.sections=(activeProject.sections||[]).filter(function(s){return s.id!==sectionId;});if(activeSection===sectionId)activeSection='all';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};});
+      root.querySelectorAll('[data-rename-section]').forEach(function(button){button.onclick=async function(){await renameSection(button.dataset.renameSection);};});
+      root.querySelectorAll('[data-move-section]').forEach(function(button){button.onclick=async function(){button.disabled=true;if(!await moveSection(button.dataset.moveSection,Number(button.dataset.step)))button.disabled=false;};});
+      root.querySelectorAll('[data-delete-section]').forEach(function(button){button.onclick=async function(){var sectionId=button.dataset.deleteSection, section=(activeProject.sections||[]).filter(function(s){return s.id===sectionId;})[0];if(!await askConfirm('Delete section?', '“'+(section?section.title:'This section')+'” will be removed. Its blocks will stay in the project under Unsorted.', 'Delete section'))return;blocks.forEach(function(block){if(block.sectionId===sectionId){block.sectionId='';cloud().saveBlock(activeProject.id,block.id,block).catch(function(){});}});activeProject.sections=(activeProject.sections||[]).filter(function(s){return s.id!==sectionId;});if(activeSection===sectionId)activeSection='all';renderAnimated();await cloud().saveProject(activeProject.id,{sections:activeProject.sections});};});
       var inviteButton=root.querySelector('[data-send-invite]');
       if(inviteButton)inviteButton.onclick=async function(){
         var field=root.querySelector('[data-invite-username]');
@@ -3840,7 +3990,7 @@
     }
     if(loadingProject)return;
     var newSection=root.querySelector('[data-new-section]');
-    if(newSection)newSection.onclick=async function(){var title=await askName('New section','e.g. Week one','Add section');if(!title||!title.trim())return;var section={id:id(),title:title.trim(),pages:[],locked:false};activeProject.sections=(activeProject.sections||[]).concat(section);activeSection=section.id;activePage='all';await cloud().saveProject(activeProject.id,{sections:activeProject.sections});render();};
+    if(newSection)newSection.onclick=async function(){var title=await askName('New section','e.g. Week one','Add section');if(!title||!title.trim())return;var section={id:id(),title:title.trim(),pages:[],locked:false};activeProject.sections=(activeProject.sections||[]).concat(section);activeSection=section.id;activePage='all';renderAnimated();await cloud().saveProject(activeProject.id,{sections:activeProject.sections});};
     var toggle=root.querySelector('[data-toggle-view]');
     /* Changing mode rewrites the whole document around the reader, so it
        arrives the way the settings page does rather than blinking into place. */
@@ -3848,8 +3998,8 @@
     root.querySelectorAll('[data-exit-preview]').forEach(function(button){ button.onclick=exitPreview; });
     var restore=root.querySelector('[data-restore-preview]');
     if(restore)restore.onclick=function(){ if(window.CrowStudioHistory)window.CrowStudioHistory.confirmRestore(); };
-    root.querySelectorAll('[data-section]').forEach(function(button){button.onclick=function(){activeSection=button.dataset.section;activePage='all';openSectionMenu='';render();};});
-    root.querySelectorAll('[data-page]').forEach(function(button){button.onclick=function(){activePage=button.dataset.page;render();};});
+    root.querySelectorAll('[data-section]').forEach(function(button){button.onclick=function(){if(activeSection===button.dataset.section&&activePage==='all')return;activeSection=button.dataset.section;activePage='all';openSectionMenu='';renderAnimated();};});
+    root.querySelectorAll('[data-page]').forEach(function(button){button.onclick=function(){if(activePage===button.dataset.page)return;activePage=button.dataset.page;renderAnimated();};});
     /* The list inside is redrawn as headings change, so the click is taken on
        the list itself rather than on each entry. */
     root.querySelectorAll('[data-contents]').forEach(function(nav){
@@ -4506,13 +4656,11 @@
     sendPresence(true);
     stopBlocks=cloud().watchBlocks(projectId,function(list,ours){
       if(!activeProject||activeProject.id!==projectId)return;
-      /* adoptBlocks writes the incoming fields into the block objects already
-         in hand, so the handlers bound to them stay current. That made `before`
-         and `next` the same objects, and every comparison below compared a block
-         with itself: somebody else's edit was never drawn on an open page, and
-         the next keystroke there saved the old words over theirs. `before` is a
-         copy taken first. */
-      var before=blocks.map(function(block){ return Object.assign({},block); });
+      /* adoptBlocks folds the snapshot into the objects already on screen, so
+         holding on to those objects kept nothing of how they were: before and
+         next were the same blocks, every card compared equal, and a change
+         made by someone else was never drawn. Keep a copy of what is shown. */
+      var before=blocks.map(function(block){ return JSON.parse(JSON.stringify(block)); });
       var next=adoptBlocks(list.map(normalizeBlock));
       var mark=blocksSignature(next);
       var localEcho=ownBlockEcho(before,next,ours);

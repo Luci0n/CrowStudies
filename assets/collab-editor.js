@@ -2,13 +2,15 @@
 
    Every import names the exact versions of what it shares with the others.
    esm.sh otherwise resolves each package's own version ranges, and the page
-   ended up with two copies of Yjs and two of Tiptap's core. Yjs refuses to
-   work across copies ("Yjs was already imported"), so shared notes could not
-   have worked even once the import below that never existed was fixed: there
-   is no extension-collaboration-caret 2.x; the 2.x name is
-   extension-collaboration-cursor. Change these versions together or not at
-   all, and check that one copy of each still loads, and that the server's
-   versions in collab-server/package.json still match them.
+   ended up with two copies of Yjs (the editor's document and the provider's
+   were not the same Y.Doc) and two of Tiptap's core. Each import lists only
+   the packages it depends on, so that every one of them asks for the same
+   URL of a shared dependency and gets the same copy. Tiptap 2 calls the
+   shared-caret extension CollaborationCursor; the CollaborationCaret package
+   only exists from Tiptap 3, so importing it at 2.x failed and took the whole
+   editor down with it. Change these versions together or not at all, check
+   that one copy of each still loads, and keep collab-server/package.json on
+   the same ones.
 
    Notes are not kept in the browser (there was an IndexedDB copy). A note
    takes no typing until the server's copy arrives, so a local copy could not
@@ -80,29 +82,75 @@ function toolbar(editor){
   actions.forEach(([label,command,args])=>{ const button=document.createElement('button'); button.type='button'; button.disabled=true; button.innerHTML=label==='B'?'<b>B</b>':label==='I'?'<i>I</i>':label; button.onclick=()=>{ const chain=editor.chain().focus()[command](args); chain.run(); }; bar.append(button); });
   return bar;
 }
+/* Whether the editor and its buttons take input: only once the server's copy
+   is in, and never for someone who may only read. */
+function setOpen(entry){
+  const open=entry.synced&&!entry.options.readOnly;
+  try{ if(entry.editor.isEditable!==open)entry.editor.setEditable(open); }
+  catch(error){ console.warn('Collaborative note could not change mode', error); }
+  entry.controls.querySelectorAll('button').forEach((button)=>{ button.disabled=!open; });
+}
 
+/* An editor outlives the redraw that drew its card. Studio rebuilds the whole
+   project whenever the section, page or mode changes; tearing every shared
+   note down with it and connecting again made each switch flash the stored
+   text, then jump when the live document replaced it. Instead an editor is
+   kept, and the next card drawn for the same note takes it back: its element
+   moves into the new card, still connected and showing what it showed. */
+const pending = new Map();
+const PARK_LIMIT = 60000;
+function adopt(entry, host, options){
+  /* The newest card's callbacks are the ones that know the block as it is now. */
+  entry.options = options;
+  entry.parkedAt = 0;
+  if(entry.host !== host){
+    if(!host.isConnected) return entry;
+    if(host.hasAttribute('data-placeholder')) entry.host.setAttribute('data-placeholder', host.getAttribute('data-placeholder'));
+    host.replaceWith(entry.host);
+  }
+  if(entry.host.parentNode && entry.controls.nextSibling !== entry.host){
+    entry.host.parentNode.insertBefore(entry.controls, entry.host);
+  }
+  setOpen(entry);
+  if(options.onStatus && entry.status) options.onStatus(entry.status);
+  return entry;
+}
 async function mount(host, options){
-  if(!config.url || live.has(options.documentName)) return null;
+  if(!config.url) return null;
+  const name = options.documentName;
+  if(live.has(name)) return adopt(live.get(name), host, options);
+  /* A redraw can come while the editor for this note is still connecting.
+     Wait for that one rather than starting a second editor beside it. */
+  if(pending.has(name)){
+    const entry = await pending.get(name);
+    return entry ? adopt(entry, host, options) : null;
+  }
+  const starting = create(host, options);
+  pending.set(name, starting);
+  try{ return await starting; }
+  finally{ pending.delete(name); }
+}
+async function create(host, options){
   host.dataset.collabActive='true';
   host.oninput=null; // Never leave the old HTML/Firestore writer attached.
   /* The note keeps showing the text it already has until the server's copy
      arrives, but as something to read: typed into, that copy would save
      nowhere. If the server never answers, the words stay on screen instead of
-     an empty editor that looks as if they had been wiped. */
+     an empty editor that looks as if they had been wiped. Once the editor is
+     in, this outer box stays out of the way: left editable, a click focused
+     it instead of the editor inside, which then never knew it had focus and
+     never shared its caret. */
   host.setAttribute('contenteditable','false');
   const token=await options.user.getIdToken();
-  /* Studio may have redrawn while the token was fetched. An editor opened for
-     a card no longer on the page would claim this note, and the card that
-     replaced it could then never open its own. */
-  if(!host.isConnected||live.has(options.documentName)){ delete host.dataset.collabActive; return null; }
   const ydoc=new Y.Doc();
+  const entry={ options, status:'', parkedAt:0, synced:false, host, ydoc };
   const provider=new HocuspocusProvider({
     url:config.url,
     name:options.documentName,
     document:ydoc,
     token,
     preserveConnection:false,
-    onStatus:({status})=>options.onStatus&&options.onStatus(status),
+    onStatus:({status})=>{ entry.status=status; if(entry.options.onStatus) entry.options.onStatus(status); },
   });
   const user={name:'@'+options.username,color:colorFor(options.user.uid),avatar:options.avatarUrl||undefined};
   /* Nothing can be typed until the server's copy has arrived. Before that,
@@ -119,8 +167,8 @@ async function mount(host, options){
     editorProps:{attributes:{class:'tiptap ProseMirror','aria-label':'Collaborative note'}},
   });
   const controls=toolbar(editor);
-  host.parentNode.insertBefore(controls,host);
-  const entry={editor,provider,ydoc,controls,host,synced:false};
+  Object.assign(entry,{editor,provider,controls});
+  if(host.parentNode) host.parentNode.insertBefore(controls,host);
   /* The block's `body` is the copy everything outside this editor reads:
      history, duplicate, turn into, export and the contents block. Only edits
      made here are reported, so one change is not written back by everyone
@@ -128,7 +176,7 @@ async function mount(host, options){
      the editor holds part of the note at most, and writing that over `body`
      would throw away the one copy that may still be whole. */
   editor.on('update',({transaction})=>{
-    if(options.onLocalChange&&entry.synced&&typedHere(transaction))options.onLocalChange(editor.getHTML());
+    if(entry.options.onLocalChange&&entry.synced&&typedHere(transaction))entry.options.onLocalChange(editor.getHTML());
   });
   /* A note that connects late still has to count as caught up when it does,
      so this listens for as long as the editor is open. */
@@ -139,15 +187,15 @@ async function mount(host, options){
     provider.off('synced',caughtUp);
     firstDrawn().then(()=>{
       if(live.get(options.documentName)!==entry)return;
-      host.textContent='';
-      host.append(surface);
+      entry.host.textContent='';
+      entry.host.append(surface);
       entry.synced=true;
-      if(!options.readOnly){ editor.setEditable(true); controls.querySelectorAll('button').forEach((button)=>{ button.disabled=false; }); }
-      if(options.onSynced)options.onSynced();
+      setOpen(entry);
+      if(entry.options.onSynced)entry.options.onSynced();
     });
   };
-  if(provider.isSynced)caughtUp(); else provider.on('synced',caughtUp);
   live.set(options.documentName,entry);
+  if(provider.isSynced)caughtUp(); else provider.on('synced',caughtUp);
   return entry;
 }
 function destroy(documentName){
@@ -155,6 +203,23 @@ function destroy(documentName){
   entry.controls.remove(); entry.editor.destroy(); entry.provider.destroy(); entry.ydoc.destroy(); live.delete(documentName);
 }
 function destroyAll(){ Array.from(live.keys()).forEach(destroy); }
+/* Keep the editors whose name starts with prefix, close the rest. Studio calls
+   this before each redraw with the open project's prefix, or with nothing
+   when no live notes should stay open (another project, an old version). */
+function keepOnly(prefix){
+  Array.from(live.keys()).forEach((name)=>{ if(!prefix || name.indexOf(prefix)!==0) destroy(name); });
+}
+/* A kept editor whose note is not on screen (another section, a deleted
+   block) still holds a connection. Close it once it has been away a minute;
+   coming back after that simply connects again. */
+setInterval(()=>{
+  const now=Date.now();
+  live.forEach((entry,name)=>{
+    if(entry.host.isConnected){ entry.parkedAt=0; return; }
+    if(!entry.parkedAt){ entry.parkedAt=now; return; }
+    if(now-entry.parkedAt>PARK_LIMIT) destroy(name);
+  });
+},15000);
 /* What a note says right now, if it is open and has caught up with the
    server. Before that the editor may be showing nothing at all, and an empty
    answer would be mistaken for an empty note. */
@@ -204,5 +269,5 @@ async function withDocument(documentName, options, use){
     ydoc.destroy();
   }
 }
-window.CrowCollab={enabled:()=>Boolean(config.url),mount,destroy,destroyAll,html,replace,read};
+window.CrowCollab={enabled:()=>Boolean(config.url),mount,destroy,destroyAll,keepOnly,html,replace,read};
 window.dispatchEvent(new Event('crow-collab-ready'));

@@ -365,7 +365,7 @@ function CrowQuiz(config){
          makes it matter is the colour it carries, not a shape of its own. */
       +     '<div class="reviewbar" data-f="reviewBar">'
       +       '<span class="disc" data-f="reviewMark" aria-hidden="true"></span>'
-      +       '<span class="utext"><b data-f="reviewHead"></b>'
+      +       '<span class="utext"><span class="review-kicker">Spaced repetition</span><b data-f="reviewHead"></b>'
       +       '<span class="review-note" data-f="reviewNote"></span></span>'
       +       '<button class="btn ghost sm" data-f="reviewDue">Review cards</button>'
       +     '</div>'
@@ -430,11 +430,12 @@ function CrowQuiz(config){
       +   '<button class="btn wide" data-f="modalClose">Got it</button></div>'
       + '</div>'
       + '<div class="backdrop" data-f="reviewInfo" hidden>'
-      +   '<div class="modal review-info"><div class="review-info-mark" aria-hidden="true">↻</div><h3>Review mode</h3>'
+      +   '<div class="modal review-info"><div class="review-info-mark" aria-hidden="true">↻</div><p class="review-info-kicker">Spaced repetition</p><h3>Review mode</h3>'
       +   '<p>These cards return at the moment you are most likely to need them. Try to recall before looking at the answer, then rate the effort honestly.</p>'
       +   '<div class="review-info-ratings"><span><b>Again</b> I missed it</span><span><b>Hard</b> I got it, barely</span><span><b>Good</b> I recalled it</span><span><b>Easy</b> Instant recall</span></div>'
       +   '<p class="review-info-note">Your choice sets the next review time. The schedule adapts to your history and retention setting.</p>'
-      +   '<button class="btn wide" data-f="reviewInfoClose">Got it</button></div>'
+      +   '<button class="btn wide" data-f="reviewInfoClose">Got it</button>'
+      +   '<button class="review-info-off" type="button" data-f="reviewInfoOff">Do not show this again</button></div>'
       + '</div>';
 
     root.querySelectorAll('[data-f]').forEach(function(n){ dom[n.dataset.f] = n; });
@@ -579,11 +580,18 @@ function CrowQuiz(config){
       var txt = el('span', 'utext');
       txt.appendChild(el('b', null, u.title));
       var lessons = u.steps.filter(function(s){ return s.title; }).length;
-      txt.appendChild(el('span', null, unitDue.length
-        ? unitDue.length+' review '+(unitDue.length===1?'card':'cards')+' due'
-        : (rec.done>0
-        ? 'Best ' + rec.best + '/' + (rec.total||'?') + ' · ' + rec.done + (rec.done===1?' run':' runs')
-        : (lessons ? lessons + (lessons===1?' lesson · ':' lessons · ') + u.blurb : u.blurb))));
+      /* What the unit is about is the one thing that never changes, so it is
+         always on the row. Progress used to replace it, which left a unit you
+         had started unable to say what was in it. */
+      txt.appendChild(el('span', null,
+        lessons ? lessons + (lessons===1?' lesson · ':' lessons · ') + u.blurb : u.blurb));
+      var standing = [];
+      if (unitDue.length) standing.push(unitDue.length+' review '+(unitDue.length===1?'card':'cards')+' due');
+      if (rec.done>0) standing.push('Best ' + rec.best + '/' + (rec.total||'?') + ' · ' + rec.done + (rec.done===1?' run':' runs'));
+      if (standing.length){
+        var mark = el('span', 'ustat' + (unitDue.length ? ' is-due' : ''), standing.join(' · '));
+        txt.appendChild(mark);
+      }
       if (rec.done>0){
         var meter = el('span', 'meter');
         var fill = el('i');
@@ -697,11 +705,24 @@ function CrowQuiz(config){
     };
     state.lastQuestionKey = '';
     dom.reviewModeHelp.hidden=!reviewCards;
+    /* The explanation is the first thing a review needs, so it is offered
+       every time one starts - until somebody says they have read it, which
+       they can undo from account settings. */
+    if (reviewCards && wantsReviewGuide()) openReviewGuide();
     showScreen('session');
     renderHearts();
     nextItem();
   }
 
+  function wantsReviewGuide(){
+    if (window.CrowCloud && window.CrowCloud.reviewGuide) return window.CrowCloud.reviewGuide();
+    try{ return localStorage.getItem('crowstudies:review-guide') !== 'off'; }catch(error){ return true; }
+  }
+  function openReviewGuide(){
+    if (!dom.reviewInfo) return;
+    dom.reviewInfo.hidden=false;
+    dom.reviewInfoClose.focus({preventScroll:true});
+  }
   function renderHearts(){
     dom.hearts.innerHTML = '';
     for (var i=0;i<HEARTS;i++){
@@ -850,11 +871,19 @@ function CrowQuiz(config){
     var s = state.session;
     var counted = !state.hinted;
     s.answered++;
-    /* Practice creates a card from the observed answer. Review is different:
-       it waits for the learner's own recall rating before scheduling. */
+    /* Practice creates a card from the observed answer, but not yet: the run
+       has to be seen through first. Answering two questions and walking out
+       used to leave those two scheduled, so a unit nobody had finished still
+       announced cards due. They are held here and written when the run ends.
+       Review is different again: it waits for the learner's own recall rating,
+       and that rating is theirs the moment they give it. */
     if (!s.review){
-      scheduleCard(state.questionUnit || s.unit, state.question, success ? 'good' : 'again', state.hinted);
-      persist();
+      (s.pending = s.pending || []).push({
+        unit: state.questionUnit || s.unit,
+        question: state.question,
+        grade: success ? 'good' : 'again',
+        hinted: state.hinted
+      });
     }
 
     if (success){
@@ -923,6 +952,13 @@ function CrowQuiz(config){
     renderProgress();
     hideSheet();
 
+    /* The run is over - out of hearts counts, walking out does not - so the
+       answers it collected become cards now. */
+    (s.pending || []).forEach(function(mark){
+      scheduleCard(mark.unit, mark.question, mark.grade, mark.hinted);
+    });
+    s.pending = [];
+
     save.sessions++;
     save.bestRun = Math.max(save.bestRun, s.bestRun);
     var rec = save.units[s.unit] || { done:0, best:0, total:s.totalQ };
@@ -956,7 +992,12 @@ function CrowQuiz(config){
     var root = document.querySelector(rootSelector || '#app');
     buildSkeleton(root);
 
-    dom.quit.onclick = function(){ hideSheet(); renderHome(); showScreen('home'); };
+    dom.quit.onclick = function(){
+      /* Nothing answered in an abandoned run is scheduled. */
+      if (state.session) state.session.pending = [];
+      state.session = null;
+      hideSheet(); renderHome(); showScreen('home');
+    };
     dom.home.onclick = function(){ renderHome(); showScreen('home'); };
     dom.again.onclick = function(){
       if (state.session && state.session.review){
@@ -966,8 +1007,12 @@ function CrowQuiz(config){
       } else startSession(state.session ? state.session.unit : UNITS[0].id);
     };
     dom.reviewDue.onclick = openReview;
-    dom.reviewInfoOpen.onclick = function(){ dom.reviewInfo.hidden=false; dom.reviewInfoClose.focus({preventScroll:true}); };
+    dom.reviewInfoOpen.onclick = function(){ openReviewGuide(); };
     dom.reviewInfoClose.onclick = function(){ dom.reviewInfo.hidden=true; };
+    dom.reviewInfoOff.onclick = function(){
+      dom.reviewInfo.hidden=true;
+      if (window.CrowCloud && window.CrowCloud.setReviewGuide) window.CrowCloud.setReviewGuide(false);
+    };
     dom.reviewInfo.onclick = function(e){ if(e.target===dom.reviewInfo) dom.reviewInfo.hidden=true; };
     dom['continue'].onclick = advance;
     dom.extraBack.onclick = function(){ renderHome(); showScreen('home'); };
@@ -983,7 +1028,9 @@ function CrowQuiz(config){
     dom.modal.onclick = function(e){ if (e.target === dom.modal) dom.modal.hidden = true; };
 
     document.addEventListener('keydown', function(e){
-      if (e.key === 'Enter' && state.locked && dom.sheet.classList.contains('up') && !state.session.review){
+      /* Leaving a session clears it, and a key pressed after that must not
+         reach in and ask what kind of session it was. */
+      if (e.key === 'Enter' && state.session && state.locked && dom.sheet.classList.contains('up') && !state.session.review){
         e.preventDefault(); advance();
       }
       if (e.key === 'Escape' && !dom.modal.hidden) dom.modal.hidden = true;

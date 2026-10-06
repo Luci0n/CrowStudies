@@ -37,7 +37,17 @@
 .project-actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 .danger-action:hover{ color:var(--bad)!important; border-color:var(--bad)!important; }
 .project-title{ width:100%; border:0; background:transparent; color:var(--ink); font:650 clamp(28px,5vw,42px)/1.1 "Space Grotesk",sans-serif; outline:none; margin:0; }
-.section-bar{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 18px; }
+.section-bar{ position:relative; display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 18px; }
+/* The highlight that slides between section or page chips while the choice
+   changes. It sits under the chips; the chosen one hides its own fill until
+   the pill has arrived, then the pill is removed. */
+.page-bar{ position:relative; }
+.choice-pill{ position:absolute; z-index:0; border-radius:999px; pointer-events:none; transform-origin:0 0; will-change:transform; }
+.choice-pill.is-section{ background:var(--brand); }
+.choice-pill.is-page{ background:var(--brand-soft); box-shadow:inset 0 0 0 1px var(--brand); }
+.section-bar>*:not(.choice-pill),.page-bar>*:not(.choice-pill){ position:relative; z-index:1; }
+.section-bar>.section-choice:has(.section-popover){ z-index:5; }
+.section-filter.pill-target,.page-filter.pill-target{ background:transparent!important; border-color:transparent!important; }
 .section-filter,.page-filter,.add-card{ border:1px solid var(--glass-edge); background:var(--glass); color:var(--ink-2); border-radius:999px; padding:8px 11px; font-family:inherit; font-weight:750; font-size:13px; line-height:1;
   transition:background .22s ease, border-color .22s ease, color .22s ease; }
 .section-filter:not(.active):hover,.page-filter:not(.active):hover,.add-card:hover{ background:var(--glass-lift); }
@@ -214,6 +224,10 @@
 .section-settings{ display:grid; gap:7px; margin-top:12px; }
 .section-settings>div{ display:flex; align-items:center; justify-content:space-between; gap:10px; border-top:1px solid var(--line); padding-top:8px; }
 .section-settings .btn{ width:auto; padding:8px 11px; }
+.section-settings>div{ flex-wrap:wrap; }
+.section-settings>div>span:first-child{ flex:1 1 140px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.section-settings-actions{ display:flex; justify-content:flex-end; gap:6px; margin-left:auto; }
+.section-settings-actions .btn:disabled{ opacity:.4; cursor:default; }
 .share-list{ display:grid; gap:7px; margin:11px 0; }
 .share-row{ display:flex; align-items:center; gap:10px; padding:9px 11px; border:1px solid var(--line); border-radius:8px; background:var(--card); }
 .share-row.pending{ border-style:dashed; }
