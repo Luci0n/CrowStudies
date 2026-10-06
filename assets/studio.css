@@ -557,6 +557,23 @@
 .studio-block.whiteboard-full{ position:fixed; inset:0; z-index:90; display:flex; flex-direction:column; margin:0; padding:14px 16px 12px; border-radius:0; background:var(--ground,var(--card)); }
 .studio-block.whiteboard-full .whiteboard-frame{ flex:1 1 auto; height:auto; }
 .studio-block.whiteboard-full .drag-handle,.studio-block.whiteboard-full .width-grip,.studio-block.whiteboard-full .block-delete,.studio-block.whiteboard-full .block-more,.studio-block.whiteboard-full .upgrade-comment{ display:none; }
+/* Excalidraw's panels, menus and accent take the site palette rather than its
+   own greys and purple, so a board looks like the rest of the theme you chose.
+   Its stylesheet loads after this one; the extra class is what wins. */
+.whiteboard-board .excalidraw.excalidraw-container{
+  --island-bg-color:var(--card); --popup-bg-color:var(--card); --sidebar-bg-color:var(--card);
+  --default-bg-color:var(--well); --input-bg-color:var(--well); --input-border-color:var(--line); --input-hover-bg-color:var(--glass-lift);
+  --button-bg:var(--card); --button-hover-bg:var(--glass-lift); --button-border:var(--line);
+  --color-surface-lowest:var(--ground); --color-surface-low:var(--well); --color-surface-mid:var(--card); --color-surface-high:var(--card-2);
+  --color-surface-primary-container:var(--brand-soft); --color-on-primary-container:var(--ink);
+  --color-primary:var(--brand); --color-primary-hover:color-mix(in srgb,var(--brand) 85%,white); --color-primary-darker:color-mix(in srgb,var(--brand) 85%,black); --color-primary-darkest:color-mix(in srgb,var(--brand) 70%,black);
+  --color-primary-light:var(--brand-soft); --color-primary-light-darker:color-mix(in srgb,var(--brand-soft) 80%,var(--brand));
+  --color-brand-hover:color-mix(in srgb,var(--brand) 85%,white); --color-brand-active:color-mix(in srgb,var(--brand) 85%,black);
+  --text-primary-color:var(--ink); --color-on-surface:var(--ink); --icon-fill-color:var(--ink-2); --keybinding-color:var(--ink-3);
+  --dialog-border-color:var(--line); --color-border-outline:var(--line); --color-border-outline-variant:var(--glass-edge);
+  --overlay-bg-color:color-mix(in srgb,var(--ground) 72%,transparent);
+  --link-color:var(--brand); --select-highlight-color:var(--brand); --focus-highlight-color:color-mix(in srgb,var(--brand) 40%,transparent);
+}
 /* The site's own focus ring is larger than Excalidraw's controls expect. */
 .whiteboard-board .excalidraw :focus-visible{ outline-offset:0; }
 @media (prefers-reduced-motion: reduce){ .whiteboard-frame,.whiteboard-activate span{ transition:none; } }

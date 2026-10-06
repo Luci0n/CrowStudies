@@ -482,6 +482,21 @@
       await notify('The example project could not be added','Check your connection and try again.');
     }
   }
+  /* Where you were - project, section and page - kept per account on this
+     device, so a reload (or coming back from a whiteboard library) lands you
+     there instead of on the first project. */
+  function placeKey(){ var user=cloud()&&cloud().user; return 'crowstudies:studio:place:'+(user?user.uid:'anon'); }
+  function rememberedPlace(){ try{ return JSON.parse(localStorage.getItem(placeKey())||'null'); }catch(error){ return null; } }
+  function rememberPlace(){
+    if(!activeProject||previewing()||loadingProject)return;
+    try{ localStorage.setItem(placeKey(),JSON.stringify({ project:activeProject.id, section:activeSection, page:activePage })); }catch(error){}
+  }
+  function returnToPlace(place){
+    var section=place.section==='all'?null:findSection(place.section);
+    activeSection=section||place.section===''?place.section:'all';
+    var page=section&&(section.pages||[]).filter(function(item){ return item.id===place.page; })[0];
+    activePage=page?page.id:'all';
+  }
   function exampleSeedKey(){ var user=cloud()&&cloud().user; return 'crowstudies:studio:example:'+(user?user.uid:'anon'); }
   function exampleAlreadyOffered(){ try{ return localStorage.getItem(exampleSeedKey())==='1'; }catch(error){ return true; } }
   function rememberExample(){ try{ localStorage.setItem(exampleSeedKey(),'1'); }catch(error){} }
@@ -1183,6 +1198,7 @@
        so the header shuffled a frame later. Asking for them here puts them in
        before anything is shown. */
     try{ if(window.CrowStudioUpgrades&&window.CrowStudioUpgrades.decorate)window.CrowStudioUpgrades.decorate(); }catch(error){}
+    rememberPlace();
     setTimeout(paintPresence,0);
   }
   /* Notes whose text has to reach the shared document before an editor may
@@ -4913,7 +4929,11 @@
     window.__crowProjects=await cloud().listProjects();
     /* A workspace with nothing in it starts with the example project. Delete it
        and it stays deleted. */
-    if(!window.__crowProjects.length&&!selectId&&!exampleAlreadyOffered()){ rememberExample(); await addExampleProject(); return; }var chosen=selectId||(activeProject&&activeProject.id);activeProject=window.__crowProjects.filter(function(p){return p.id===chosen;})[0]||window.__crowProjects[0]||null;blocks=[];
+    if(!window.__crowProjects.length&&!selectId&&!exampleAlreadyOffered()){ rememberExample(); await addExampleProject(); return; }/* Opening Studio afresh goes back to where you were on this device. */
+    var firstOpen=!selectId&&!activeProject, place=firstOpen?rememberedPlace():null;
+    var chosen=selectId||(activeProject&&activeProject.id)||(place&&place.project);activeProject=window.__crowProjects.filter(function(p){return p.id===chosen;})[0]||window.__crowProjects[0]||null;
+    if(place&&activeProject&&activeProject.id===place.project)returnToPlace(place);
+    blocks=[];
     /* The opening block snapshot is real project data, even when this account
        made the most recent edit. Flag it as an initial load so echo suppression
        cannot discard it before the first render. */

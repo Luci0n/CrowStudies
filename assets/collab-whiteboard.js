@@ -68,18 +68,56 @@ const UI_OPTIONS = {
   canvasActions:{ loadScene:false, saveToActiveFile:false, toggleTheme:null, export:false, saveAsImage:true, clearCanvas:true, changeViewBackgroundColor:true },
   tools:{ image:false },
 };
+/* Your shape library, kept in this browser for your account, as excalidraw.com
+   keeps it. Every board on the page reads and adds to the same one. */
+const libraryAdapters = new Map();
+function libraryAdapter(uid){
+  const key='crowstudies:whiteboard-library:'+(uid||'anon');
+  if(!libraryAdapters.has(key)) libraryAdapters.set(key,{
+    load:()=>{ try{ return { libraryItems:JSON.parse(localStorage.getItem(key)||'[]') }; }catch(error){ return { libraryItems:[] }; } },
+    save:({ libraryItems })=>{
+      localStorage.setItem(key,JSON.stringify(libraryItems||[]));
+      /* Excalidraw takes addLibrary= off the address after an import but
+         leaves the token from libraries.excalidraw.com behind. */
+      if(/^#token=[^&]*$/.test(location.hash)) history.replaceState(history.state,'',location.pathname+location.search);
+    },
+  });
+  return libraryAdapters.get(key);
+}
+/* Excalidraw's "Browse libraries" sends you to libraries.excalidraw.com, which
+   sends you back to this page with #addLibrary=… on the address. Nothing was
+   listening for that, so the library never arrived. useHandleLibrary is the
+   piece that reads it (asking first, since the page has been reloaded in
+   between) and keeps the library through the adapter above. It is a React
+   hook, so each board is drawn through this small component around it. */
+function boardComponent(lib){
+  if(lib.Board) return lib.Board;
+  const { React, Ex } = lib;
+  lib.Board=function Board(props){
+    const [api,setApi]=React.useState(null);
+    Ex.useHandleLibrary({ excalidrawAPI:api, adapter:props.adapter });
+    const settings=Object.assign({},props.settings,{
+      excalidrawAPI:(next)=>{ if(next&&next!==api) setApi(next); if(props.settings.excalidrawAPI) props.settings.excalidrawAPI(next); },
+    });
+    return React.createElement(Ex.Excalidraw,settings);
+  };
+  return lib.Board;
+}
 function draw(entry){
-  const { React, Ex } = entry.lib;
-  entry.root.render(React.createElement(Ex.Excalidraw, {
-    excalidrawAPI:(api)=>{ if(api&&!entry.api){ entry.api=api; entry.apiReady(); } },
-    initialData:{ elements:entry.initial, appState:{ viewBackgroundColor:'transparent' }, scrollToContent:true },
-    viewModeEnabled:!entry.open,
-    theme:themeNow(),
-    isCollaborating:!!entry.provider,
-    UIOptions:UI_OPTIONS,
-    onChange:()=>schedulePush(entry),
-    onPointerUpdate:(update)=>sharePointer(entry,update),
-    onPaste:(data, event)=>!refusesImages(entry,data,event),
+  const { React } = entry.lib;
+  entry.root.render(React.createElement(boardComponent(entry.lib),{
+    adapter:libraryAdapter(entry.options.user&&entry.options.user.uid),
+    settings:{
+      excalidrawAPI:(api)=>{ if(api&&!entry.api){ entry.api=api; entry.apiReady(); } },
+      initialData:{ elements:entry.initial, appState:{ viewBackgroundColor:'transparent' }, scrollToContent:true },
+      viewModeEnabled:!entry.open,
+      theme:themeNow(),
+      isCollaborating:!!entry.provider,
+      UIOptions:UI_OPTIONS,
+      onChange:()=>schedulePush(entry),
+      onPointerUpdate:(update)=>sharePointer(entry,update),
+      onPaste:(data, event)=>!refusesImages(entry,data,event),
+    },
   }));
 }
 /* Pictures would fill a shared document's room quickly, so a whiteboard does
@@ -247,7 +285,7 @@ setInterval(()=>{
     if(!entry.parkedAt){ entry.parkedAt=now; return; }
     if(now-entry.parkedAt>PARK_LIMIT) destroy(name);
   });
-  statics.forEach((item)=>{ if(!item.host.isConnected){ try{ item.root.unmount(); }catch(error){} statics.delete(item); } });
+  statics.forEach((item)=>{ if(!item.host.isConnected){ item.watch.disconnect(); try{ item.root.unmount(); }catch(error){} statics.delete(item); } });
 },15000);
 
 /* A board to look at, drawn from a saved copy with no connection: an old
@@ -256,12 +294,16 @@ async function mountStatic(host, json){
   const lib=await loadLibrary();
   if(!host.isConnected) return null;
   host.textContent='';
-  const root=lib.ReactDOM.createRoot(host);
-  root.render(lib.React.createElement(lib.Ex.Excalidraw,{
-    initialData:{ elements:parseBoard(json), appState:{ viewBackgroundColor:'transparent' }, scrollToContent:true },
+  const root=lib.ReactDOM.createRoot(host), elements=parseBoard(json);
+  const show=()=>root.render(lib.React.createElement(lib.Ex.Excalidraw,{
+    initialData:{ elements, appState:{ viewBackgroundColor:'transparent' }, scrollToContent:true },
     viewModeEnabled:true, theme:themeNow(), UIOptions:UI_OPTIONS,
   }));
-  statics.add({ host, root });
+  show();
+  /* Follows a change of theme like a live board does. */
+  const watch=new MutationObserver(show);
+  watch.observe(document.documentElement,{ attributes:true, attributeFilter:['data-theme'] });
+  statics.add({ host, root, watch });
   return true;
 }
 
