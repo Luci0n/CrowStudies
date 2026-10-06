@@ -524,6 +524,7 @@
 .contents-item.depth-0{ color:var(--ink); font-weight:700; }
 .contents-item.depth-1{ padding-left:22px; }
 .contents-item.depth-2{ padding-left:36px; font-size:13px; }
+.contents-item.depth-3{ padding-left:50px; font-size:13px; }
 .contents-item:hover,.contents-item:focus-visible{ background:var(--glass-lift); color:var(--brand); outline:none; }
 .contents-page{ padding:10px 8px 3px; color:var(--ink-3); font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
 .contents-page:first-child{ padding-top:2px; }

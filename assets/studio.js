@@ -622,7 +622,7 @@
      every card run its entry animation again, which looks like the page flashed.
      Structural changes (a new/deleted/reordered visible block) still use render. */
   function visibleBlocks(list){
-    var shown=list.filter(function(block){ return (activeSection==='all'||(block.sectionId||'')===activeSection)&&(activePage==='all'||(block.pageId||'')===activePage); });
+    var shown=list.filter(function(block){ return (activeSection==='all'||(block.sectionId||'')===activeSection)&&onActivePage(block); });
     return readOnly?shown.filter(function(block){ return !(block.type==='image'&&!block.imageUrl); }):shown;
   }
   function replaceFocusedBody(body, html){
@@ -1295,7 +1295,7 @@
   }
   function projectHTML(){
     var sections=activeProject.sections||[];
-    var shown=blocks.filter(function(b){return (activeSection==='all'||(b.sectionId||'')===activeSection)&&(activePage==='all'||(b.pageId||'')===activePage);});
+    var shown=blocks.filter(function(b){return (activeSection==='all'||(b.sectionId||'')===activeSection)&&onActivePage(b);});
     /* An empty image block is only a prompt to paste a URL, which is no use
        to someone reading the project. */
     if(readOnly)shown=shown.filter(function(b){ return !(b.type==='image'&&!b.imageUrl); });
@@ -1677,25 +1677,45 @@
     }).catch(function(){ copy.pending=false; });
   }
   /* ---------------------------------------------------------------- contents
-     A contents block lists the headings written in the other blocks of its own
-     section, across all of that section's pages, and takes you to one when it
-     is picked. It keeps nothing of its own: it is drawn from the blocks each
-     time, so it cannot fall out of step with them. */
+     A contents block lists the other blocks of its own section, across all of
+     that section's pages, and takes you to one when it is picked. A block's
+     title is its heading; the headings written inside a note sit under it. A
+     block left untitled offers only the headings inside it. It keeps nothing
+     of its own: it is drawn from the blocks each time, so it cannot fall out
+     of step with them. */
   var CONTENTS_FROM=['note','idea','callout','quote'], contentsTimer=null;
   function headingText(node){ return String(node.textContent||'').replace(/\s+/g,' ').trim(); }
+  /* A block on no page shows only under All pages, except a contents block:
+     it covers every page of its section, so it is on every one of them. */
+  function onActivePage(block){
+    var page=block.pageId||'';
+    return activePage==='all'||page===activePage||(block.type==='toc'&&!page);
+  }
   function contentsEntries(block){
     var sectionId=block.sectionId||'', pageAt={'':0};
     sectionPages(sectionId).forEach(function(page,index){ pageAt[page.id]=index+1; });
     function placeOf(other){ var at=pageAt[other.pageId||'']; return at===undefined?1e6:at; }
     var sources=blocks.map(function(other,at){ return { block:other, at:at }; }).filter(function(item){
-      return item.block.id!==block.id&&(item.block.sectionId||'')===sectionId&&CONTENTS_FROM.indexOf(item.block.type)>=0;
+      return item.block.type!=='toc'&&(item.block.sectionId||'')===sectionId;
     }).sort(function(a,b){ return (placeOf(a.block)-placeOf(b.block))||(a.at-b.at); });
     var entries=[];
     sources.forEach(function(item){
-      var holder=document.createElement('template'); holder.innerHTML=currentBody(item.block);
+      var other=item.block, pageId=other.pageId||'';
+      var titled=!implicitBlockTitle(other.title);
+      /* index -1 stands for the block itself rather than a heading in it. */
+      if(titled)entries.push({ blockId:other.id, pageId:pageId, index:-1, depth:0, text:String(other.title).replace(/\s+/g,' ').trim() });
+      if(CONTENTS_FROM.indexOf(other.type)<0)return;
+      var holder=document.createElement('template'); holder.innerHTML=currentBody(other);
+      var found=[];
       Array.prototype.forEach.call(holder.content.querySelectorAll('h1,h2,h3'),function(heading,index){
         var text=headingText(heading);
-        if(text)entries.push({ blockId:item.block.id, pageId:item.block.pageId||'', index:index, level:+heading.tagName.charAt(1), text:text });
+        if(text)found.push({ index:index, level:+heading.tagName.charAt(1), text:text });
+      });
+      /* Indented by how they stand to one another, so a note written with H2
+         and H3 reads the same as one written with H1 and H2. */
+      var top=Math.min.apply(null,found.map(function(heading){ return heading.level; }));
+      found.forEach(function(heading){
+        entries.push({ blockId:other.id, pageId:pageId, index:heading.index, depth:Math.min(3,(titled?1:0)+heading.level-top), text:heading.text });
       });
     });
     return entries;
@@ -1704,16 +1724,15 @@
     var entries=contentsEntries(block);
     if(!entries.length){
       var frozen=readOnly||!canEdit();
-      return '<p class="contents-empty">'+(frozen?'No headings in this section yet.':'Headings in this section’s notes appear here. Make one with H1, H2 or H3 in a note.')+'</p>';
+      return '<p class="contents-empty">'+(frozen?'Nothing in this section yet.':'The titles of this section’s blocks appear here, with the H1, H2 and H3 headings inside its notes beneath them.')+'</p>';
     }
     var titled={}; sectionPages(block.sectionId||'').forEach(function(page){ titled[page.id]=page.title; });
-    /* Page names are only worth showing when the headings are on more than one. */
+    /* Page names are only worth showing when the entries are on more than one. */
     var spread=entries.some(function(entry){ return entry.pageId!==entries[0].pageId; });
-    var top=Math.min.apply(null,entries.map(function(entry){ return entry.level; }));
     var html='', lastPage=null;
     entries.forEach(function(entry){
       if(spread&&entry.pageId!==lastPage){ lastPage=entry.pageId; html+='<div class="contents-page">'+esc(titled[entry.pageId]||'Not on a page')+'</div>'; }
-      html+='<button type="button" class="contents-item depth-'+Math.min(2,entry.level-top)+'" data-go-block="'+esc(entry.blockId)+'" data-go-index="'+entry.index+'">'+esc(entry.text)+'</button>';
+      html+='<button type="button" class="contents-item depth-'+entry.depth+'" data-go-block="'+esc(entry.blockId)+'" data-go-index="'+entry.index+'">'+esc(entry.text)+'</button>';
     });
     return html;
   }
@@ -1746,9 +1765,10 @@
     var tries=0;
     (function seek(){
       var card=root.querySelector('[data-block="'+blockId+'"]'); if(!card)return;
-      var heading=headingIn(card,index,text);
+      /* A block's own title goes to the card; a heading inside it is looked for. */
+      var heading=index<0?null:headingIn(card,index,text);
       /* A shared note empties for a moment while its editor opens. */
-      if(!heading&&tries++<12){ setTimeout(seek,150); return; }
+      if(index>=0&&!heading&&tries++<12){ setTimeout(seek,150); return; }
       var still=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       (heading||card).scrollIntoView({ behavior:still?'auto':'smooth', block:'start' });
       /* The mark goes on the card, not the heading: the heading may belong to
@@ -1804,7 +1824,7 @@
      making of a block lives in one place instead of inside a handler. */
   function addBlockOfType(type){
     if(!type||!activeProject)return;
-    var block={id:id(),type:type,title:'',body:'',sectionId:activeSection==='all'?'':activeSection,pageId:activePage==='all'?'':activePage,order:Date.now(),done:false,due:'',pending:true,items:type==='tasks'?[{text:'',done:false}]:[],steps:type==='lesson'?[normalizeStep({kind:'choice'})]:[],lessonSection:type==='lesson'?sectionName(activeSection==='all'?'':activeSection):'',lessonBlurb:'',lessonIcon:type==='lesson'?'✦':'',lessonColor:type==='lesson'?LESSON_DEFAULT_COLOR:'',lessonHint:''};if(type==='note')fresh[block.id]=true;blocks.push(block);render();var card=root.querySelector('[data-block="'+block.id+'"]'), field=card&&card.querySelector('[data-title]');if(field)field.focus();cloud().saveBlock(activeProject.id,block.id,block).then(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current)current.classList.remove('is-pending');var dot=current&&current.querySelector('.save-dot');if(dot)dot.remove();mountCollaborativeEditors();}).catch(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current){current.classList.remove('is-pending');current.classList.add('save-failed');}});
+    var block={id:id(),type:type,title:'',body:'',sectionId:activeSection==='all'?'':activeSection,pageId:(activePage==='all'||type==='toc')?'':activePage,order:Date.now(),done:false,due:'',pending:true,items:type==='tasks'?[{text:'',done:false}]:[],steps:type==='lesson'?[normalizeStep({kind:'choice'})]:[],lessonSection:type==='lesson'?sectionName(activeSection==='all'?'':activeSection):'',lessonBlurb:'',lessonIcon:type==='lesson'?'✦':'',lessonColor:type==='lesson'?LESSON_DEFAULT_COLOR:'',lessonHint:''};if(type==='note')fresh[block.id]=true;blocks.push(block);render();var card=root.querySelector('[data-block="'+block.id+'"]'), field=card&&card.querySelector('[data-title]');if(field)field.focus();cloud().saveBlock(activeProject.id,block.id,block).then(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current)current.classList.remove('is-pending');var dot=current&&current.querySelector('.save-dot');if(dot)dot.remove();mountCollaborativeEditors();}).catch(function(){block.pending=false;var current=root.querySelector('[data-block="'+block.id+'"]');if(current){current.classList.remove('is-pending');current.classList.add('save-failed');}});
   }
   var ADD_GROUPS=[
     { name:'Text', types:['note','quote','callout','code','toc'] },
@@ -4014,7 +4034,7 @@
     root.querySelectorAll('[data-add-open]').forEach(function(addOpen){
       addOpen.onclick=function(event){ event.stopPropagation(); openAddPalette(addOpen); };
     });
-    root.querySelectorAll('[data-block]').forEach(function(card){var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0], body=card.querySelector('[data-body]'), titleField=card.querySelector('[data-title]');if(titleField)titleField.oninput=function(e){block.title=e.target.value;queuedSave(block,false,{title:block.title});};if(body&&!liveDocument(body)){guardRichBody(body);body.oninput=function(e){block.body=cleanHTML(e.target.innerHTML);queuedSave(block,false,{body:block.body});refreshContentsSoon();};}var practice=card.querySelector('[data-practice]');if(practice)practice.oninput=function(e){block.practice=e.target.value;queuedSave(block,false,{practice:block.practice});};var answer=card.querySelector('[data-answer]');if(answer)answer.oninput=function(e){block.answer=e.target.value;queuedSave(block,false,{answer:block.answer});};var image=card.querySelector('[data-image-url]');if(image)image.onchange=function(e){block.imageUrl=e.target.value.trim();queuedSave(block,true);render();};var imageUpload=card.querySelector('[data-image-upload]');if(imageUpload)imageUpload.onchange=function(e){var file=e.target.files&&e.target.files[0];if(file)takeImage(block,file,imageUpload);e.target.value='';};
+    root.querySelectorAll('[data-block]').forEach(function(card){var block=blocks.filter(function(b){return b.id===card.dataset.block;})[0], body=card.querySelector('[data-body]'), titleField=card.querySelector('[data-title]');if(titleField)titleField.oninput=function(e){block.title=e.target.value;queuedSave(block,false,{title:block.title});refreshContentsSoon();};if(body&&!liveDocument(body)){guardRichBody(body);body.oninput=function(e){block.body=cleanHTML(e.target.innerHTML);queuedSave(block,false,{body:block.body});refreshContentsSoon();};}var practice=card.querySelector('[data-practice]');if(practice)practice.oninput=function(e){block.practice=e.target.value;queuedSave(block,false,{practice:block.practice});};var answer=card.querySelector('[data-answer]');if(answer)answer.oninput=function(e){block.answer=e.target.value;queuedSave(block,false,{answer:block.answer});};var image=card.querySelector('[data-image-url]');if(image)image.onchange=function(e){block.imageUrl=e.target.value.trim();queuedSave(block,true);render();};var imageUpload=card.querySelector('[data-image-upload]');if(imageUpload)imageUpload.onchange=function(e){var file=e.target.files&&e.target.files[0];if(file)takeImage(block,file,imageUpload);e.target.value='';};
       var drop=card.querySelector('[data-image-drop]');
       if(drop)bindImageDrop(drop,block);
       var clear=card.querySelector('[data-image-clear]');
