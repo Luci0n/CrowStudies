@@ -574,6 +574,15 @@
   --overlay-bg-color:color-mix(in srgb,var(--ground) 72%,transparent);
   --link-color:var(--brand); --select-highlight-color:var(--brand); --focus-highlight-color:color-mix(in srgb,var(--brand) 40%,transparent);
 }
+/* A picked canvas colour is shown as itself: dark mode's inversion is off for
+   that board, so what is drawn on it looks the same to everyone. The picker's
+   swatches show true colours too, since that is what picking one gives. */
+.whiteboard-board.has-paper .excalidraw.excalidraw-container{ --theme-filter:none; }
+.whiteboard-board .excalidraw .dropdown-menu .color-picker-container .color-picker__button,
+.whiteboard-board .excalidraw .dropdown-menu .color-picker-container .color-picker__button-outline,
+.whiteboard-board .excalidraw .dropdown-menu .color-picker-container .color-picker__button:hover::after{ filter:none; }
+.block-menu .board-swatch{ width:12px; height:12px; margin-right:8px; border:1px solid var(--line); border-radius:3px; flex:none; }
+.block-menu button[data-board-picked]{ display:flex; align-items:center; }
 /* The site's own focus ring is larger than Excalidraw's controls expect. */
 .whiteboard-board .excalidraw :focus-visible{ outline-offset:0; }
 @media (prefers-reduced-motion: reduce){ .whiteboard-frame,.whiteboard-activate span{ transition:none; } }

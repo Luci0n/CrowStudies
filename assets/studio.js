@@ -753,6 +753,7 @@
     if(copy.type==='whiteboard'){
       if(typeof copy.board!=='string')copy.board='';
       if(!BOARD_HEIGHTS[copy.boardHeight])copy.boardHeight='medium';
+      if(typeof copy.boardBackground!=='string')copy.boardBackground='';
     }
     if(copy.type==='database'){
       if(!Array.isArray(copy.props))copy.props=[];
@@ -871,7 +872,11 @@
     delete oldRest.title; delete oldRest.body; delete nextRest.title; delete nextRest.body;
     /* A live board's drawing comes through its shared document; its saved copy
        changing is not a reason to draw the card again. */
-    if(card.querySelector('[data-whiteboard][data-collab-active="true"]')){ delete oldRest.board; delete nextRest.board; }
+    if(card.querySelector('[data-whiteboard][data-collab-active="true"]')){
+      delete oldRest.board; delete nextRest.board;
+      if(oldRest.boardBackground!==nextRest.boardBackground&&window.CrowWhiteboard)window.CrowWhiteboard.setBackground(noteDocument(after),nextRest.boardBackground);
+      delete oldRest.boardBackground; delete nextRest.boardBackground;
+    }
     return JSON.stringify(oldRest)===JSON.stringify(nextRest);
   }
   function patchLiveBlocks(before, after){
@@ -1221,7 +1226,7 @@
       if(!block||host.dataset.collabActive==='true'||host.dataset.boardShown==='true')return;
       if(previewing()||!sharingBoardsFor(activeProject.id)){
         host.dataset.boardShown='true';
-        window.CrowWhiteboard.mountStatic(host,block.board).catch(function(error){ host.textContent='This whiteboard could not be drawn.'; console.warn(error); });
+        window.CrowWhiteboard.mountStatic(host,block.board,block.boardBackground).catch(function(error){ host.textContent='This whiteboard could not be drawn.'; console.warn(error); });
         return;
       }
       if(block.pending)return;
@@ -1235,6 +1240,7 @@
         user:cloud().user,
         username:(cloud().profile&&cloud().profile.username)||'someone',
         saved:block.board,
+        background:block.boardBackground,
         readOnly:readOnly||!canEdit()||sectionLocked(block.sectionId),
         onStatus:function(status){
           if(status==='connected'){ if(synced)card.classList.remove('collab-offline'); }
@@ -1245,6 +1251,10 @@
           if(json.length>BOARD_COPY_LIMIT){ boardNotice(block,'This board is too big to keep a saved copy, so History may miss its latest changes. It is still saved for everyone.'); return; }
           block.board=json;
           queuedSave(block,false,{ board:json });
+        },
+        onBackground:function(color){
+          block.boardBackground=color;
+          queuedSave(block,false,{ boardBackground:color });
         },
         onNotice:function(text){ boardNotice(block,text); }
       }).then(function(entry){
@@ -2126,6 +2136,10 @@
       rows.push('<div class="block-menu-head">Height</div>'+Object.keys(BOARD_HEIGHTS).map(function(key){
         return '<button type="button" data-board-height="'+key+'"'+(height===key?' class="is-on"':'')+'>'+BOARD_HEIGHTS[key].label+'</button>';
       }).join('')+'<button type="button" data-board-full-menu>Full screen</button>');
+      /* A colour is picked from the board's own menu; this is the way back. */
+      rows.push('<div class="block-menu-head">Background</div>'
+        +'<button type="button" data-board-theme'+(block.boardBackground?'':' class="is-on"')+'>Follow the theme</button>'
+        +(block.boardBackground?'<button type="button" class="is-on" data-board-picked><span class="board-swatch" style="background:'+esc(block.boardBackground)+'"></span>Picked colour</button>':''));
     }
     if(TURN_INTO.indexOf(block.type)>=0){
       rows.push('<div class="block-menu-head">Turn into</div>');
@@ -2184,6 +2198,16 @@
         queuedSave(block,true,{ boardHeight:block.boardHeight });
       };
     });
+    var themeBackground=menu.querySelector('[data-board-theme]');
+    if(themeBackground)themeBackground.onclick=function(){
+      closeBlockMenu();
+      if(!block.boardBackground)return;
+      block.boardBackground='';
+      if(window.CrowWhiteboard)window.CrowWhiteboard.setBackground(noteDocument(block),'');
+      queuedSave(block,true,{ boardBackground:'' });
+    };
+    var pickedBackground=menu.querySelector('[data-board-picked]');
+    if(pickedBackground)pickedBackground.onclick=function(){ closeBlockMenu(); };
     var fullFromMenu=menu.querySelector('[data-board-full-menu]');
     if(fullFromMenu)fullFromMenu.onclick=function(){ closeBlockMenu(); setBoardFull(card,true); };
     setTimeout(function(){ document.addEventListener('click',awayFromBlockMenu); },0);

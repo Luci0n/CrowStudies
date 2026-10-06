@@ -44,6 +44,29 @@ function parseBoard(json){
   try{ const list=JSON.parse(json||'[]'); return Array.isArray(list)?list:[]; }catch(error){ return []; }
 }
 function plain(element){ return JSON.parse(JSON.stringify(element)); }
+/* A board's canvas is either the theme's (transparent, over the frame) or a
+   colour someone picked. Excalidraw's dark mode inverts the whole canvas so
+   drawings suit both themes, which turned a picked white into near-black while
+   the picker still said ffffff. A picked colour is shown as itself instead,
+   with the inversion off for that board, and everyone on it sees the same. */
+const THEME_BACKGROUND = 'transparent';
+function backgroundOf(value){ return typeof value==='string'&&value?value:THEME_BACKGROUND; }
+function paintBackground(host, color){ host.classList.toggle('has-paper',color!==THEME_BACKGROUND); }
+function applyBackground(entry, value){
+  const color=backgroundOf(value);
+  if(color===entry.background) return;
+  entry.background=color; paintBackground(entry.host,color);
+  if(entry.api) entry.api.updateScene({ appState:{ viewBackgroundColor:color }, captureUpdate:entry.lib.Ex.CaptureUpdateAction.NEVER });
+}
+/* A colour picked here is kept for the board; one changed by someone who may
+   not edit it is put back. */
+function noticeBackground(entry, appState){
+  const color=backgroundOf(appState&&appState.viewBackgroundColor);
+  if(color===entry.background) return;
+  if(!entry.open){ if(entry.api) entry.api.updateScene({ appState:{ viewBackgroundColor:entry.background }, captureUpdate:entry.lib.Ex.CaptureUpdateAction.NEVER }); return; }
+  entry.background=color; paintBackground(entry.host,color);
+  if(entry.options.onBackground) entry.options.onBackground(color===THEME_BACKGROUND?'':color);
+}
 
 function whenSynced(provider){
   return new Promise((resolve,reject)=>{
@@ -109,12 +132,12 @@ function draw(entry){
     adapter:libraryAdapter(entry.options.user&&entry.options.user.uid),
     settings:{
       excalidrawAPI:(api)=>{ if(api&&!entry.api){ entry.api=api; entry.apiReady(); } },
-      initialData:{ elements:entry.initial, appState:{ viewBackgroundColor:'transparent' }, scrollToContent:true },
+      initialData:{ elements:entry.initial, appState:{ viewBackgroundColor:entry.background }, scrollToContent:true },
       viewModeEnabled:!entry.open,
       theme:themeNow(),
       isCollaborating:!!entry.provider,
       UIOptions:UI_OPTIONS,
-      onChange:()=>schedulePush(entry),
+      onChange:(elements, appState)=>{ schedulePush(entry); noticeBackground(entry,appState); },
       onPointerUpdate:(update)=>sharePointer(entry,update),
       onPaste:(data, event)=>!refusesImages(entry,data,event),
     },
@@ -201,6 +224,7 @@ function adopt(entry, host, options){
     if(!host.isConnected) return entry;
     host.replaceWith(entry.host);
   }
+  applyBackground(entry,options.background);
   const open=entry.synced&&!options.readOnly;
   if(open!==entry.open){ entry.open=open; draw(entry); }
   if(options.onStatus&&entry.status) options.onStatus(entry.status);
@@ -224,7 +248,8 @@ async function create(host, options){
   const lib=await loadLibrary();
   const ydoc=new Y.Doc(), map=ydoc.getMap('elements');
   const entry={ options, lib, host, ydoc, map, status:'', parkedAt:0, synced:false, open:false, api:null, known:new Map(),
-    initial:parseBoard(options.saved) };
+    initial:parseBoard(options.saved), background:backgroundOf(options.background) };
+  paintBackground(host,entry.background);
   entry.ready=new Promise((resolve)=>{ entry.apiReady=resolve; });
   /* A fresh token on every connection: one lasts an hour, and a board left
      open longer would otherwise be turned away for good. */
@@ -290,13 +315,14 @@ setInterval(()=>{
 
 /* A board to look at, drawn from a saved copy with no connection: an old
    version in History, or Studio without a collaboration server. */
-async function mountStatic(host, json){
+async function mountStatic(host, json, background){
   const lib=await loadLibrary();
   if(!host.isConnected) return null;
   host.textContent='';
-  const root=lib.ReactDOM.createRoot(host), elements=parseBoard(json);
+  const root=lib.ReactDOM.createRoot(host), elements=parseBoard(json), color=backgroundOf(background);
+  paintBackground(host,color);
   const show=()=>root.render(lib.React.createElement(lib.Ex.Excalidraw,{
-    initialData:{ elements, appState:{ viewBackgroundColor:'transparent' }, scrollToContent:true },
+    initialData:{ elements, appState:{ viewBackgroundColor:color }, scrollToContent:true },
     viewModeEnabled:true, theme:themeNow(), UIOptions:UI_OPTIONS,
   }));
   show();
@@ -350,5 +376,7 @@ async function replace(name, list, options){
     return true;
   });
 }
-window.CrowWhiteboard={ enabled:()=>Boolean(config.url), mount, destroy, destroyAll, keepOnly, elements, read, replace, mountStatic, loadLibrary };
+/* Someone else picked a canvas colour, or put the theme's back. */
+function setBackground(name, color){ const entry=live.get(name); if(entry) applyBackground(entry,color); }
+window.CrowWhiteboard={ enabled:()=>Boolean(config.url), mount, destroy, destroyAll, keepOnly, elements, read, replace, mountStatic, setBackground, loadLibrary };
 window.dispatchEvent(new Event('crow-whiteboard-ready'));
